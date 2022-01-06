@@ -19,6 +19,7 @@ InputKey input_key_from_wparam(WPARAM wparam)
     case 0x53: return IK_S;
     case 0x42: return IK_B;
     case 0x45: return IK_E;
+    case 0x57: return IK_W;
     }
     
     LOG_INFO("unhandled virtual key: 0x%X", wparam);

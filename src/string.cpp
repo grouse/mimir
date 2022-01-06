@@ -847,4 +847,8 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
         sb->current->written += length;
     }
 }
-                 
+
+bool is_whitespace(i32 c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}

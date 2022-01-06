@@ -21,12 +21,15 @@ enum InputKey {
     IK_TAB,
     IK_PAGE_UP,
     IK_PAGE_DOWN,
+    IK_ESC,
     
     IK_Z,
     IK_R,
     IK_E,
     IK_B,
     IK_S,
+    IK_W,
+    IK_I,
 };
 
 enum ModifierFlags : u32 {

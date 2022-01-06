@@ -7,6 +7,20 @@
 #include "core.cpp"
 #include "gfx_opengl.cpp"
 
+enum EditMode {
+    MODE_EDIT,
+    MODE_INSERT,
+};
+
+enum BufferHistoryType {
+    BUFFER_INSERT,
+    BUFFER_REMOVE,
+
+    BUFFER_CURSOR_POS,
+    BUFFER_HISTORY_GROUP_START,
+    BUFFER_HISTORY_GROUP_END
+};
+
 struct BufferLine {
     i64 offset : 63;
     i64 wrapped : 1;
@@ -16,15 +30,8 @@ struct Application {
     Font mono;
     i32 tab_width = 4;
     bool animating = true;
-};
-
-enum BufferHistoryType {
-    BUFFER_INSERT,
-    BUFFER_REMOVE,
     
-    BUFFER_CURSOR_POS,
-    BUFFER_HISTORY_GROUP_START,
-    BUFFER_HISTORY_GROUP_END
+    EditMode mode;
 };
 
 struct BufferHistory {
@@ -167,18 +174,40 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
 
 bool is_word_boundary(i32 c)
 {
-    switch (c) {
+    switch(c) {
     case ' ':
     case '\t':
     case '\n':
     case '\r':
+    case '*':
+    case '!':
+    case '@':
+    case '$':
+    case '&':
+    case '#':
+    case '^':
+    case '+':
+    case '-':
+    case '=':
     case '.':
     case ',':
-    case '(':
-    case ')':
+    case ';':
+    case ':':
+    case '?':
+    case '<': case '>':
+    case '%':
+    case '[': case ']':
+    case '{': case '}':
+    case '(': case ')':
+    case '\'': case '\"': case '`':
+    case '/':
+    case '\\':
+    case '|':
         return true;
-    default: return false;
+    default:
+        return false;
     }
+
 }
 
 
@@ -234,6 +263,11 @@ String buffer_newline_str(BufferId buffer_id)
 
 BufferId create_buffer(String file)
 {
+    // TODO(jesper): do something to try and figure out/guess file type,
+    // in particular try to detect whether the file is a binary so that we can
+    // write a binary blob visualiser, or at least something that won't choke and
+    // crash trying to render invalid text
+    
     Buffer b{ .type = BUFFER_FLAT };
     b.file_path = absolute_path(file, mem_dynamic);
     b.name = filename_of(b.file_path);
@@ -357,12 +391,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *lines, Bu
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
     
-    // TODO(jesper): multiview support
-
-    // TODO(jesper): figure out what I wanna do here to re-flow the lines. Do I create persistent gui layouts
-    // that I can use when reflowing? Do I reflow again if view_rect is different? How do I calculate the view_rect
-    // before the scrollbar?
-    Rect r{ .size = { gfx.resolution.x-gui.style.scrollbar.thickness, gfx.resolution.y } };
+    Rect r = view.rect;
 
     Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
     Vector2 pen = baseline;
@@ -505,6 +534,9 @@ void buffer_save(BufferId buffer_id)
 
 bool buffer_unsaved_changes(BufferId buffer_id)
 {
+    // TODO(jesper): ideally this should be smart enough to detect whether the changes 
+    // made since last save point cancel out. There should be enough information in 
+    // the buffer history to figure that out
     Buffer *buffer = get_buffer(buffer_id);
     return buffer && buffer->saved_at != buffer->history_index;
 }
@@ -531,7 +563,6 @@ void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_hist
         break;
     }
 
-    // TODO(jesper): multiview support
     if (view.buffer == buffer_id) {
         for (i32 i = view.caret.wrapped_line+1; i < view.lines.count; i++) {
             view.lines[i].offset += text.length;
@@ -608,7 +639,7 @@ void buffer_redo(BufferId buffer_id)
 }
 
 
-i64 caret_prev_offset(BufferId buffer_id, i64 byte_offset)
+i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return byte_offset;
@@ -639,7 +670,7 @@ i64 caret_prev_offset(BufferId buffer_id, i64 byte_offset)
     return prev_offset;
 }
 
-i64 caret_next_offset(BufferId buffer_id, i64 byte_offset)
+i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return byte_offset;
@@ -671,10 +702,117 @@ i64 caret_next_offset(BufferId buffer_id, i64 byte_offset)
     return next_offset;
 }
 
+i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT: {
+            i64 offset = byte_offset;
+            i64 end = buffer_end(buffer_id);
+            
+            char *p = &buffer->flat.data[0];
+            
+            char start_c = p[offset++];
+            bool start_is_whitespace = is_whitespace(start_c);
+            bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
+            bool in_whitespace = start_is_whitespace;
+            bool was_cr = start_c == '\r';
+            
+            for (; offset < end; offset++) {
+                char c = buffer->flat.data[offset];
+                
+                bool whitespace = is_whitespace(c);
+                bool boundary = !whitespace && is_word_boundary(c);
+                
+                if (c == '\r') {
+                    was_cr = true;
+                    boundary = true;
+                } else { 
+                    if (!was_cr && c == '\r') boundary = true;
+                    was_cr = false;
+                }
+                
+                if (start_is_boundary && !whitespace) return offset;
+                if (!start_is_whitespace) {
+                    if (boundary || (in_whitespace && !whitespace)) {
+                        return offset;
+                    } else if (whitespace) {
+                        in_whitespace = true;
+                    }
+                } else if (!whitespace || boundary) {
+                    return offset;
+                }
+            }
+        } break;
+    }
+    
+    return byte_offset;
+}
+
+i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT: {
+            i64 offset = byte_offset;
+            i64 end = buffer_end(buffer_id);
+            
+            char *p = &buffer->flat.data[0];
+            
+            char start_c = p[offset--];
+            bool start_is_whitespace = is_whitespace(start_c);
+            bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
+            
+            bool was_whitespace = start_is_whitespace;
+            bool has_whitespace = false;
+            bool was_ln = start_c == '\n';
+            
+            for (; offset >= 0; offset--) {
+                char c = p[offset];
+                bool whitespace = is_whitespace(c);
+                bool boundary = !whitespace && is_word_boundary(c);
+                
+                if (c == '\n') {
+                    was_ln = true;
+                    boundary = true;
+                } else {
+                    if (was_ln && c == '\r') boundary = true;
+                    was_ln = false;
+                }
+                
+                has_whitespace = has_whitespace || whitespace;
+                if (whitespace && !was_whitespace) {
+                    if (offset+1 != byte_offset) {
+                        return CLAMP(0, offset+1, end);
+                    }
+                }
+                
+                if (start_is_boundary && !whitespace && boundary && (offset+1 != byte_offset)) {
+                    if (was_whitespace) {
+                        return CLAMP(0, offset, end);
+                    } else {
+                        return CLAMP(0, offset+1, end);
+                    }
+                }
+                
+                was_whitespace = whitespace;
+            }
+            
+            return 0;
+        } break;
+    }
+    
+    return byte_offset;
+}
+
 i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
 {
     i64 offset = current;
-    while (n--) offset = caret_next_offset(buffer_id, offset);
+    while (n--) offset = buffer_next_offset(buffer_id, offset);
     return offset;
 }
 
@@ -682,7 +820,6 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_i
 {
     return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
 }
-
 
 i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 {
@@ -879,7 +1016,7 @@ void app_event(InputEvent event)
     
     switch (event.type) {
     case IE_TEXT: 
-        if (buffer_valid(view.buffer)) {
+        if (app.mode == MODE_INSERT && buffer_valid(view.buffer)) {
             BufferHistoryScope h(view.buffer);
             buffer_insert(view.buffer, view.caret.byte_offset, String{ (char*)&event.text.c[0], event.text.length });
 
@@ -890,7 +1027,114 @@ void app_event(InputEvent event)
             app.animating = true;
         } break;
     case IE_KEY_PRESS: 
+        if (app.mode == MODE_EDIT) {
+            switch (event.key.code) {
+            case IK_W: 
+                view.caret.byte_offset = buffer_seek_next_word(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
+                app.animating = true;
+                break;
+            case IK_B:
+                view.caret.byte_offset = buffer_seek_prev_word(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
+                app.animating = true;
+                break;
+            case IK_I:
+                app.mode = MODE_INSERT;
+                break;
+            default: break;
+            }
+        } else if (app.mode == MODE_INSERT) {
+            switch (event.key.code) {
+            case IK_ESC:
+                app.mode = MODE_EDIT;
+                break;
+            case IK_ENTER: 
+                if (buffer_valid(view.buffer)) {
+                    BufferHistoryScope h(view.buffer);
+                    buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
+
+                    view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                    view.caret.wrapped_line++;
+                    view.caret.line++;
+                    view.caret.column = view.caret.wrapped_column = view.caret.preferred_column = 0;
+
+                    move_view_to_caret();
+                    app.animating = true;
+                } break;
+            case IK_TAB: 
+                if (buffer_valid(view.buffer)) {
+                    BufferHistoryScope h(view.buffer);
+                    // TODO(jesper): this should insert tab or spaces depending on buffer setting
+                    buffer_insert(view.buffer, view.caret.byte_offset, "\t");
+
+                    view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+
+                    move_view_to_caret();
+                } break;
+            case IK_BACKSPACE: 
+                if (buffer_valid(view.buffer)) {
+                    BufferHistoryScope h(view.buffer);
+                    i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
+                    if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
+                        // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
+                        view.lines_dirty = true;
+
+                        view.caret.byte_offset = start;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+
+                        move_view_to_caret();
+                    }
+                } break;
+            case IK_DELETE: 
+                if (buffer_valid(view.buffer)) {
+                    BufferHistoryScope h(view.buffer);
+                    i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                    if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
+                        view.lines_dirty = true;
+                        view.caret_dirty = true;
+                    }
+                } break;
+                
+            default: break;
+            }
+        }
+        
         switch (event.key.code) {
+        case IK_PAGE_DOWN: {
+                Buffer *buffer = get_buffer(view.buffer);
+                if (!buffer) break;
+
+                for (i32 i = 0; view.caret.wrapped_line < view.lines.count-1 && i < view.lines_visible-1; i++) {
+                    view.caret.wrapped_line++;
+                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
+                }
+
+                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                move_view_to_caret();
+                app.animating = true;
+            } break;
+        case IK_PAGE_UP: {
+                Buffer *buffer = get_buffer(view.buffer);
+                if (!buffer) break;
+
+                for (i32 i = 0; view.caret.wrapped_line > 0 && i < view.lines_visible-1; i++) {
+                    view.caret.wrapped_line--;
+                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
+                }
+
+                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                move_view_to_caret();
+                app.animating = true;
+            } break;
+#if 0
         case IK_S:
             if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
             app.animating = true;
@@ -907,60 +1151,13 @@ void app_event(InputEvent event)
             view.caret_dirty = true;
             app.animating = true;
             break;
-        case IK_ENTER: 
-            if (buffer_valid(view.buffer)) {
-                BufferHistoryScope h(view.buffer);
-                buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
-
-                view.caret.byte_offset = caret_next_offset(view.buffer, view.caret.byte_offset);
-                view.caret.wrapped_line++;
-                view.caret.line++;
-                view.caret.column = view.caret.wrapped_column = view.caret.preferred_column = 0;
-
-                move_view_to_caret();
-                app.animating = true;
-            } break;
-        case IK_TAB: 
-            if (buffer_valid(view.buffer)) {
-                BufferHistoryScope h(view.buffer);
-                // TODO(jesper): this should insert tab or spaces depending on buffer setting
-                buffer_insert(view.buffer, view.caret.byte_offset, "\t");
-
-                view.caret.byte_offset = caret_next_offset(view.buffer, view.caret.byte_offset);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-
-                move_view_to_caret();
-            } break;
-        case IK_BACKSPACE: 
-            if (buffer_valid(view.buffer)) {
-                BufferHistoryScope h(view.buffer);
-                i64 start = caret_prev_offset(view.buffer, view.caret.byte_offset);
-                if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
-                    // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
-                    view.lines_dirty = true;
-                    
-                    view.caret.byte_offset = start;
-                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                    
-                    move_view_to_caret();
-                }
-            } break;
-        case IK_DELETE: 
-            if (buffer_valid(view.buffer)) {
-                BufferHistoryScope h(view.buffer);
-                i64 end = caret_next_offset(view.buffer, view.caret.byte_offset);
-                if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
-                    view.lines_dirty = true;
-                    view.caret_dirty = true;
-                }
-            } break;
         case IK_LEFT: 
-            view.caret.byte_offset = caret_prev_offset(view.buffer, view.caret.byte_offset);
+            view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
             move_view_to_caret();
             break;
         case IK_RIGHT:
-            view.caret.byte_offset = caret_next_offset(view.buffer, view.caret.byte_offset);
+            view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
             move_view_to_caret();
             break;
@@ -1000,37 +1197,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
             } break;
-        case IK_PAGE_DOWN: {
-                Buffer *buffer = get_buffer(view.buffer);
-                if (!buffer) break;
-                
-                for (i32 i = 0; view.caret.wrapped_line < view.lines.count-1 && i < view.lines_visible-1; i++) {
-                    view.caret.wrapped_line++;
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-                }
-
-                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
-        case IK_PAGE_UP: {
-                Buffer *buffer = get_buffer(view.buffer);
-                if (!buffer) break;
-
-                for (i32 i = 0; view.caret.wrapped_line > 0 && i < view.lines_visible-1; i++) {
-                    view.caret.wrapped_line--;
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
-                }
-
-                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
-
+#endif
         default: break;
         }
         break;

@@ -45,6 +45,8 @@ struct StringBuilder {
     Block *current = &head;
 };
 
+bool is_whitespace(i32 c);
+
 String stringf(char *buffer, i32 size, const char *fmt, ...);
 String stringf(Allocator mem, const char *fmt, ...);
 
@@ -88,7 +90,5 @@ i32 codepoint_index_from_byte_index(String str, i32 byte);
 
 void append_string(StringBuilder *sb, String str);
 void append_stringf(StringBuilder *sb, const char *fmt, ...);
-
-
 
 #endif // STRING_H
