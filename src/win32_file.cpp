@@ -353,3 +353,31 @@ bool file_exists(String path)
     const char *sz_path = sz_string(path);
     return file_exists_sz(sz_path);
 }
+
+FileHandle open_file(String path, FileOpenMode mode)
+{
+    char *sz_path = sz_string(path);
+    
+    u32 creation_mode = 0;
+    switch (mode) {
+    case FILE_OPEN_CREATE:
+        creation_mode = CREATE_NEW;
+        break;
+    case FILE_OPEN_TRUNCATE:
+        creation_mode = CREATE_ALWAYS;
+        break;
+    }
+    
+    PANIC_IF(creation_mode == 0, "invalid creation mode");
+    return win32_open_file(sz_path, creation_mode, GENERIC_WRITE|GENERIC_READ);
+}
+
+void write_file(FileHandle handle, char *data, i32 bytes)
+{
+    WriteFile(handle, data, bytes, nullptr, nullptr);
+}
+
+void close_file(FileHandle handle)
+{
+    CloseHandle(handle);
+}
