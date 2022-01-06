@@ -55,6 +55,7 @@ struct Buffer {
     
     DynamicArray<BufferHistory> history;
     i32 history_index;
+    i32 saved_at;
     
     NewlineMode newline_mode;
     
@@ -120,11 +121,13 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
             buffer->history[buffer->history.count-3].type == BUFFER_HISTORY_GROUP_START) 
         {
             buffer->history.count -= 3;
+            buffer->history_index = MIN(buffer->history_index, buffer->history.count);
             return;
         } else if (buffer->history.count > 0 &&
                    buffer->history[buffer->history.count-1].type == BUFFER_HISTORY_GROUP_START) 
         {
             buffer->history.count -= 1;
+            buffer->history_index = MIN(buffer->history_index, buffer->history.count);
             return;
         }
     }
@@ -459,6 +462,27 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     return false;
 }
 
+void buffer_save(BufferId buffer_id)
+{
+    Buffer *buffer = &buffers[buffer_id.index];
+    if (buffer->saved_at == buffer->history_index) return;
+    
+    FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        write_file(f, buffer->flat.data, buffer->flat.size);
+        break;
+    }
+    close_file(f);
+    
+    buffer->saved_at = buffer->history_index;
+}
+
+bool buffer_unsaved_changes(BufferId buffer_id)
+{
+    Buffer *buffer = &buffers[buffer_id.index];
+    return buffer->saved_at != buffer->history_index;
+}
 
 void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_history = true)
 {
@@ -790,41 +814,51 @@ void move_view_to_caret()
     }
 }
 
+// NOTE(jesper): this is poorly named. It starts/stops a history group and records the active view's
+// cursor position appropriately
+struct BufferHistoryScope {
+    BufferId buffer;
+    
+    BufferHistoryScope(BufferId buffer) : buffer(buffer)
+    {
+        buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_START });
+        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
+    }
+    
+    ~BufferHistoryScope()
+    {
+        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
+        buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_END });
+    }
+};
+
 void app_event(InputEvent event)
 {
+    // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
+    // management in order to record the cursor position in the history groups, so that when
+    // a user undo/redo the cursor is repositioned to where it was before/after the edit 
+
+    // TODO(jesper): figure out if there's a better way for us to signal that the event results
+    // in an update/redraw. If nothing else, the app.animating variable name just feels wrong at
+    // this point, especially when I don't even have anything animating
+    
     Buffer *buffer = &buffers[view.buffer.index];
-    
-    buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_START });
-    buffer_history(view.buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
-    
-    defer { 
-        buffer_history(view.buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
-        buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_END });
-    };
-
     switch (event.type) {
-    case IE_TEXT: 
-        buffer_insert(view.buffer, view.caret.byte_offset, String{ (char*)&event.text.c[0], event.text.length });
+    case IE_TEXT: {
+            BufferHistoryScope h(view.buffer);
+            buffer_insert(view.buffer, view.caret.byte_offset, String{ (char*)&event.text.c[0], event.text.length });
 
-        // TODO(jesper): calc this from buffer api
-        view.caret.byte_offset += event.text.length;
-        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+            // TODO(jesper): calc this from buffer api
+            view.caret.byte_offset += event.text.length;
+            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
 
-        app.animating = true;
-        break;
+            app.animating = true;
+        } break;
     case IE_KEY_PRESS: 
         switch (event.key.code) {
         case IK_S:
-            if (event.key.modifiers == MF_CTRL) {
-                Buffer *buffer = &buffers[view.buffer.index];
-                FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
-                switch (buffer->type) {
-                case BUFFER_FLAT:
-                    write_file(f, buffer->flat.data, buffer->flat.size);
-                    break;
-                }
-                close_file(f);
-            }
+            if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
+            app.animating = true;
             break;
         case IK_Z:
             if (event.key.modifiers == MF_CTRL) buffer_undo(view.buffer);
@@ -838,18 +872,20 @@ void app_event(InputEvent event)
             view.caret_dirty = true;
             app.animating = true;
             break;
-        case IK_ENTER: 
-            buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
+        case IK_ENTER: {
+                BufferHistoryScope h(view.buffer);
+                buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
 
-            view.caret.byte_offset = caret_next_offset(view.buffer, view.caret.byte_offset);
-            view.caret.wrapped_line++;
-            view.caret.line++;
-            view.caret.column = view.caret.wrapped_column = view.caret.preferred_column = 0;
+                view.caret.byte_offset = caret_next_offset(view.buffer, view.caret.byte_offset);
+                view.caret.wrapped_line++;
+                view.caret.line++;
+                view.caret.column = view.caret.wrapped_column = view.caret.preferred_column = 0;
 
-            move_view_to_caret();
-            app.animating = true;
-            break;
+                move_view_to_caret();
+                app.animating = true;
+            } break;
         case IK_TAB: {
+                BufferHistoryScope h(view.buffer);
                 // TODO(jesper): this should insert tab or spaces depending on buffer setting
                 buffer_insert(view.buffer, view.caret.byte_offset, "\t");
 
@@ -859,6 +895,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
             } break;
         case IK_BACKSPACE: {
+                BufferHistoryScope h(view.buffer);
                 i64 start = caret_prev_offset(view.buffer, view.caret.byte_offset);
                 if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
                     // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
@@ -871,6 +908,7 @@ void app_event(InputEvent event)
                 }
             } break;
         case IK_DELETE: {
+                BufferHistoryScope h(view.buffer);
                 i64 end = caret_next_offset(view.buffer, view.caret.byte_offset);
                 if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
                     view.lines_dirty = true;
