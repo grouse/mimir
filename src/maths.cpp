@@ -782,3 +782,14 @@ f32 radians_from_degrees(f32 theta)
     return theta * f32_PI / 180.0f;
 }
                    
+
+bool operator==(const Rect &lhs, const Rect &rhs)
+{
+    return lhs.pos == rhs.pos && lhs.size == rhs.size;
+}
+
+
+bool operator!=(const Rect &lhs, const Rect &rhs)
+{
+    return lhs.pos != rhs.pos || lhs.size != rhs.size;
+}
