@@ -811,7 +811,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                     if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
                     
                     i32 new_length = gui.edit.length-(end-start);
-                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, new_length);
+                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, new_length-start);
                     gui.edit.length = new_length;
                     gui.edit.cursor = gui.edit.selection = start;
                     
@@ -838,7 +838,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                     i32 end = MAX(gui.edit.cursor, gui.edit.selection);
                     if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
 
-                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-(end-start));
+                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-start);
                     gui.edit.length -= end-start;
                     gui.edit.cursor = gui.edit.selection = start;
                     
