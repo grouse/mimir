@@ -1198,7 +1198,6 @@ bool gui_begin_window_id(
 void gui_end_window()
 {
     ASSERT(gui.current_window > 1);
-    ASSERT(gui.layout_stack.count > 1);
 
     if (gui.current_window_data.size) {
         // NOTE(jesper): we handle the window resizing at the end to ensure it's always on
@@ -2041,35 +2040,25 @@ bool gui_menu_button_id(GuiId id, String label, bool *toggle_value)
 }
 
 
-void gui_scrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset)
+void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor anchor)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GuiLayout *cl = gui_current_layout();
     
     GuiId up_id = GUI_ID_INTERNAL(id, 1);
     GuiId dwn_id = GUI_ID_INTERNAL(id, 2);
-    GuiId scroll_id = GUI_ID_INTERNAL(id, 3);
+    GuiId handle_id = GUI_ID_INTERNAL(id, 3);
     
     // TODO(jesper): support left hand side scroll bars
     Vector2 total_size{ gui.style.scrollbar.thickness, cl->size.y };
-    Vector2 total_pos = { cl->pos.x + cl->size.x - total_size.x, cl->pos.y };
-    
-    switch (cl->type) {
-    case GUI_LAYOUT_ABSOLUTE:
-        cl->size.x -= total_size.x;
-        break;
-    case GUI_LAYOUT_ROW:
-    case GUI_LAYOUT_COLUMN:
-        LOG_ERROR("unimplemented");
-        break;
-    }
+    Vector2 total_pos = gui_layout_widget(total_size, anchor);
     
     Vector2 btn_size{ gui.style.scrollbar.thickness, gui.style.scrollbar.thickness };
     Vector2 btn_up_p{ total_pos.x, total_pos.y };
     Vector2 btn_dwn_p{ total_pos.x, total_pos.y + total_size.y - btn_size.y };
     
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
-    Vector2 scroll_pos{ total_pos.x, total_pos.y + btn_up_p.y + btn_size.y };
+    Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
     
     GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     gui_draw_rect(cmdbuf, total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
@@ -2096,7 +2085,7 @@ void gui_scrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_
     f32 scroll_to_total = row_height/pixels_per_i;
     f32 total_to_scroll = pixels_per_i/row_height;
     
-    if (gui_active_drag(scroll_id, { *offset, (f32)*current }) && gui.mouse.dy != 0) {
+    if (gui_active_drag(handle_id, { *offset, (f32)*current }) && gui.mouse.dy != 0) {
         f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
         
         f32 o = gui.drag_start_data.x*total_to_scroll + dy;
@@ -2118,21 +2107,34 @@ void gui_scrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_
         *current = c;
     }
     
+    f32 min_h = 8.0f;
+    f32 max_y = scroll_pos.y + scroll_size.y - gui.style.scrollbar.thickness;
+    
     f32 y0 = *current*pixels_per_i + *offset*total_to_scroll;
-    f32 y1 = y0 + MIN(num_visible, max) * pixels_per_i;
-    y1 = MIN(y1, scroll_pos.y + scroll_size.y - gui.style.scrollbar.thickness);
+    f32 yh = MIN(num_visible, max) * pixels_per_i;
+    f32 y1 = y0 + yh;
+    
+    y1 = MIN(y1, max_y);
+    
+    // TODO(jesper) find a more appealing version of this that ensures a pixel of distance
+    // between scroll handle and bottom/top until it's actually at the bottom/top
+    if (yh < min_h) {
+        y0 = MAX(0, y0-min_h/2.0f);
+        y1 = MIN(max_y, y0+min_h);
+    }
+    
 
-    Vector2 scroll_btn_p{ scroll_pos.x, scroll_pos.y + y0 };
-    Vector2 scroll_btn_s{ gui.style.scrollbar.thickness, y1 - y0 };
-    gui_hot_rect(scroll_id, scroll_btn_p, scroll_btn_s);
+    Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
+    Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
+    gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
 
-    Vector3 scroll_btn_bg = gui.active == scroll_id ? 
+    Vector3 scroll_handle_bg = gui.active == handle_id ? 
         gui.style.scrollbar.scroll_btn_active : 
-        gui.hot == scroll_id ? 
+        gui.hot == handle_id ? 
         gui.style.scrollbar.scroll_btn_hot : 
         gui.style.scrollbar.scroll_btn;
     
-    gui_draw_rect(cmdbuf, scroll_btn_p, scroll_btn_s, wnd->clip_rect, scroll_btn_bg);
+    gui_draw_rect(cmdbuf, scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
 }
 
 Rect gui_layout_widget_fill()

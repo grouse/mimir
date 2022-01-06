@@ -23,7 +23,8 @@
 #define gui_2d_gizmo_size_square(...) gui_2d_gizmo_size_square_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
 #define gui_2d_gizmo_size_axis(...) gui_2d_gizmo_size_axis_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
 #define gui_begin_window(...) gui_begin_window_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_scrollbar(...) gui_scrollbar_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
+#define gui_scrollbar(...) gui_vscrollbar_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
+#define gui_vscrollbar(...) gui_vscrollbar_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
 
 #define gui_begin_menu(...) gui_begin_menu_id(GuiId{ __COUNTER__, 0, -1 } ARGS(__VA_ARGS__))
 #define gui_menu_button(...) gui_menu_button_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
@@ -273,8 +274,8 @@ template<typename T> void gui_dropdown_id(GuiId id, String *labels, T *values, i
 template<typename T> T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value);
 template<typename T> T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value);
 
-void gui_scrollbar_id(GuiId id, i32 *current, i32 max, i32 num_visible, f32 *offset);
-    
+void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor = GUI_ANCHOR_RIGHT);
+
 GuiGizmoAction gui_2d_gizmo_translate_id(GuiId id, Camera camera, Vector2 *position);
 GuiGizmoAction gui_2d_gizmo_translate_id(GuiId id, Camera camera, Vector2 *position, f32 multiple);
 GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *position, Vector2 axis);
