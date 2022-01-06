@@ -78,6 +78,12 @@ struct GuiWindow {
     GfxCommandBuffer command_buffer;
 };
 
+struct GuiWindowState {
+    Vector2 pos = { 10.0f, 30.0f };
+    Vector2 size = { 300.0f, 200.0f };
+    bool active;
+};
+
 enum GuiLayoutType {
     GUI_LAYOUT_ABSOLUTE,
     GUI_LAYOUT_ROW,

@@ -1120,6 +1120,11 @@ bool gui_begin_window_id(
     return true;
 }
 
+bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state)
+{
+    return gui_begin_window_id(id, title, &state->pos, &state->size, &state->active);
+}
+
 bool gui_begin_window_id(
     GuiId id, 
     String title, 
