@@ -602,6 +602,7 @@ extern "C" {
     ATOM RegisterClassA(const WNDCLASSA *lpWndClass);
     
     void OutputDebugStringA(LPCSTR lpOutputString);
+    void OutputDebugStringW(LPWSTR lpOutputString);
     BOOL IsDebuggerPresent();
     
     BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);

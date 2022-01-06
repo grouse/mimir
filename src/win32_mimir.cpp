@@ -158,29 +158,33 @@ int WINAPI wWinMain(
     
     has_init = true;
     
-    i32 argv = 0;
-    LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
-
     Array<String> args{};
-    
-    if (argv > 0) {
-        i32 total_utf8_length = 0;
-        for (i32 i = 0; i < argv; i++) {
-            total_utf8_length += utf8_length(argc[i], wcslen(argc[i]));
-        }
+    if (pCmdLine && *pCmdLine != '\0') {
+        i32 argv = 0;
+        LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
 
-        args.data = ALLOC_ARR(mem_dynamic, String, argv);
-        args.count = argv;
 
-        char *args_mem = ALLOC_ARR(mem_dynamic, char, total_utf8_length);
-        
-        char *p = args_mem;
-        for (i32 i = 0; i < argv; i++) {
-            i32 l = wcslen(argc[i]);
-            
-            args[i].data = p;
-            args[i].length = utf8_from_utf16((u8*)p, l, argc[i], l);
-            p += l;
+        if (argv > 0) {
+            i32 total_utf8_length = 0;
+            for (i32 i = 0; i < argv; i++) {
+                total_utf8_length += utf8_length(argc[i], wcslen(argc[i]));
+            }
+
+            args.data = ALLOC_ARR(mem_dynamic, String, argv);
+            args.count = argv;
+
+            char *args_mem = ALLOC_ARR(mem_dynamic, char, total_utf8_length);
+
+            char *p = args_mem;
+            for (i32 i = 0; i < argv; i++) {
+                i32 l = wcslen(argc[i]);
+
+                args[i].data = p;
+                args[i].length = utf8_from_utf16((u8*)p, l, argc[i], l);
+                p += l;
+
+                LOG_INFO("arg[%d] = '%.*s'", i, STRFMT(args[i]));
+            }
         }
     }
     

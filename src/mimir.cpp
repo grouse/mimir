@@ -87,32 +87,42 @@ struct Caret {
 };
 
 struct View {
-    f32 voffset = 0;
-    i32 line_offset = 0;
-    i32 lines_visible = 0;
-    
     DynamicArray<BufferLine> lines;
     
+    f32 voffset;
+    i32 line_offset;
+    i32 lines_visible;
+    
     Rect rect;
-    
     BufferId buffer;
-    
     Caret caret;
     
     struct {
-        u64 lines_dirty : 1 = true;
-        u64 caret_dirty : 1 = true;
+        u64 lines_dirty : 1;
+        u64 caret_dirty : 1;
     };
 
 };
 
 Application app{};
 View view{};
-DynamicArray<Buffer> buffers;
+DynamicArray<Buffer> buffers{};
+
+Buffer* get_buffer(BufferId buffer_id)
+{
+    if (buffer_id.index < 0) return nullptr;
+    return &buffers[buffer_id.index];
+}
+
+bool buffer_valid(BufferId buffer_id)
+{
+    return buffer_id.index >= 0;
+}
 
 void buffer_history(BufferId buffer_id, BufferHistory entry)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    ASSERT(buffer);
     
     if (entry.type == BUFFER_HISTORY_GROUP_END) {
         if (buffer->history.count > 2 &&
@@ -211,7 +221,9 @@ String string_from_enum(NewlineMode mode)
 
 String buffer_newline_str(BufferId buffer_id)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    ASSERT(buffer);
+    
     switch (buffer->newline_mode) {
     case NEWLINE_LF: return "\n";
     case NEWLINE_CR: return "\r";
@@ -270,6 +282,8 @@ void init_app()
 void app_open_file(String path)
 {
     view.buffer = create_buffer(path);
+    view.caret_dirty = true;
+    view.lines_dirty = true;
 }
 
 bool app_change_resolution(Vector2 resolution)
@@ -293,9 +307,12 @@ i64 utf8_decr(Buffer *buffer, i64 i)
     }
 }
 
-i64 utf8_decr(BufferId buffer, i64 i)
+i64 utf8_decr(BufferId buffer_id, i64 i)
 {
-    return utf8_decr(&buffers[buffer.index], i);
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return i;
+    
+    return utf8_decr(buffer, i);
 }
 
 i32 utf32_it_next(Buffer *buffer, i64 *byte_offset)
@@ -314,7 +331,10 @@ i64 buffer_end(Buffer *buffer)
 
 i64 buffer_end(BufferId buffer_id)
 {
-    return buffer_end(&buffers[buffer_id.index]);
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return 0;
+    
+    return buffer_end(buffer);
 }
 
 
@@ -334,6 +354,9 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 
 void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *lines, BufferId buffer_id)
 {
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return;
+    
     // TODO(jesper): multiview support
 
     // TODO(jesper): figure out what I wanna do here to re-flow the lines. Do I create persistent gui layouts
@@ -343,8 +366,6 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *lines, Bu
 
     Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
     Vector2 pen = baseline;
-
-    Buffer *buffer = &buffers[buffer_id.index];
 
     i64 last_line = wrapped_line;
     while (last_line+1 < lines->count && lines->at(last_line+1).wrapped) last_line++;
@@ -439,7 +460,9 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *lines, Bu
 
 bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record_history = true)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return false;
+    
     switch (buffer->type) {
     case BUFFER_FLAT:
         if (byte_start >= 0 && byte_end <= buffer->flat.size) {
@@ -464,7 +487,9 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
 void buffer_save(BufferId buffer_id)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return;
+    
     if (buffer->saved_at == buffer->history_index) return;
     
     FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
@@ -480,13 +505,15 @@ void buffer_save(BufferId buffer_id)
 
 bool buffer_unsaved_changes(BufferId buffer_id)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
-    return buffer->saved_at != buffer->history_index;
+    Buffer *buffer = get_buffer(buffer_id);
+    return buffer && buffer->saved_at != buffer->history_index;
 }
 
 void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_history = true)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return;
+    
     switch (buffer->type) {
     case BUFFER_FLAT: 
         if (buffer->flat.size + text.length > buffer->flat.capacity) {
@@ -520,7 +547,9 @@ void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_hist
 
 void buffer_undo(BufferId buffer_id)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return;
+    
     if (buffer->history_index == 0) return;
     
     i32 group_level = 0;
@@ -549,7 +578,9 @@ void buffer_undo(BufferId buffer_id)
 
 void buffer_redo(BufferId buffer_id)
 {
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return;
+    
     if (buffer->history_index == buffer->history.count) return;
 
     i32 group_level = 0;
@@ -579,9 +610,11 @@ void buffer_redo(BufferId buffer_id)
 
 i64 caret_prev_offset(BufferId buffer_id, i64 byte_offset)
 {
-    i64 prev_offset = byte_offset;
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
     
-    Buffer *buffer = &buffers[buffer_id.index];
+    i64 prev_offset = byte_offset;
+
     switch (buffer->type) {
     case BUFFER_FLAT:
         if (byte_offset == 0) return 0;
@@ -608,11 +641,13 @@ i64 caret_prev_offset(BufferId buffer_id, i64 byte_offset)
 
 i64 caret_next_offset(BufferId buffer_id, i64 byte_offset)
 {
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
     i64 end_offset = buffer_end(buffer_id);
     if (byte_offset >= end_offset) return end_offset;
     
     i64 next_offset = byte_offset;
-    Buffer *buffer = &buffers[buffer_id.index];
     
     switch (buffer->type) {
     case BUFFER_FLAT:
@@ -783,7 +818,8 @@ Caret recalculate_caret(Caret current, BufferId buffer_id, Array<BufferLine> lin
 {
     Caret caret = current;
 
-    Buffer *buffer = &buffers[buffer_id.index];
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return current;
 
     if (caret.byte_offset == 0) caret.wrapped_line = 0;
     else if (caret.byte_offset == buffer_end(buffer_id)) caret.wrapped_line = view.lines.count-1;
@@ -798,7 +834,6 @@ Caret recalculate_caret(Caret current, BufferId buffer_id, Array<BufferLine> lin
     caret.preferred_column = caret.wrapped_column;
     
     app.animating = true;
-    
     return caret;
 }
 
@@ -842,9 +877,9 @@ void app_event(InputEvent event)
     // in an update/redraw. If nothing else, the app.animating variable name just feels wrong at
     // this point, especially when I don't even have anything animating
     
-    Buffer *buffer = &buffers[view.buffer.index];
     switch (event.type) {
-    case IE_TEXT: {
+    case IE_TEXT: 
+        if (buffer_valid(view.buffer)) {
             BufferHistoryScope h(view.buffer);
             buffer_insert(view.buffer, view.caret.byte_offset, String{ (char*)&event.text.c[0], event.text.length });
 
@@ -872,7 +907,8 @@ void app_event(InputEvent event)
             view.caret_dirty = true;
             app.animating = true;
             break;
-        case IK_ENTER: {
+        case IK_ENTER: 
+            if (buffer_valid(view.buffer)) {
                 BufferHistoryScope h(view.buffer);
                 buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
 
@@ -884,7 +920,8 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
             } break;
-        case IK_TAB: {
+        case IK_TAB: 
+            if (buffer_valid(view.buffer)) {
                 BufferHistoryScope h(view.buffer);
                 // TODO(jesper): this should insert tab or spaces depending on buffer setting
                 buffer_insert(view.buffer, view.caret.byte_offset, "\t");
@@ -894,7 +931,8 @@ void app_event(InputEvent event)
 
                 move_view_to_caret();
             } break;
-        case IK_BACKSPACE: {
+        case IK_BACKSPACE: 
+            if (buffer_valid(view.buffer)) {
                 BufferHistoryScope h(view.buffer);
                 i64 start = caret_prev_offset(view.buffer, view.caret.byte_offset);
                 if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
@@ -907,7 +945,8 @@ void app_event(InputEvent event)
                     move_view_to_caret();
                 }
             } break;
-        case IK_DELETE: {
+        case IK_DELETE: 
+            if (buffer_valid(view.buffer)) {
                 BufferHistoryScope h(view.buffer);
                 i64 end = caret_next_offset(view.buffer, view.caret.byte_offset);
                 if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
@@ -930,6 +969,9 @@ void app_event(InputEvent event)
                 i32 wrapped_line = --view.caret.wrapped_line;
                 if (!view.lines[view.caret.wrapped_line+1].wrapped) view.caret.line--;
                 
+                Buffer *buffer = get_buffer(view.buffer);
+                ASSERT(buffer);
+                
                 // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
                 // problems in edge case files with super long lines
                 // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
@@ -945,6 +987,9 @@ void app_event(InputEvent event)
                 i32 wrapped_line = ++view.caret.wrapped_line;
                 if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
                 
+                Buffer *buffer = get_buffer(view.buffer);
+                ASSERT(buffer);
+                
                 // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
                 // problems in edge case files with super long lines
                 // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
@@ -955,30 +1000,36 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
             } break;
-        case IK_PAGE_DOWN:
-            for (i32 i = 0; view.caret.wrapped_line < view.lines.count-1 && i < view.lines_visible-1; i++) {
-                view.caret.wrapped_line++;
-                if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-            }
-            
-            view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-            view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-            view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-            move_view_to_caret();
-            app.animating = true;
-            break;
-        case IK_PAGE_UP:
-            for (i32 i = 0; view.caret.wrapped_line > 0 && i < view.lines_visible-1; i++) {
-                view.caret.wrapped_line--;
-                if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
-            }
+        case IK_PAGE_DOWN: {
+                Buffer *buffer = get_buffer(view.buffer);
+                if (!buffer) break;
+                
+                for (i32 i = 0; view.caret.wrapped_line < view.lines.count-1 && i < view.lines_visible-1; i++) {
+                    view.caret.wrapped_line++;
+                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
+                }
 
-            view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-            view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-            view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-            move_view_to_caret();
-            app.animating = true;
-            break;
+                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                move_view_to_caret();
+                app.animating = true;
+            } break;
+        case IK_PAGE_UP: {
+                Buffer *buffer = get_buffer(view.buffer);
+                if (!buffer) break;
+
+                for (i32 i = 0; view.caret.wrapped_line > 0 && i < view.lines_visible-1; i++) {
+                    view.caret.wrapped_line--;
+                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
+                }
+
+                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                move_view_to_caret();
+                app.animating = true;
+            } break;
 
         default: break;
         }
@@ -991,6 +1042,9 @@ void app_event(InputEvent event)
                 event.mouse.y >= view.rect.pos.y &&
                 event.mouse.y <= view.rect.pos.y + view.rect.size.y)
             {
+                Buffer *buffer = get_buffer(view.buffer);
+                if (!buffer) break;
+                
                 i64 wrapped_line = view.line_offset + (event.mouse.y - view.rect.pos.y + view.voffset) / app.mono.line_height;
                 wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
                 
@@ -1037,7 +1091,9 @@ void app_event(InputEvent event)
 void reflow_lines()
 {
     // TODO(jesper): merge this with the recalculate_line_wrap procedure
-    
+    Buffer *buffer = get_buffer(view.buffer);
+    if (!buffer) return;
+
     view.lines.count = 0;
     array_add(&view.lines, BufferLine{ 0, 0 });
 
@@ -1049,7 +1105,6 @@ void reflow_lines()
     Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
     Vector2 pen = baseline;
 
-    Buffer *buffer = &buffers[view.buffer.index];
     i64 start = buffer_start(buffer);
     i64 end = buffer_end(buffer);
     i64 p = start;
@@ -1219,16 +1274,15 @@ void update_and_render(f32 dt)
             }
         }
     }
-
-    {
+    
+    Buffer *buffer = get_buffer(view.buffer);
+    if (buffer) {
         GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
         cmd.gui_text.font_atlas = app.mono.texture;
         cmd.gui_text.color = { 0.0f, 0.0f, 0.0f };
         
         f32 voffset = view.voffset;
         i32 line_offset = view.line_offset;
-        
-        Buffer *buffer = &buffers[view.buffer.index];
 
         for (i32 i = 0; i < MIN(view.lines.count - line_offset, view.lines_visible); i++) {
             i32 line_index = i + line_offset;
