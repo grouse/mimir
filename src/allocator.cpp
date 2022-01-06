@@ -10,6 +10,7 @@ struct LinearAllocatorState {
 
 struct AllocationHeader {
     u8 offset;
+    u8 alignment;
 };
 
 void* align_ptr(void *ptr, u8 alignment, u8 header_size)
@@ -18,10 +19,11 @@ void* align_ptr(void *ptr, u8 alignment, u8 header_size)
     return (void*)((size_t)ptr + offset);
 }
 
-void write_header(void *ptr, void *aligned_ptr)
+void write_header(void *ptr, void *aligned_ptr, u8 alignment)
 {
     AllocationHeader *header = (AllocationHeader*)((size_t)aligned_ptr - sizeof *header);
     header->offset = (u8)((size_t)aligned_ptr - (size_t)ptr);
+    header->alignment = alignment;
 }
 
 AllocationHeader* get_header(void *aligned_ptr)
@@ -66,7 +68,7 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
             u8 header_size = sizeof(AllocationHeader);
             void *ptr = malloc(size+alignment+header_size);
             void *aligned_ptr = align_ptr(ptr, alignment, header_size);
-            write_header(ptr, aligned_ptr);
+            write_header(ptr, aligned_ptr, alignment);
             return aligned_ptr;
         } 
     case ALLOCATOR_CMD_FREE: {
@@ -81,13 +83,14 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
             void *old_unaligned_ptr = nullptr;
             if (old_ptr) {
                 AllocationHeader *header = get_header(old_ptr);
+                ASSERT(header->alignment == alignment);
                 old_unaligned_ptr = (void*)((size_t)old_ptr - header->offset);
             }
             
             u8 header_size = sizeof(AllocationHeader);
             void *ptr = realloc(old_unaligned_ptr, size+alignment+header_size);
             void *aligned_ptr = align_ptr(ptr, alignment, header_size);
-            write_header(ptr, aligned_ptr);
+            write_header(ptr, aligned_ptr, alignment);
             return aligned_ptr;
         }
     case ALLOCATOR_CMD_RESET:
