@@ -1,5 +1,18 @@
 #include "file.h"
 
+String absolute_path(String relative, Allocator mem)
+{
+    const char *sz_relative = sz_string(relative);
+
+    // NOTE(jesper): size is total size required including null terminator
+    DWORD size = GetFullPathNameA(sz_relative, 0, NULL, NULL);
+    char *pstr = ALLOC_ARR(mem, char, size);
+    
+    // NOTE(jesper): length is size excluding null terminator
+    DWORD length = GetFullPathNameA(sz_relative, size, pstr, NULL);
+    return String{ pstr, (i32)length };
+}
+
 FileInfo read_file(String path, Allocator mem, i32 retry_count)
 {
     FileInfo fi{};

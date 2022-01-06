@@ -1,13 +1,30 @@
 #ifndef FILE_H
 #define FILE_H
 
+#ifdef _WIN32
+using FileHandle = HANDLE;
+#else
+#error "unsupported platform"
+#endif
+
 struct FileInfo {
     u8 *data;
     i32 size;
 };
 
+enum FileOpenMode {
+    FILE_OPEN_CREATE = 1,
+    FILE_OPEN_TRUNCATE,
+};
+
 FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
 Array<String> list_files(String dir, Allocator mem = mem_tmp);
+
+String absolute_path(String relative, Allocator mem = mem_tmp);
+
+FileHandle open_file(String path, FileOpenMode mode);
+void write_file(FileHandle handle, char *data, i32 bytes);
+void close_file(FileHandle handle);
 
 void write_file(String path, StringBuilder *sb);
 
