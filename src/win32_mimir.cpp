@@ -159,6 +159,9 @@ int WINAPI wWinMain(
     has_init = true;
     
     Array<String> args{};
+    
+    // NOTE(jesper): CommandLineToArgvW sets the first argument string to the executable
+    // path if and only if pCmdLine is empty
     if (pCmdLine && *pCmdLine != '\0') {
         i32 argv = 0;
         LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
