@@ -664,8 +664,10 @@ bool gui_button_id(GuiId id, String text)
     return gui_button_id(id, &gui.style.button.font, td, td.bounds.size + Vector2{ 24.0f, 12.0f });
 }
 
-void gui_checkbox_id(GuiId id, String label, bool *checked)
+bool gui_checkbox_id(GuiId id, String label, bool *checked)
 {
+    bool toggled = false;
+    
     id.internal = id.owner;
     id.owner = gui.current_id.owner;
     
@@ -686,9 +688,12 @@ void gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector2 btn_pos = pos + btn_offset;
 
+    if (gui_active_click(id)) {
+        *checked = !(*checked);
+        toggled = true;
+    }
     gui_hot_rect(id, pos, size);
-    if (gui_active_click(id)) *checked = !(*checked);
-    
+
     Vector3 border_col = rgb_unpack(0xFFCCCCCC);
     Vector3 bg_col = gui.active == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
     Vector3 checked_col = rgb_unpack(0xFFCCCCCC);
@@ -698,6 +703,8 @@ void gui_checkbox_id(GuiId id, String label, bool *checked)
     gui_draw_rect(cmdbuf, btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
     if (*checked) gui_draw_rect(cmdbuf, btn_pos + inner_margin, inner_size, wnd->clip_rect, checked_col);
     gui_draw_text(cmdbuf, td.quads, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
+    
+    return toggled;
 }
 
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 size)
