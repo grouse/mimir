@@ -535,16 +535,16 @@ i32 codepoint_index_from_byte_index(String str, i32 byte)
     return ci;
 }
 
-i32 utf8_decr(String str, i32 i)
+i64 utf8_decr(char *str, i64 length, i64 i)
 {
     i--;
     while (i > 0 && (str[i] & 0b11000000) == 0b10000000) i--;
     return i;
 }
 
-i32 utf8_incr(String str, i32 i)
+i64 utf8_incr(char *str, i64 length, i64 i)
 {
-    if (i < str.length) {
+    if (i < length) {
         char c = str[i++];
         if (c & 0x80) {
             if (~c & (1 << 5))      i += 1;
@@ -554,6 +554,17 @@ i32 utf8_incr(String str, i32 i)
     }
     return i;
 }
+
+i32 utf8_decr(String str, i32 i)
+{
+    return (i32)utf8_decr(str.data, str.length, i);
+}
+
+i32 utf8_incr(String str, i32 i)
+{
+    return (i32)utf8_incr(str.data, str.length, i);
+}
+
 
 bool path_equals(String lhs, String rhs)
 { 
@@ -657,7 +668,43 @@ i32 utf8_from_utf32(u8 utf8[4], i32 utf32)
     return -1;
 }
 
-i32 utf32_it_next(String str, i64 *offset)
+i64 utf32_it_next(char *str, i64 length, i64 *offset)
+{
+    i32 c = str[*offset];
+    i64 end = (i64)(str + length);
+
+    if (c & 0x80) {
+        if (~c & (1 << 5)) {
+            if ((*offset)+1 >= end) return 0;
+
+            c = (str[*offset] & 0b00011111) << 6 | 
+                (str[(*offset)+1] & 0b00111111);
+            (*offset) += 1;
+        } else if (~c & (1 << 4)) {
+            if ((*offset)+2 >= end) return 0;
+
+            c = (str[*offset] & 0b00001111) << 12 | 
+                (str[(*offset)+1] & 0b00111111) << 6 | 
+                (str[(*offset)+2] & 0b00111111);
+
+            (*offset) += 2;
+        } else if (~c & (1 << 3)) {
+            if ((*offset)+3 >= end) return 0;
+
+            c = (str[*offset] & 0b00000111) << 18 | 
+                (str[(*offset)+1] & 0b00111111) << 12 | 
+                (str[(*offset)+2] & 0b00111111) << 6 | 
+                (str[(*offset)+3] & 0b00111111);
+
+            (*offset) += 3;
+        }
+    }
+
+    (*offset) += 1;
+    return c;
+}
+
+i32 utf32_it_next(String str, i32 *offset)
 {
     i32 c = str[*offset];
     i64 end = (i64)(str.data + str.length);
