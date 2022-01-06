@@ -90,6 +90,7 @@ struct GuiLayout {
     Vector2 size;
     
     Vector2 current;
+    Vector2 available_space;
 
     union {
         struct {
@@ -237,6 +238,9 @@ extern GuiContext gui;
 void init_gui(String assets_dir);
 void gui_begin_frame();
 void gui_render(Camera camera);
+
+void gui_begin_layout(GuiLayout layout);
+void gui_end_layout();
 
 bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, bool *visible);
 bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size);

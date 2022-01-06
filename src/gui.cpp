@@ -121,7 +121,7 @@ void gui_begin_frame()
         .pos = { 0.0f, 0.0f },
         .size = gfx.resolution
     };
-    array_add(&gui.layout_stack, root_layout);
+    gui_begin_layout(root_layout);
     
     gui.last_active = gui.active;
 }
@@ -1163,7 +1163,7 @@ bool gui_begin_window_id(
         .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f },
         .row.margin = 2.0f
     };
-    array_add(&gui.layout_stack, layout);
+    gui_begin_layout(layout);
 
     wnd->clip_rect = Rect{ layout.pos, layout.size };
     Vector3 title_bg = gui.active_window != id
@@ -1237,7 +1237,7 @@ void gui_end_window()
         gui.current_window_data.size = nullptr;
     }
 
-    gui.layout_stack.count -= 1;
+    gui_end_layout();
     gui.current_window = 1;
 }
 
@@ -1289,8 +1289,7 @@ bool gui_active_parent(GuiId id)
 
 Vector2 gui_layout_widget(Vector2 *required_size)
 {
-    ASSERT(gui.layout_stack.count > 0);
-    GuiLayout *layout = &gui.layout_stack[gui.layout_stack.count-1];
+    GuiLayout *layout = gui_current_layout();
 
     Vector2 pos = gui_layout_widget(*required_size);
     switch (layout->type) {
@@ -1914,9 +1913,8 @@ bool gui_begin_menu_id(GuiId id)
         .size = size,
         .column.margin = 1.0f,
     };
-        
-    array_add(&gui.layout_stack, layout);
-    
+    gui_begin_layout(layout);
+
     Vector3 bg = rgb_unpack(0xFF212121);
     gui_draw_rect(&wnd->command_buffer, layout.pos, layout.size, wnd->clip_rect, bg);
     
@@ -1926,8 +1924,7 @@ bool gui_begin_menu_id(GuiId id)
 
 void gui_end_menu()
 {
-    ASSERT(gui.layout_stack.count > 1);
-    GuiLayout *layout = &gui.layout_stack[gui.layout_stack.count-1];
+    GuiLayout *layout = gui_current_layout();
     
     if (layout->type == GUI_LAYOUT_ROW &&
         (gui.active == gui.current_id || gui.active.owner == gui.current_id.owner)) 
@@ -1937,7 +1934,7 @@ void gui_end_menu()
         gui_draw_rect(&gui.windows[1].command_buffer, layout->pos, size, bg, 0);
     }
     
-    gui.layout_stack.count--;
+    gui_end_layout();
     gui_pop_id();
 }
 
@@ -1985,8 +1982,8 @@ bool gui_begin_menu_id(GuiId id, String label)
             .size = { 200.0f, 0.0f },
             .column.margin = 1.0f,
         };
-        
-        array_add(&gui.layout_stack, layout);
+
+        gui_begin_layout(layout);
         return true;
     }
     
@@ -2124,17 +2121,32 @@ void gui_scrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_
 
 Rect gui_layout_widget_fill()
 {
-    Rect r;
     GuiLayout *cl = gui_current_layout();
+    
+    Rect r;
+    r.pos = cl->pos + cl->current;
+    r.size = cl->available_space;
+
     switch (cl->type) {
     case GUI_LAYOUT_ABSOLUTE:
-        r.pos = cl->pos;
-        r.size = cl->size;
         break;
     case GUI_LAYOUT_ROW:
     case GUI_LAYOUT_COLUMN:
-        LOG_ERROR("unimplemented");
+        cl->available_space = { 0, 0 };
+        cl->current = cl->pos + cl->size;
         break;
     }
     return r;
+}
+
+void gui_begin_layout(GuiLayout layout)
+{
+    layout.available_space = layout.size;
+    array_add(&gui.layout_stack, layout);
+}
+
+void gui_end_layout()
+{
+    ASSERT(gui.layout_stack.count > 1);
+    gui.layout_stack.count--;
 }
