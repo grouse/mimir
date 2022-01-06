@@ -541,11 +541,13 @@ GuiWindow* push_window_to_top(i32 index)
 
 bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
 {
-    // TODO(jesper): investigate whether this should short circuit if gui.active == id
     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
     Vector2 rel = mouse - pos;
-
-    if (gui.active == id ||
+    
+    // TODO(jesper): investigate whether this should short circuit if gui.active == id
+    // - Does not work in menu and submenus. Sub-menus are essentially open if they are active
+    // it should probably be re-worked
+    if (//gui.active == id ||
         (rel.x >= 0.0f && rel.x < size.x &&
          rel.y >= 0.0f && rel.y < size.y))
     {
@@ -595,7 +597,7 @@ void gui_active_press(GuiId id)
 
 bool gui_active_drag(GuiId id, Vector2 data)
 {
-    if (gui.hot == id) {
+    if (gui.hot == id || gui.active == id) {
         if (gui.active != id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed)  {
             gui_active(id);
             gui_drag_start(data);
@@ -2018,9 +2020,11 @@ bool gui_menu_button_id(GuiId id, String label)
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
     
-    gui_hot_rect(id, pos, size);
+    // TODO(jesper): I don't like how this behaves with how the menu closes as soon as anything inside it is clicked,
+    // but not sure how I want to solve it without a lot of annoying usage code
     bool clicked = gui_active_click(id);
-    
+    gui_hot_rect(id, pos, size);
+
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
     gui_draw_rect(cmdbuf, pos, size, wnd->clip_rect, btn_bg);
