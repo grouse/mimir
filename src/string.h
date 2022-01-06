@@ -23,7 +23,14 @@ struct String {
         data = (char*)str;
     }
 
-    char& operator[](i32 i) { return data[i]; }
+    char& operator[](i32 i) 
+    { 
+        // NOTE(jesper): disabled because C/C++ is garbage and assert is defined 
+        // in core.h but core.h needs to include string.h for its procedures. Need 
+        // to make them not rely on string or some nonsense
+        //ASSERT(i < length && i >= 0);
+        return data[i]; 
+    }
 };
 
 struct StringBuilder {
