@@ -42,6 +42,13 @@ enum GuiGizmoAction {
     GUI_GIZMO_END,
 };
 
+enum GuiAnchor {
+    GUI_ANCHOR_TOP,
+    GUI_ANCHOR_RIGHT,
+    GUI_ANCHOR_BOTTOM = GUI_ANCHOR_RIGHT,
+    GUI_ANCHOR_LEFT = GUI_ANCHOR_TOP,
+};
+
 struct GuiId {
     i32 owner;
     i32 index;
@@ -241,7 +248,7 @@ void gui_end_window();
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 size);
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size);
 
-Vector2 gui_layout_widget(Vector2 preferred_size);
+Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
 Vector2 gui_layout_widget(Vector2 *required_size);
 Rect gui_layout_widget_fill();
 

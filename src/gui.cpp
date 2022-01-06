@@ -1241,18 +1241,39 @@ void gui_end_window()
     gui.current_window = 1;
 }
 
-Vector2 gui_layout_widget(Vector2 size)
+Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
 {
-    ASSERT(gui.layout_stack.count > 0);
-    GuiLayout *layout = &gui.layout_stack[gui.layout_stack.count-1];
+    GuiLayout *cl = gui_current_layout();
+    Vector2 pos = cl->pos;
     
-    Vector2 pos = layout->pos + layout->current;
-    switch (layout->type) {
+    switch (cl->type) {
     case GUI_LAYOUT_ROW:
-        layout->current.y += size.y + layout->row.margin;
+        switch (anchor) {
+        case GUI_ANCHOR_TOP:
+            pos += cl->current;
+            cl->current.y += size.y + cl->row.margin;
+            cl->available_space.y -=  size.y + cl->row.margin;
+            break;
+        case GUI_ANCHOR_BOTTOM:
+            pos.x += cl->current.x;
+            pos.y += cl->current.y + cl->available_space.y - size.y;
+            cl->available_space.y -= size.y + cl->row.margin;
+            break;
+        }
         break;
     case GUI_LAYOUT_COLUMN:
-        layout->current.x += size.x + layout->column.margin;
+        switch (anchor) {
+        case GUI_ANCHOR_LEFT:
+            pos += cl->current;
+            cl->current.x += size.x + cl->column.margin;
+            cl->available_space.x -= size.x + cl->column.margin;
+            break;
+        case GUI_ANCHOR_RIGHT:
+            pos.x += cl->current.x + cl->available_space.x - size.x;
+            pos.y += cl->current.y;
+            cl->available_space.x -= size.x + cl->column.margin;
+            break;
+        }
         break;
     case GUI_LAYOUT_ABSOLUTE:
         break;
