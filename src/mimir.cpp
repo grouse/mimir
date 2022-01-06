@@ -58,12 +58,17 @@ struct View {
     i32 line_offset = 0;
     i32 lines_visible = 10;
     DynamicArray<BufferLine> lines;
-    bool lines_dirty = true;
     Rect rect;
     
     BufferId buffer;
     
     Caret caret;
+    
+    struct {
+        u64 lines_dirty : 1 = true;
+        u64 caret_dirty : 1 = true;
+    };
+
 };
 
 Application app{};
@@ -290,6 +295,10 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
     return offset;
 }
 
+bool app_needs_render()
+{
+    return app.animating || view.lines_dirty || view.caret_dirty;
+}
 
 void app_event(InputEvent event)
 {
@@ -682,4 +691,6 @@ void update_and_render(f32 dt)
     gfx_submit_commands(debug_gfx);
 
     gui_render();
+    
+    app.animating = false;
 }

@@ -180,7 +180,7 @@ int WINAPI WinMain(
         g_mouse.dwheel = 0;
         
         MSG msg;
-        while (!app.animating && GetMessageA(&msg, nullptr, 0, 0)) {
+        while (!app_needs_render() && GetMessageA(&msg, nullptr, 0, 0)) {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
         }
@@ -203,8 +203,6 @@ int WINAPI WinMain(
         
         update_and_render(dt);
         SwapBuffers(wnd.hdc);
-        
-        //app.animating = false;
     }
 
     return 0;
