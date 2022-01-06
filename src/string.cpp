@@ -139,7 +139,7 @@ i32 utf8_truncate(String str, i32 limit)
     return truncated;
 }
 
-void utf8_from_utf16(u8 *dst, i32 capacity, u16 *src, i32 length)
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const u16 *src, i32 length)
 {
     i32 written = 0;
     for (const u16 *ptr = src; ptr < src+length; ptr++) {
@@ -167,25 +167,33 @@ void utf8_from_utf16(u8 *dst, i32 capacity, u16 *src, i32 length)
         }
 
         if (utf32 <= 0x7F) {
-            if (written+1 > capacity) return;
+            if (written+1 > capacity) return written;
             dst[written++] = (u8)utf32;
         } else if (utf32 <= 0x7FF) {
-            if (written+2 > capacity) return;
+            if (written+2 > capacity) return written;
             dst[written++] = (u8)(0b11000000 | (0b00011111 & (u8)(utf32 >> 6)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32)));
         } else if (utf32 <= 0xFFFF) {
-            if (written+3 > capacity) return; 
+            if (written+3 > capacity) return written; 
             dst[written++] = (u8)(0b11100000 | (0b00001111 & (u8)(utf32 >> 12)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32))); 
         } else {
-            if (written+4 > capacity) return;
+            if (written+4 > capacity) return written;
             dst[written++] = (u8)(0b11110000 | (0b00000111 & (u8)(utf32 >> 18)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 12)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6))); 
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32))); 
         }
     }
+    
+    return written;
+}
+
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return utf8_from_utf16(dst, capacity, (const u16*)src, length);
 }
 
 String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
@@ -264,7 +272,13 @@ String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
     return str;
 }
 
-i32 utf8_length(u16 *str, i32 utf16_len, i32 limit)
+String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return string_from_utf16((const u16*)in_str, length, mem);
+}
+
+i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit)
 {
     i32 length = 0;
     for (i32 i = 0; i < utf16_len; i++) {
@@ -309,7 +323,7 @@ i32 utf8_length(u16 *str, i32 utf16_len, i32 limit)
     return length;
 }
 
-i32 utf8_length(u16 *str, i32 utf16_len)
+i32 utf8_length(const u16 *str, i32 utf16_len)
 {
     i32 length = 0;
     for (i32 i = 0; i < utf16_len; i++) {
@@ -349,6 +363,13 @@ i32 utf8_length(u16 *str, i32 utf16_len)
 
     return length;
 }
+
+i32 utf8_length(const wchar_t *str, i32 utf16_len)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return utf8_length((const u16*)str, utf16_len);
+}
+
 
 i32 utf16_length(String str)
 {

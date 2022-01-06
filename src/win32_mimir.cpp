@@ -92,6 +92,9 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     case WM_EXITSIZEMOVE:
         break;
     case WM_SIZE: {
+            // NOTE(jesper): we end up here as soon as the window is created
+            if (!has_init) break;
+            
             i32 width = lparam & 0xFFFF;
             i32 height = (lparam >> 16) & 0xFFFF;
             
@@ -105,7 +108,7 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             default: resize_type = "unknown";
             }
             
-            if (has_init && app_change_resolution({ (f32)width, (f32)height })) {
+            if (app_change_resolution({ (f32)width, (f32)height })) {
                 glViewport(0, 0, width, height);
                 
                 // TODO(jesper): I don't really understand why I can't just set this to true
@@ -131,10 +134,10 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 }
 
 
-int WINAPI WinMain(
+int WINAPI wWinMain(
     HINSTANCE hInstance, 
     HINSTANCE hPrevInstance, 
-    PWSTR pCmdLine, 
+    LPWSTR pCmdLine, 
     int nShowCmd)
 {
     init_default_allocators();
@@ -152,11 +155,39 @@ int WINAPI WinMain(
     
     init_gfx(resolution);
     init_app();
+    
     has_init = true;
     
-    update_and_render(0.0f);
-    SwapBuffers(wnd.hdc);
+    i32 argv = 0;
+    LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
 
+    Array<String> args{};
+    
+    if (argv > 0) {
+        i32 total_utf8_length = 0;
+        for (i32 i = 0; i < argv; i++) {
+            total_utf8_length += utf8_length(argc[i], wcslen(argc[i]));
+        }
+
+        args.data = ALLOC_ARR(mem_dynamic, String, argv);
+        args.count = argv;
+
+        char *args_mem = ALLOC_ARR(mem_dynamic, char, total_utf8_length);
+        
+        char *p = args_mem;
+        for (i32 i = 0; i < argv; i++) {
+            i32 l = wcslen(argc[i]);
+            
+            args[i].data = p;
+            args[i].length = utf8_from_utf16((u8*)p, l, argc[i], l);
+            p += l;
+        }
+    }
+    
+    if (args.count > 0) {
+        app_open_file(args[0]);
+    }
+    
     
     LARGE_INTEGER frequency, last_time;
     QueryPerformanceFrequency(&frequency);

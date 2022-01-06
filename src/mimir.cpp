@@ -256,13 +256,17 @@ BufferId create_buffer(String file)
 void init_app()
 {
     String assets_dir{ "../assets" };
+    
     init_gui(assets_dir);
     
-    //gui.style.text.color = Vector3{ 0.0f, 0.0f, 0.0f };
     app.mono = load_font(join_path(assets_dir, "fonts/Cousine/Cousine-Regular.ttf"));
     
-    view.buffer = create_buffer("../lorem_1mb.txt");
     calculate_num_visible_lines();
+}
+
+void app_open_file(String path)
+{
+    view.buffer = create_buffer(path);
 }
 
 bool app_change_resolution(Vector2 resolution)

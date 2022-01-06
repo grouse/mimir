@@ -61,16 +61,20 @@ String slice(String str, i32 start);
 
 char* sz_string(String str, Allocator mem = mem_tmp);
 
-i32 utf8_length(u16 *str, i32 utf16_len, i32 limit);
-i32 utf8_length(u16 *str, i32 utf16_len);
+i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit);
+i32 utf8_length(const u16 *str, i32 utf16_len);
+i32 utf8_length(const wchar_t *str, i32 utf16_len);
 i32 utf16_length(String str);
 
 void utf16_from_string(u16 *dst, i32 capacity, String src);
 
-void utf8_from_utf16(u8 *dst, i32 capacity, u16 *src, i32 length);
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const u16 *src, i32 length);
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length);
+
 i32 utf8_from_utf32(u8 utf8[4], i32 utf32);
 
 String string_from_utf16(const u16 *in_str, i32 length, Allocator mem = mem_tmp);
+String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem = mem_tmp);
 
 i32 utf32_next(char **p, char *end);
 i32 utf32_it_next(char **utf8, char *end);
@@ -84,5 +88,7 @@ i32 codepoint_index_from_byte_index(String str, i32 byte);
 
 void append_string(StringBuilder *sb, String str);
 void append_stringf(StringBuilder *sb, const char *fmt, ...);
+
+
 
 #endif // STRING_H

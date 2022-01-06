@@ -710,6 +710,10 @@ extern "C" {
         SIZE_T dwSize,
         DWORD  flAllocationType,
         DWORD  flProtect);    
+    
+    LPWSTR* CommandLineToArgvW(
+        LPCWSTR lpCmdLine,
+        int *pNumArgs);
 }
 
 #endif // WIN32_LITE_H

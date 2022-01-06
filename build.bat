@@ -13,7 +13,7 @@ SET FLAGS=%DEFINITIONS% %WARNINGS% -ferror-limit=0 -g -fno-exceptions -fno-rtti 
 if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
 SET INCLUDE_DIR=-I%ROOT%
-SET LIBS=-luser32.lib -lopengl32.lib -lgdi32.lib -lshlwapi.lib
+SET LIBS=-luser32.lib -lShell32.lib -lopengl32.lib -lgdi32.lib -lshlwapi.lib
 SET LLVM=D:\apps\LLVM
 
 PUSHD %BUILD_DIR%
