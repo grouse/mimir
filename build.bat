@@ -7,7 +7,7 @@ SET BUILD_DIR=%ROOT%\build
 
 SET DEFINITIONS=-D_CRT_SECURE_NO_WARNINGS
 
-SET WARNINGS=-Wall -Wextra -Wno-missing-braces -Wno-logical-op-parentheses -Wno-c99-designator -Wno-unused-parameter -Wno-initializer-overrides
+SET WARNINGS=-Wall -Wextra -Wno-missing-braces -Wno-logical-op-parentheses -Wno-c99-designator -Wno-unused-parameter -Wno-initializer-overrides -Wno-c++20-extensions
 SET FLAGS=%DEFINITIONS% %WARNINGS% -ferror-limit=0 -g -fno-exceptions -fno-rtti -std=c++17 -fno-color-diagnostics
 
 if not exist %BUILD_DIR% mkdir %BUILD_DIR%
