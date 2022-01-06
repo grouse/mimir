@@ -11,9 +11,16 @@ struct Array {
 
     T& operator[](i32 i) 
     { 
-        ASSERT(i < count);
+        ASSERT(i < count && i >= 0);
         return data[i]; 
     }
+    
+    T& at(i32 i) 
+    { 
+        ASSERT(i < count && i >= 0);
+        return data[i]; 
+    }
+
 
     T* begin() { return &data[0]; }
     T* end() { return &data[count]; }
