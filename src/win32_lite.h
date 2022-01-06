@@ -98,6 +98,8 @@
 #define WM_LBUTTONUP                    0x0202
 #define WM_MBUTTONDOWN                  0x0207
 #define WM_MBUTTONUP                    0x0208
+#define WM_RBUTTONDOWN                  0x0204
+#define WM_RBUTTONUP                    0x0205
 #define WM_PAINT                        0x000F
 #define WM_CHAR                         0x0102
 #define WM_COMMAND                      0x0111
@@ -477,6 +479,12 @@ extern "C" {
         DWORD    dwCreatorType;
         WORD     wFinderFlags;
     } WIN32_FIND_DATAA, *PWIN32_FIND_DATAA, *LPWIN32_FIND_DATAA;
+    
+    DWORD GetFullPathNameA(
+        LPCSTR lpFileName,
+        DWORD  nBufferLength,
+        LPSTR  lpBuffer,
+        LPSTR  *lpFilePart);
     
     typedef struct tagPOINT {
         LONG x;
