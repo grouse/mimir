@@ -135,9 +135,7 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T e)
     ASSERT(insert_at <= arr->count);
 
     if (arr->count+1 > arr->capacity) {
-        if (arr->alloc.proc == nullptr) {
-            arr->alloc = mem_dynamic;
-        }
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
         i32 old_capacity = arr->capacity;
         arr->capacity = arr->capacity == 0 ? 1 : arr->capacity*2;
@@ -156,9 +154,7 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T *es, i32 count)
     ASSERT(insert_at <= arr->count);
 
     if (arr->count+count > arr->capacity) {
-        if (arr->alloc.proc == nullptr) {
-            arr->alloc = mem_dynamic;
-        }
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
         i32 old_capacity = arr->capacity;
         arr->capacity = MAX(arr->count+count, arr->capacity*2);
@@ -171,6 +167,40 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T *es, i32 count)
     return insert_at;
 }
 
+template<typename T>
+i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
+{
+    ASSERT(start >= 0);
+    ASSERT(end >= 0);
+    ASSERT(end <= arr->count);
+    ASSERT(start < end);
+    
+    i32 remove_count = end-start;
+    i32 new_count = arr->count - remove_count + values.count;
+    
+    if (new_count > arr->capacity) {
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
+
+        i32 old_capacity = arr->capacity;
+        arr->capacity = MAX(new_count, arr->capacity*2);
+        arr->data = REALLOC_ARR(arr->alloc, T, arr->data, old_capacity, arr->capacity);
+    }
+    
+    if (values.count > remove_count) {
+        for (i32 i = new_count-1; i > end; i--) arr->data[i] = arr->data[i-1];
+    }
+    
+    for (i32 i = 0; i < values.count; i++) arr->data[start+i] = values.data[i];
+    
+    if (remove_count > values.count) {
+        for (i32 i = 0; i < values.count-end; i++) {
+            arr->data[start+i] = arr->data[end+i];
+        }
+    }
+         
+    arr->count = new_count;
+    return new_count;
+}
 
 template<typename T>
 void array_remove_unsorted(Array<T> *arr, i32 index)
