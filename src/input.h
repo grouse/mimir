@@ -30,6 +30,10 @@ enum InputKey {
     IK_S,
     IK_W,
     IK_I,
+    IK_J,
+    IK_K,
+    IK_D,
+    IK_U,
 };
 
 enum ModifierFlags : u32 {

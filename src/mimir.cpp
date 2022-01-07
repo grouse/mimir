@@ -50,6 +50,10 @@ struct BufferHistory {
             i64 offset;
             String text;
         };
+        struct {
+            i64 caret;
+            i64 mark;
+        };
     };
 };
 
@@ -603,7 +607,8 @@ void buffer_undo(BufferId buffer_id)
             buffer_insert(buffer_id, h.offset, h.text, false);
             break;
         case BUFFER_CURSOR_POS:
-            view.caret.byte_offset = h.offset;
+            view.caret.byte_offset = h.caret;
+            view.mark.byte_offset = h.mark;
             view.caret_dirty = true;
             break;
         case BUFFER_HISTORY_GROUP_START:
@@ -634,7 +639,8 @@ void buffer_redo(BufferId buffer_id)
             buffer_remove(buffer_id, h.offset, h.offset+h.text.length, false);
             break;
         case BUFFER_CURSOR_POS:
-            view.caret.byte_offset = h.offset;
+            view.caret.byte_offset = h.caret;
+            view.mark.byte_offset = h.mark;
             view.caret_dirty = true;
             break;
         case BUFFER_HISTORY_GROUP_START:
@@ -1012,12 +1018,12 @@ struct BufferHistoryScope {
     BufferHistoryScope(BufferId buffer) : buffer(buffer)
     {
         buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_START });
-        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
+        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
     }
     
     ~BufferHistoryScope()
     {
-        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .offset = view.caret.byte_offset });
+        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
         buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_END });
     }
 };
