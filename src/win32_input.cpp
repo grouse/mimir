@@ -82,12 +82,16 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         } break;
     case WM_KEYDOWN:
         if (wparam == VK_CONTROL) modifier_state |= MF_CTRL;
+        else if (wparam == VK_SHIFT) modifier_state |= MF_SHIFT;
+        
         event.type = IE_KEY_PRESS;
         event.key.code = input_key_from_wparam(wparam);
         event.key.modifiers = (ModifierFlags)modifier_state;
         break;
     case WM_KEYUP:
         if (wparam == VK_CONTROL) modifier_state &= ~MF_CTRL;
+        else if (wparam == VK_SHIFT) modifier_state &= ~MF_SHIFT;
+        
         event.type = IE_KEY_RELEASE;
         event.key.code = input_key_from_wparam(wparam);
         event.key.modifiers = (ModifierFlags)modifier_state;

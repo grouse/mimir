@@ -32,6 +32,15 @@ struct Application {
     bool animating = true;
     
     EditMode mode;
+    
+    Vector3 bg = rgb_unpack(0x00142825);
+    Vector3 fg = rgb_unpack(0x00D5C4A1);
+    
+    Vector3 mark_fg = rgb_unpack(0xFFEF5F0A);
+    Vector3 caret_fg = rgb_unpack(0xFFEF5F0A);
+    Vector3 caret_bg = rgb_unpack(0xFF8a523f);
+    
+    Vector3 line_bg = rgb_unpack(0xFF264041);
 };
 
 struct BufferHistory {
@@ -102,7 +111,7 @@ struct View {
     
     Rect rect;
     BufferId buffer;
-    Caret caret;
+    Caret caret, mark;
     
     struct {
         u64 lines_dirty : 1;
@@ -766,7 +775,8 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
             char start_c = p[offset--];
             bool start_is_whitespace = is_whitespace(start_c);
             bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
-            
+            bool start_is_normal = !start_is_boundary && !start_is_whitespace;
+
             bool was_whitespace = start_is_whitespace;
             bool has_whitespace = false;
             bool was_ln = start_c == '\n';
@@ -796,6 +806,14 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
                         return CLAMP(0, offset, end);
                     } else {
                         return CLAMP(0, offset+1, end);
+                    }
+                }
+                
+                if (boundary && offset != byte_offset) {
+                    if ((has_whitespace || start_is_normal) && !was_whitespace && offset+1 != byte_offset) {
+                        return CLAMP(0, offset+1, end);
+                    } else {
+                        return CLAMP(0, offset, end);
                     }
                 }
                 
@@ -1030,12 +1048,16 @@ void app_event(InputEvent event)
         if (app.mode == MODE_EDIT) {
             switch (event.key.code) {
             case IK_W: 
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                
                 view.caret.byte_offset = buffer_seek_next_word(view.buffer, view.caret.byte_offset);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 app.animating = true;
                 break;
             case IK_B:
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                
                 view.caret.byte_offset = buffer_seek_prev_word(view.buffer, view.caret.byte_offset);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
@@ -1442,11 +1464,56 @@ void update_and_render(f32 dt)
         }
     }
     
+    if (view.caret_dirty) {
+        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+        view.caret_dirty = false;
+    }
+
+    if (view.caret.wrapped_line >= view.line_offset && 
+        view.caret.wrapped_line < view.line_offset + view.lines_visible)
+    {
+        i32 y = view.caret.wrapped_line - view.line_offset;
+        f32 w = app.mono.space_width;
+        f32 h = app.mono.line_height - 2.0f;
+        
+        Vector2 p0{ 
+            view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
+            view.rect.pos.y + y*app.mono.line_height - view.voffset,
+        };
+        Vector2 p1{ p0.x, p0.y + h };
+        
+        gui_draw_rect(&gfx.frame_cmdbuf, { view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg);
+
+        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, h }, app.caret_bg);
+        gui_draw_rect(&gfx.frame_cmdbuf, p0, { 1.0f, h }, app.caret_fg);
+        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, 1.0f }, app.caret_fg);
+        gui_draw_rect(&gfx.frame_cmdbuf, p1, { w, 1.0f }, app.caret_fg);
+    }
+    
+    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+    if (view.mark.wrapped_line >= view.line_offset && 
+        view.mark.wrapped_line < view.line_offset + view.lines_visible)
+    {
+        i32 y = view.mark.wrapped_line - view.line_offset;
+        f32 w = app.mono.space_width/2;
+        f32 h = app.mono.line_height - 2.0f;
+
+        Vector2 p0{ 
+            view.rect.pos.x + view.mark.wrapped_column*app.mono.space_width,
+            view.rect.pos.y + y*app.mono.line_height - view.voffset,
+        };
+        Vector2 p1{ p0.x, p0.y + h };
+
+        gui_draw_rect(&gfx.frame_cmdbuf, p0, { 1.0f, h }, app.mark_fg);
+        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, 1.0f }, app.mark_fg);
+        gui_draw_rect(&gfx.frame_cmdbuf, p1, { w, 1.0f }, app.mark_fg);
+    }
+
     Buffer *buffer = get_buffer(view.buffer);
     if (buffer) {
         GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
         cmd.gui_text.font_atlas = app.mono.texture;
-        cmd.gui_text.color = { 0.0f, 0.0f, 0.0f };
+        cmd.gui_text.color = linear_from_sRGB(app.fg);
         
         f32 voffset = view.voffset;
         i32 line_offset = view.line_offset;
@@ -1524,27 +1591,8 @@ void update_and_render(f32 dt)
         gui_push_command(&gfx.frame_cmdbuf, cmd);
     }
     
-    if (view.caret_dirty) {
-        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-        view.caret_dirty = false;
-    }
-
-    if (view.caret.wrapped_line >= view.line_offset && 
-        view.caret.wrapped_line < view.line_offset + view.lines_visible)
-    {
-        i32 i = view.caret.wrapped_line - view.line_offset;
-
-        Vector2 pen{ 
-            view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
-            view.rect.pos.y + i*app.mono.line_height + (f32)app.mono.baseline - view.voffset
-        };
-
-        // TODO(jesper): animate blinking caret?
-        gui_draw_rect(&gfx.frame_cmdbuf, { pen.x, pen.y - app.mono.baseline }, { 1.0f, app.mono.line_height }, { 1.0f, 0.0f, 0.0f });
-
-    }
-
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    Vector3 clear_color = linear_from_sRGB(app.bg);
+    glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     gui_end_layout();
