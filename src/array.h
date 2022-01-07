@@ -172,7 +172,6 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
 {
     ASSERT(start >= 0);
     ASSERT(end >= 0);
-    ASSERT(end <= arr->count);
     ASSERT(start < end);
     
     i32 remove_count = end-start;
