@@ -31,7 +31,7 @@ struct Application {
     i32 tab_width = 4;
     bool animating = true;
     
-    EditMode mode;
+    EditMode mode, next_mode;
     
     Vector3 bg = rgb_unpack(0x00142825);
     Vector3 fg = rgb_unpack(0x00D5C4A1);
@@ -971,7 +971,7 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
 
 bool app_needs_render()
 {
-    return app.animating || view.lines_dirty || view.caret_dirty;
+    return app.next_mode != app.mode || app.animating || view.lines_dirty || view.caret_dirty;
 }
 
 
@@ -1140,14 +1140,14 @@ void app_event(InputEvent event)
                     app.animating = true;
                 } break;
             case IK_I:
-                app.mode = MODE_INSERT;
+                app.next_mode = MODE_INSERT;
                 break;
             default: break;
             }
         } else if (app.mode == MODE_INSERT) {
             switch (event.key.code) {
             case IK_ESC:
-                app.mode = MODE_EDIT;
+                app.next_mode = MODE_EDIT;
                 break;
             case IK_ENTER: 
                 if (buffer_valid(view.buffer)) {
@@ -1634,4 +1634,9 @@ void update_and_render(f32 dt)
     gui_render();
     
     app.animating = false;
+    
+    // NOTE(jesper): this is something of a hack because WM_CHAR messages come after the WM_KEYDOWN, and
+    // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
+    // be deferred.
+    app.mode = app.next_mode;
 }
