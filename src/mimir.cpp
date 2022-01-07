@@ -517,7 +517,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 };
                 buffer_history(buffer_id, h);
             }
-            memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_start);
+            memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
             buffer->flat.size -= num_bytes;
             return true;
         } else LOG_ERROR("out of range");
@@ -1053,6 +1053,36 @@ void app_event(InputEvent event)
     case IE_KEY_PRESS: 
         if (app.mode == MODE_EDIT) {
             switch (event.key.code) {
+            case IK_U:
+                buffer_undo(view.buffer);
+                view.lines_dirty = true;
+                view.caret_dirty = true;
+                app.animating = true;
+                break;
+            case IK_R:
+                buffer_redo(view.buffer);
+                view.lines_dirty = true;
+                view.caret_dirty = true;
+                app.animating = true;
+                break;
+            case IK_D: {
+                    BufferHistoryScope h(view.buffer);
+                    
+                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
+                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
+                    if (start == end) end += 1;
+                    
+                    if (buffer_remove(view.buffer, start, end)) {
+                        // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
+                        view.lines_dirty = true;
+
+                        view.caret.byte_offset = start;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        view.mark = view.caret;
+
+                        move_view_to_caret();
+                    }
+                } break;
             case IK_W: 
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 
@@ -1069,6 +1099,46 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
                 break;
+            case IK_J:
+                if (view.caret.wrapped_line < view.lines.count-1) {
+                    if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                    
+                    i32 wrapped_line = ++view.caret.wrapped_line;
+                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
+
+                    Buffer *buffer = get_buffer(view.buffer);
+                    ASSERT(buffer);
+
+                    // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
+                    // problems in edge case files with super long lines
+                    // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
+                    // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
+                    view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                    view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                    move_view_to_caret();
+                    app.animating = true;
+                } break;
+            case IK_K:
+                if (view.caret.wrapped_line > 0) {
+                    if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                    
+                    i32 wrapped_line = --view.caret.wrapped_line;
+                    if (!view.lines[view.caret.wrapped_line+1].wrapped) view.caret.line--;
+
+                    Buffer *buffer = get_buffer(view.buffer);
+                    ASSERT(buffer);
+
+                    // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
+                    // problems in edge case files with super long lines
+                    // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
+                    // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
+                    view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
+                    view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+                    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+                    move_view_to_caret();
+                    app.animating = true;
+                } break;
             case IK_I:
                 app.mode = MODE_INSERT;
                 break;
@@ -1167,18 +1237,6 @@ void app_event(InputEvent event)
             if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
             app.animating = true;
             break;
-        case IK_Z:
-            if (event.key.modifiers == MF_CTRL) buffer_undo(view.buffer);
-            view.lines_dirty = true;
-            view.caret_dirty = true;
-            app.animating = true;
-            break;
-        case IK_R:
-            if (event.key.modifiers == MF_CTRL) buffer_redo(view.buffer);
-            view.lines_dirty = true;
-            view.caret_dirty = true;
-            app.animating = true;
-            break;
         case IK_LEFT: 
             view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
@@ -1189,42 +1247,7 @@ void app_event(InputEvent event)
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
             move_view_to_caret();
             break;
-        case IK_UP:
-            if (view.caret.wrapped_line > 0) {
-                i32 wrapped_line = --view.caret.wrapped_line;
-                if (!view.lines[view.caret.wrapped_line+1].wrapped) view.caret.line--;
-                
-                Buffer *buffer = get_buffer(view.buffer);
-                ASSERT(buffer);
-                
-                // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
-                // problems in edge case files with super long lines
-                // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
-                // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
-                view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
         case IK_DOWN:
-            if (view.caret.wrapped_line < view.lines.count-1) {
-                i32 wrapped_line = ++view.caret.wrapped_line;
-                if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-                
-                Buffer *buffer = get_buffer(view.buffer);
-                ASSERT(buffer);
-                
-                // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
-                // problems in edge case files with super long lines
-                // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
-                // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
-                view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
 #endif
         default: break;
         }
