@@ -32,6 +32,20 @@ struct DynamicArray : Array<T> {
     Allocator alloc;
 };
 
+template<typename T>
+void array_create(DynamicArray<T> *arr, i32 capacity = 0, Allocator mem = mem_tmp)
+{
+    arr->data = capacity > 0 ? ALLOC_ARR(mem, T, capacity) : nullptr;
+    arr->count = arr->capacity = capacity;
+    arr->alloc = mem;
+}
+
+template<typename T>
+void array_create(Array<T> *arr, i32 capacity = 0, Allocator mem = mem_dynamic)
+{
+    arr->data = capacity > 0 ? ALLOC_ARR(mem, T, capacity) : nullptr;
+    arr->count = capacity;
+}
 
 template<typename T>
 void array_reserve(DynamicArray<T> *arr, i32 capacity)

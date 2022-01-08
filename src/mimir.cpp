@@ -6,6 +6,7 @@
 #include "allocator.cpp"
 #include "core.cpp"
 #include "gfx_opengl.cpp"
+#include "assets.cpp"
 
 enum EditMode {
     MODE_EDIT,
@@ -317,11 +318,16 @@ BufferId create_buffer(String file)
 
 void init_app()
 {
-    String assets_dir{ "../assets" };
+    String asset_folders[] = {
+        "./",
+        "../assets",
+        // bin_folder
+    };
+    init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
     
-    init_gui(assets_dir);
+    init_gui();
     
-    app.mono = load_font(join_path(assets_dir, "fonts/Cousine/Cousine-Regular.ttf"));
+    app.mono = load_font("fonts/Cousine/Cousine-Regular.ttf");
     
     calculate_num_visible_lines();
 }

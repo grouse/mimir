@@ -2,6 +2,7 @@
 
 #include "core.h"
 #include "file.h"
+#include "assets.h"
 
 extern Allocator mem_frame;
 
@@ -15,13 +16,13 @@ Font load_font(String path)
 {
     Font font{};
     
-    FileInfo f = read_file(path);
-    if (f.data) {
+    Asset *asset = find_asset(path);
+    if (asset) {
         stbtt_fontinfo fi;
-        stbtt_InitFont(&fi, f.data, 0);
+        stbtt_InitFont(&fi, asset->data, 0);
 
         u8 *bitmap = (u8*)ALLOC(mem_dynamic, 1024*1024);
-        stbtt_BakeFontBitmap(f.data, 0, 18.0f, bitmap, 1024, 1024, 0, 256, font.atlas);
+        stbtt_BakeFontBitmap(asset->data, 0, 18.0f, bitmap, 1024, 1024, 0, 256, font.atlas);
         stbtt_GetFontVMetrics(&fi, &font.ascent, &font.descent, &font.line_gap);
         font.scale = stbtt_ScaleForPixelHeight(&fi, 18);
         font.line_height = font.scale * (font.ascent - font.descent + font.line_gap);
@@ -44,7 +45,7 @@ Font load_font(String path)
     return font;
 }
 
-void init_gui(String assets_dir)
+void init_gui()
 {
     glGenBuffers(1, &gui.vbo);
     
@@ -73,10 +74,9 @@ void init_gui(String assets_dir)
     gui.camera.projection[3][1] = -1.0f;
     gui.camera.projection[3][0] = -1.0f;
     
-    //TextureAsset *texture = find_texture_asset("textures/close.png");
-    //PANIC_IF(!texture, "unable to find close button icon asset");
-    //gui.style.icons.close = texture->texture_handle;
-    gui.style.text.font = load_font(join_path(assets_dir, "fonts/Roboto-Regular.ttf"));
+    if (auto a = find_asset("textures/close.png"); a) gui.style.icons.close = gfx_load_texture(a->data, a->size);
+    
+    gui.style.text.font = load_font("fonts/Roboto-Regular.ttf");
     gui.style.button.font = gui.style.text.font;
 }
 
@@ -1094,7 +1094,6 @@ bool gui_begin_window_id(
     Vector2 *size,
     bool *visible)
 {
-    
     if (!*visible) return false;
     ASSERT(gui.current_window == 1);
     gui_begin_window_id(id, title, pos, size);

@@ -1,5 +1,7 @@
 #include "gfx_opengl.h"
 
+#include "external/stb/stb_image.h"
+
 GfxContext gfx;
 
 extern Allocator mem_frame;
@@ -687,7 +689,7 @@ Vector4 linear_from_sRGB(Vector4 sRGB)
     return l;
 }
     
-GLuint gfx_create_texture(void *data, i32 width, i32 height)
+GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height)
 {
     GLuint handle;
     glGenTextures(1, &handle);
@@ -697,9 +699,16 @@ GLuint gfx_create_texture(void *data, i32 width, i32 height)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
     
     return handle;
+}
+
+GLuint gfx_load_texture(u8 *data, i32 size)
+{
+    i32 width, height, num_channels;
+    u8 *pixel_data = stbi_load_from_memory(data, size, &width, &height, &num_channels, 4);
+    return gfx_create_texture(pixel_data, width, height);
 }
 
 Matrix4 transform(Camera *camera)

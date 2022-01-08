@@ -242,7 +242,7 @@ struct GuiContext {
 
 extern GuiContext gui;
 
-void init_gui(String assets_dir);
+void init_gui();
 void gui_begin_frame();
 void gui_render(Camera camera);
 

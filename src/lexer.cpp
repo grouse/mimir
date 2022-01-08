@@ -102,3 +102,43 @@ bool require_next_token(Lexer *lexer, char c, Token *t)
     }
     return true;
 }
+
+
+bool parse_version_decl(Lexer *lexer, i32 *version_out, i32 max_version, Token *t)
+{
+    if (!require_next_token(lexer, '#', t)) return false;
+    if (!require_next_token(lexer, TOKEN_IDENTIFIER, t)) return false;
+
+    if (t->str != "version") {
+        PARSE_ERROR(lexer, "expected identifier 'version', got '%.*s'", STRFMT(t->str));
+        return false;
+    }
+
+    Token version_token;
+    if (!require_next_token(lexer, TOKEN_INTEGER, &version_token)) return false;
+    i32 version = i32_from_string(version_token.str);
+
+    if (version < 0) {
+        PARSE_ERROR(lexer, "version cannot be a negative number");
+        return false;
+    }
+
+    if (version > max_version) {
+        PARSE_ERROR(lexer, "version (%d) is higher than currently supported (%d)", version, max_version);
+        return false;
+    }
+
+    *version_out = version;
+    return true;
+}
+
+bool parse_vector2(Lexer *lexer, Token *t, Vector2 *position)
+{
+    Token x_tok, y_tok;
+    if (!require_next_token(lexer, TOKEN_NUMBER, &x_tok)) return false;
+    if (!require_next_token(lexer, TOKEN_NUMBER, &y_tok)) return false;
+    if (!require_next_token(lexer, ';', t)) return false;
+    if (!f32_from_string(x_tok.str, &position->x)) return false;
+    if (!f32_from_string(y_tok.str, &position->y)) return false;
+    return true;
+}

@@ -28,6 +28,11 @@
 #define STBTT_fabs(x)     fabs(x)
 #include "external/stb/stb_truetype.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ASSERT(x) ASSERT(x)
+#include "external/stb/stb_image.h"
+
+
 Allocator mem_frame;
 thread_local Allocator mem_tmp;
 Allocator mem_dynamic;
