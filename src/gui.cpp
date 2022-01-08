@@ -1245,6 +1245,7 @@ void gui_end_window()
 
         Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
+        //gui_draw_rect(&wnd->command_buffer, { resize_bl.x, resize_tr.y }, { resize_tr.x - resize_bl.x, resize_bl.y - resize_tr.y }, resize_bg);
 
         gui.current_window_data.size = nullptr;
     }

@@ -69,35 +69,28 @@ struct GfxVertexAttrib {
 struct GfxContext {
     struct {
         struct {
-            GLuint cs_from_ws;
+            GLint cs_from_ws;
         } global;
         struct {
-            GLuint program;
-            GLuint ws_from_ls;
-            GLuint color;
-            GLuint ray;
-            GLuint ray_alpha;
-        } block;
-        struct {
-            GLuint program;
-            GLuint ws_from_ls;
-            GLuint color;
+            GLint program;
+            GLint ws_from_ls;
+            GLint color;
         } basic2d;
         struct {
             GLuint program;
         } pass2d;
         struct {
             GLuint program;
-            GLuint resolution;
-            GLuint color;
+            GLint resolution;
+            GLint color;
         } text;
         struct {
             GLuint program;
-            GLuint resolution;
+            GLint resolution;
         } gui_prim;
         struct {
             GLuint program;
-            GLuint resolution;
+            GLint resolution;
         } gui_prim_texture;
     } shaders;
 

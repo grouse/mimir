@@ -154,6 +154,8 @@ void init_gfx(Vector2 resolution)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
 
+    gfx.shaders.global.cs_from_ws = 0;
+    
     {
         const char *vert = SHADER_HEADER
             "layout(location = 0) in vec2 v_pos;\n"
@@ -175,7 +177,7 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.pass2d.program = gfx_create_shader(vert, frag);
-        ASSERT(glGetUniformLocation(gfx.shaders.pass2d.program, "cs_from_ws") == 0);
+        ASSERT(glGetUniformLocation(gfx.shaders.pass2d.program, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
     }
 
     {
@@ -186,6 +188,8 @@ void init_gfx(Vector2 resolution)
             "void main()\n"
             "{\n"
             "   gl_Position = cs_from_ws * vec4(v_pos, 0.0, 1.0);\n"
+            //"   vec2 resolution = vec2(1280, 720);\n"
+            //"   gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
             "   gl_Position.y = -gl_Position.y;\n"
             "   vs_uv = v_uv;\n"
             "}\0";
@@ -200,7 +204,7 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.basic2d.program = gfx_create_shader(vert, frag);
-        ASSERT(glGetUniformLocation(gfx.shaders.basic2d.program, "cs_from_ws") == 0);
+        ASSERT(glGetUniformLocation(gfx.shaders.basic2d.program, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
     }
     
     {
@@ -533,13 +537,11 @@ GfxCommandBuffer gfx_command_buffer()
 
 void gfx_submit_commands(GfxCommandBuffer cmdbuf)
 {
-    Camera camera;
-    camera.projection = matrix4_identity();
-    camera.projection[0][0] = 2.0f / gfx.resolution.x;
-    camera.projection[1][1] = 2.0f / gfx.resolution.y;
-    camera.projection[3][1] = -1.0f;
-    camera.projection[3][0] = -1.0f;
-    Matrix4 cs_from_ws = transform(&camera);
+    Matrix4 cs_from_ws = matrix4_identity();
+    cs_from_ws[0][0] = 2.0f / gfx.resolution.x;
+    cs_from_ws[1][1] = 2.0f / gfx.resolution.y;
+    cs_from_ws[3][0] = -1.0f;
+    cs_from_ws[3][1] = -1.0f;
 
     for (GfxCommand cmd : cmdbuf.commands) {
         switch (cmd.type) {
