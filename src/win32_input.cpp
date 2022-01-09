@@ -1,35 +1,34 @@
 #include "input.h"
 
-InputKey input_key_from_wparam(WPARAM wparam)
+VirtualCode virtual_code_from_wparam(WPARAM wparam)
 {
     switch (wparam) {
-    case VK_LEFT: return IK_LEFT;
-    case VK_RIGHT: return IK_RIGHT;
-    case VK_UP: return IK_UP;
-    case VK_DOWN: return IK_DOWN;
-    case VK_BACK: return IK_BACKSPACE;
-    case VK_DELETE: return IK_DELETE;
-    case VK_RETURN: return IK_ENTER;
-    case VK_TAB: return IK_TAB;
-    case VK_PRIOR: return IK_PAGE_UP;
-    case VK_NEXT: return IK_PAGE_DOWN;
-    case VK_ESCAPE: return IK_ESC;
+    case VK_LEFT: return VC_LEFT;
+    case VK_RIGHT: return VC_RIGHT;
+    case VK_UP: return VC_UP;
+    case VK_DOWN: return VC_DOWN;
+    case VK_BACK: return VC_BACKSPACE;
+    case VK_DELETE: return VC_DELETE;
+    case VK_RETURN: return VC_ENTER;
+    case VK_TAB: return VC_TAB;
+    case VK_PRIOR: return VC_PAGE_UP;
+    case VK_NEXT: return VC_PAGE_DOWN;
+    case VK_ESCAPE: return VC_ESC;
         
-    case 0x5a: return IK_Z;
-    case 0x52: return IK_R;
-    case 0x53: return IK_S;
-    case 0x42: return IK_B;
-    case 0x45: return IK_E;
-    case 0x57: return IK_W;
-    case 0x4A: return IK_J;
-    case 0x4B: return IK_K;
-    case 0x44: return IK_D;
-    case 0x55: return IK_U;
-    case 0x49: return IK_I;
+    case 0x5a: return VC_Z;
+    case 0x52: return VC_R;
+    case 0x53: return VC_S;
+    case 0x42: return VC_B;
+    case 0x45: return VC_E;
+    case 0x57: return VC_W;
+    case 0x4A: return VC_J;
+    case 0x4B: return VC_K;
+    case 0x44: return VC_D;
+    case 0x55: return VC_U;
+    case 0x49: return VC_I;
     }
     
-    LOG_INFO("unhandled virtual key: 0x%X", wparam);
-    return (InputKey)0;
+    return (VirtualCode)0;
 }
 
 InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
@@ -91,15 +90,19 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         else if (wparam == VK_SHIFT) modifier_state |= MF_SHIFT;
         
         event.type = IE_KEY_PRESS;
-        event.key.code = input_key_from_wparam(wparam);
+        event.key.virtual_code = virtual_code_from_wparam(wparam);
+        event.key.scan_code = (ScanCode)((lparam >> 16) & 0xFF);
         event.key.modifiers = (ModifierFlags)modifier_state;
+        
+        LOG_INFO("virtual keycode: 0x%X, scancode: 0x%X", wparam, (lparam >> 16) & 0xFF);
         break;
     case WM_KEYUP:
         if (wparam == VK_CONTROL) modifier_state &= ~MF_CTRL;
         else if (wparam == VK_SHIFT) modifier_state &= ~MF_SHIFT;
         
         event.type = IE_KEY_RELEASE;
-        event.key.code = input_key_from_wparam(wparam);
+        event.key.virtual_code = virtual_code_from_wparam(wparam);
+        event.key.scan_code = (ScanCode)((lparam >> 16) & 0xFF);
         event.key.modifiers = (ModifierFlags)modifier_state;
         break;
     }

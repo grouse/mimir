@@ -10,30 +10,33 @@ enum InputEventType {
     IE_TEXT
 };
 
-enum InputKey {
-    IK_LEFT = 1,
-    IK_RIGHT,
-    IK_UP,
-    IK_DOWN,
-    IK_BACKSPACE,
-    IK_DELETE,
-    IK_ENTER,
-    IK_TAB,
-    IK_PAGE_UP,
-    IK_PAGE_DOWN,
-    IK_ESC,
+enum VirtualCode : u8 {
+    VC_LEFT = 1,
+    VC_RIGHT,
+    VC_UP,
+    VC_DOWN,
+    VC_BACKSPACE,
+    VC_DELETE,
+    VC_ENTER,
+    VC_TAB,
+    VC_PAGE_UP,
+    VC_PAGE_DOWN,
+    VC_ESC,
     
-    IK_Z,
-    IK_R,
-    IK_E,
-    IK_B,
-    IK_S,
-    IK_W,
-    IK_I,
-    IK_J,
-    IK_K,
-    IK_D,
-    IK_U,
+    VC_Z,
+    VC_R,
+    VC_E,
+    VC_B,
+    VC_S,
+    VC_W,
+    VC_I,
+    VC_J,
+    VC_K,
+    VC_D,
+    VC_U,
+};
+
+enum ScanCode : u8 {
 };
 
 enum ModifierFlags : u32 {
@@ -55,7 +58,8 @@ struct InputEvent {
             i16 x, y;
         } mouse;
         struct {
-            InputKey code;
+            VirtualCode virtual_code;
+            ScanCode scan_code;
             ModifierFlags modifiers;
         } key;
         struct {

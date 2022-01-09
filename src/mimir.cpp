@@ -1059,20 +1059,20 @@ void app_event(InputEvent event)
         } break;
     case IE_KEY_PRESS: 
         if (app.mode == MODE_EDIT) {
-            switch (event.key.code) {
-            case IK_U:
+            switch (event.key.virtual_code) {
+            case VC_U:
                 buffer_undo(view.buffer);
                 view.lines_dirty = true;
                 view.caret_dirty = true;
                 app.animating = true;
                 break;
-            case IK_R:
+            case VC_R:
                 buffer_redo(view.buffer);
                 view.lines_dirty = true;
                 view.caret_dirty = true;
                 app.animating = true;
                 break;
-            case IK_D: {
+            case VC_D: {
                     BufferHistoryScope h(view.buffer);
                     
                     i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
@@ -1090,7 +1090,7 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-            case IK_W: 
+            case VC_W: 
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 
                 view.caret.byte_offset = buffer_seek_next_word(view.buffer, view.caret.byte_offset);
@@ -1098,7 +1098,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
                 break;
-            case IK_B:
+            case VC_B:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 
                 view.caret.byte_offset = buffer_seek_prev_word(view.buffer, view.caret.byte_offset);
@@ -1106,7 +1106,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
                 break;
-            case IK_J:
+            case VC_J:
                 if (view.caret.wrapped_line < view.lines.count-1) {
                     if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                     
@@ -1126,7 +1126,7 @@ void app_event(InputEvent event)
                     move_view_to_caret();
                     app.animating = true;
                 } break;
-            case IK_K:
+            case VC_K:
                 if (view.caret.wrapped_line > 0) {
                     if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                     
@@ -1146,17 +1146,17 @@ void app_event(InputEvent event)
                     move_view_to_caret();
                     app.animating = true;
                 } break;
-            case IK_I:
+            case VC_I:
                 app.next_mode = MODE_INSERT;
                 break;
             default: break;
             }
         } else if (app.mode == MODE_INSERT) {
-            switch (event.key.code) {
-            case IK_ESC:
+            switch (event.key.virtual_code) {
+            case VC_ESC:
                 app.next_mode = MODE_EDIT;
                 break;
-            case IK_ENTER: 
+            case VC_ENTER: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
@@ -1169,7 +1169,7 @@ void app_event(InputEvent event)
                     move_view_to_caret();
                     app.animating = true;
                 } break;
-            case IK_TAB: 
+            case VC_TAB: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     // TODO(jesper): this should insert tab or spaces depending on buffer setting
@@ -1180,7 +1180,7 @@ void app_event(InputEvent event)
 
                     move_view_to_caret();
                 } break;
-            case IK_BACKSPACE: 
+            case VC_BACKSPACE: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
@@ -1194,7 +1194,7 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-            case IK_DELETE: 
+            case VC_DELETE: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
@@ -1208,8 +1208,8 @@ void app_event(InputEvent event)
             }
         }
         
-        switch (event.key.code) {
-        case IK_PAGE_DOWN: {
+        switch (event.key.virtual_code) {
+        case VC_PAGE_DOWN: {
                 Buffer *buffer = get_buffer(view.buffer);
                 if (!buffer) break;
 
@@ -1224,7 +1224,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 app.animating = true;
             } break;
-        case IK_PAGE_UP: {
+        case VC_PAGE_UP: {
                 Buffer *buffer = get_buffer(view.buffer);
                 if (!buffer) break;
 
@@ -1240,21 +1240,21 @@ void app_event(InputEvent event)
                 app.animating = true;
             } break;
 #if 0
-        case IK_S:
+        case VC_S:
             if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
             app.animating = true;
             break;
-        case IK_LEFT: 
+        case VC_LEFT: 
             view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
             move_view_to_caret();
             break;
-        case IK_RIGHT:
+        case VC_RIGHT:
             view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
             move_view_to_caret();
             break;
-        case IK_DOWN:
+        case VC_DOWN:
 #endif
         default: break;
         }
