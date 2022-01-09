@@ -416,15 +416,26 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
     Vector2 pen = baseline;
 
-    i64 last_line = wrapped_line;
+    i64 last_line = wrapped_line+1;
     while (last_line+1 < existing_lines->count && existing_lines->at(last_line+1).wrapped) last_line++;
+    last_line = MIN(last_line+1, existing_lines->count);
 
-    DynamicArray<BufferLine> new_lines{ .alloc = mem_tmp };
-    array_add(&new_lines, existing_lines->at(wrapped_line));
-
-
-    i64 start = existing_lines->at(wrapped_line).offset;
+    i64 start = 0;
     i64 end = line_end_offset(last_line, *existing_lines, buffer);
+
+    DynamicArray<BufferLine> tmp_lines{ .alloc = mem_tmp };
+    DynamicArray<BufferLine> *new_lines = &tmp_lines;
+
+    if (wrapped_line < existing_lines->count) {
+        array_add(new_lines, existing_lines->at(wrapped_line));
+        start = existing_lines->at(wrapped_line).offset;
+    } else if (existing_lines->count == 0) {
+        new_lines = existing_lines;
+        array_add(new_lines, BufferLine{ 0, 0 });
+    } else {
+        LOG_ERROR("unimplemented, this is a case where we're appending new lines to the existing lines");
+    }
+
     i64 p = start;
 
     i64 line_start = p;
@@ -450,7 +461,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             pen = baseline;
             if (p < end && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
             line_start = word_start = p;
-            array_add(&new_lines, { (i64)line_start, 0 });
+            array_add(new_lines, { (i64)line_start, 0 });
             vcolumn = 0;
             continue;
         }
@@ -460,7 +471,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             pen = baseline;
             if (p < end && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
             line_start = word_start = p;
-            array_add(&new_lines, { (i64)line_start, 0 });
+            array_add(new_lines, { (i64)line_start, 0 });
             vcolumn = 0;
             continue;
         }
@@ -490,12 +501,12 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             // Maybe the word-break glyph should be on the start of the artificial line start?
             if (!is_word_boundary(c) && line_start != word_start) { 
                 p = line_start = word_start;
-                array_add(&new_lines, { (i64)line_start, 1 });
+                array_add(new_lines, { (i64)line_start, 1 });
                 vcolumn = 0;
                 continue;
             } else {
                 p = line_start = word_start = pn;
-                array_add(&new_lines, { (i64)line_start, 1 });
+                array_add(new_lines, { (i64)line_start, 1 });
                 vcolumn = 0;
                 continue;
             }
@@ -504,9 +515,13 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
         vcolumn++;
     }
     
-    Array<BufferLine> lines = new_lines;
-    if (end != buffer_end(buffer)) lines = slice(new_lines, 0, new_lines.count-1);
-    array_replace_range(existing_lines, wrapped_line, last_line+1, lines);
+    Array<BufferLine> lines = *new_lines;
+    if (end != buffer_end(buffer)) lines = slice(*new_lines, 0, new_lines->count-1);
+    
+    if (new_lines != existing_lines) {
+        if (wrapped_line == last_line) array_insert(existing_lines, wrapped_line, lines);
+        else array_replace_range(existing_lines, wrapped_line, last_line, lines);
+    }
 }
 
 bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record_history = true)
@@ -1334,104 +1349,6 @@ void app_event(InputEvent event)
     }
 }
 
-void reflow_lines()
-{
-    // TODO(jesper): merge this with the recalculate_line_wrap procedure
-    Buffer *buffer = get_buffer(view.buffer);
-    if (!buffer) return;
-
-    view.lines.count = 0;
-    array_add(&view.lines, BufferLine{ 0, 0 });
-
-    // TODO(jesper): figure out what I wanna do here to re-flow the lines. Do I create persistent gui layouts
-    // that I can use when reflowing? Do I reflow again if view_rect is different? How do I calculate the view_rect
-    // before the scrollbar?
-    Rect r{ .size = { gfx.resolution.x-gui.style.scrollbar.thickness, gfx.resolution.y } };
-
-    Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
-    Vector2 pen = baseline;
-
-    i64 start = buffer_start(buffer);
-    i64 end = buffer_end(buffer);
-    i64 p = start;
-
-    i64 line_start = p;
-    i64 word_start = p;
-
-    i64 vcolumn = 0;
-    i32 prev_c = ' ';
-    while (p < end) {
-        i64 pn = p;
-        i32 c = utf32_it_next(buffer, &p);
-        if (c == 0) break;
-
-        if ((is_word_boundary(prev_c) && !is_word_boundary(c)) ||
-            (is_word_boundary(c) && !is_word_boundary(prev_c)))
-        {
-            word_start = pn;
-        }
-        prev_c = c;
-
-        if (c == '\n') {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
-            if (p < end && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
-            line_start = word_start = p;
-            array_add(&view.lines, { (i64)(line_start - start), 0 });
-            vcolumn = 0;
-            continue;
-        }
-
-        if (c == '\r') {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
-            if (p < end && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
-            line_start = word_start = p;
-            array_add(&view.lines, { (i64)(line_start - start), 0 });
-            vcolumn = 0;
-            continue;
-        }
-
-        if (c == ' ') {
-            pen.x += app.mono.space_width;
-            vcolumn++;
-            continue;
-        }
-
-        if (c == '\t') {
-            i32 w = app.tab_width - vcolumn % app.tab_width;
-            pen.x += app.mono.space_width*w;
-            vcolumn += w;
-            continue;
-        }
-
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(app.mono.atlas, 1024, 1024, c, &pen.x, &pen.y, &q, 1);
-
-        if (q.x1 >= r.pos.x + r.size.x) {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
-
-            // TODO(jesper): go back 1 more glyph and replace it with some kind of word-break glyph
-            // if the line has to be broken mid-word because of super long single word lines
-            // Maybe the word-break glyph should be on the start of the artificial line start?
-            if (!is_word_boundary(c) && line_start != word_start) { 
-                p = line_start = word_start;
-                array_add(&view.lines, { (i64)(line_start - start), 1 });
-                vcolumn = 0;
-                continue;
-            } else {
-                p = line_start = word_start = pn;
-                array_add(&view.lines, { (i64)(line_start - start), 1 });
-                vcolumn = 0;
-                continue;
-            }
-        }
-
-        vcolumn++;
-    }
-}
-
 struct {
     struct {
         GuiWindowState wnd;
@@ -1515,7 +1432,10 @@ void update_and_render(f32 dt)
 
             if (view.lines_dirty || text_rect != view.rect) {
                 view.rect = text_rect;
-                reflow_lines();
+                
+                view.lines.count = 0;
+                recalculate_line_wrap(0, &view.lines, view.buffer);
+                
                 view.lines_dirty = false;
             }
             

@@ -182,6 +182,26 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T *es, i32 count)
 }
 
 template<typename T>
+i32 array_insert(DynamicArray<T> *arr, i32 insert_at, Array<T> es)
+{
+    ASSERT(insert_at <= arr->count);
+
+    if (arr->count+es.count > arr->capacity) {
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
+
+        i32 old_capacity = arr->capacity;
+        arr->capacity = MAX(arr->count+es.count, arr->capacity*2);
+        arr->data = REALLOC_ARR(arr->alloc, T, arr->data, old_capacity, arr->capacity);
+    }
+
+    for (i32 i = arr->count+es.count-1; i > insert_at; i--) arr->data[i] = arr->data[i-1];
+    for (i32 i = 0; i < es.count; i++) arr->data[insert_at+i] = es[i];
+    arr->count += es.count;
+    return insert_at;
+}
+
+
+template<typename T>
 i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
 {
     ASSERT(start >= 0);
