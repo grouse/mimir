@@ -108,6 +108,8 @@ struct Caret {
 };
 
 struct View {
+    GuiId gui_id = GUI_ID(0);
+    
     DynamicArray<BufferLine> lines;
     
     f32 voffset;
@@ -122,7 +124,6 @@ struct View {
         u64 lines_dirty : 1;
         u64 caret_dirty : 1;
     };
-
 };
 
 Application app{};
@@ -1260,7 +1261,7 @@ void app_event(InputEvent event)
         break;
     case IE_KEY_RELEASE: break;
     case IE_MOUSE_PRESS:
-        if (event.mouse.button == 1) {
+        if (gui.hot == view.gui_id && event.mouse.button == 1) {
             if (event.mouse.x >= view.rect.pos.x &&
                 event.mouse.x <= view.rect.pos.x + view.rect.size.x &&
                 event.mouse.y >= view.rect.pos.y &&
@@ -1496,6 +1497,8 @@ void update_and_render(f32 dt)
                 reflow_lines();
                 view.lines_dirty = false;
             }
+            
+            gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size, -1);
         }
     }
     

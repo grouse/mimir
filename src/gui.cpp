@@ -539,7 +539,7 @@ GuiWindow* push_window_to_top(i32 index)
     return &gui.windows[gui.windows.count-1];
 }
 
-bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
+bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_window)
 {
     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
     Vector2 rel = mouse - pos;
@@ -551,7 +551,7 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
         (rel.x >= 0.0f && rel.x < size.x &&
          rel.y >= 0.0f && rel.y < size.y))
     {
-        gui_hot(id, gui.current_window);
+        gui_hot(id, z);
         return true;
     } else if (gui.hot == id) {
         gui_hot(GUI_ID_INVALID);
