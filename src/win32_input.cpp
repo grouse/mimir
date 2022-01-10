@@ -14,6 +14,8 @@ VirtualCode virtual_code_from_wparam(WPARAM wparam)
     case VK_PRIOR: return VC_PAGE_UP;
     case VK_NEXT: return VC_PAGE_DOWN;
     case VK_ESCAPE: return VC_ESC;
+    case VK_OEM_4: return VC_OPEN_BRACKET;
+    case VK_OEM_6: return VC_CLOSE_BRACKET;
         
     case 0x5a: return VC_Z;
     case 0x52: return VC_R;
@@ -84,6 +86,7 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
 
             event.type = IE_TEXT;
             event.text.length = utf8_from_utf32(event.text.c, utf32);
+            event.text.modifiers = (ModifierFlags)modifier_state;
         } break;
     case WM_KEYDOWN:
         if (wparam == VK_CONTROL) modifier_state |= MF_CTRL;

@@ -742,6 +742,55 @@ i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
     return next_offset;
 }
 
+bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    ASSERT(buffer);
+    
+    i64 start = lines[wrapped_line].offset;
+    i64 end = line_end_offset(wrapped_line, lines, buffer);
+    
+    i64 p = prev_byte(buffer, end);
+    while (p >= start) {
+        if (!is_whitespace(char_at(buffer, p))) return false;
+        p = prev_byte(buffer, p);
+    }
+    
+    return true;
+}
+
+i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+{
+    if (wrapped_line >= lines.count-1) return wrapped_line;
+    bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
+    
+    i32 line = wrapped_line+1;
+    for (; line < lines.count; line++) {
+        if (line_is_empty_or_whitespace(buffer_id, lines, line)) {
+            if (had_non_empty ) return line;
+        } else {
+            had_non_empty = true;
+        }
+    }
+    return MIN(line, lines.count-1);
+}
+
+i32 buffer_seek_prev_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+{
+    if (wrapped_line <= 1) return 0;
+    bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
+    
+    i32 line = wrapped_line-1;
+    for (; line >= 0; line--) {
+        if (line_is_empty_or_whitespace(buffer_id, lines, line)) {
+            if (had_non_empty) return line;
+        } else {
+            had_non_empty = true;
+        }
+    }
+    return MAX(line, 0);
+}
+
 i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
 {
     Buffer *buffer = get_buffer(buffer_id);
@@ -1071,6 +1120,38 @@ struct BufferHistoryScope {
     }
 };
 
+void view_seek_line(i32 wrapped_line)
+{
+    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
+    Buffer *buffer = get_buffer(view.buffer);
+    
+    if (buffer && wrapped_line != view.caret.wrapped_line) {
+        view.caret.wrapped_line = wrapped_line;
+
+        view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
+        view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+        view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+
+        move_view_to_caret();
+
+        app.animating = true;
+    }
+}
+
+void view_seek_byte_offset(i64 byte_offset)
+{
+    byte_offset = CLAMP(byte_offset, 0, buffer_end(view.buffer));
+    
+    if (byte_offset != view.caret.byte_offset) {
+        view.caret.byte_offset = byte_offset;
+        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+
+        move_view_to_caret();
+
+        app.animating = true;
+    }
+}
+
 void app_event(InputEvent event)
 {
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
@@ -1092,10 +1173,19 @@ void app_event(InputEvent event)
             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
 
             app.animating = true;
-        } break;
+        } 
+        break;
     case IE_KEY_PRESS: 
         if (app.mode == MODE_EDIT) {
             switch (event.key.virtual_code) {
+            case VC_CLOSE_BRACKET:
+                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(buffer_seek_next_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
+                break;
+            case VC_OPEN_BRACKET:
+                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(buffer_seek_prev_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
+                break;
             case VC_U:
                 buffer_undo(view.buffer);
                 view.lines_dirty = true;
@@ -1128,60 +1218,20 @@ void app_event(InputEvent event)
                 } break;
             case VC_W: 
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                
-                view.caret.byte_offset = buffer_seek_next_word(view.buffer, view.caret.byte_offset);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
-                app.animating = true;
+                view_seek_byte_offset(buffer_seek_next_word(view.buffer, view.caret.byte_offset));
                 break;
             case VC_B:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                
-                view.caret.byte_offset = buffer_seek_prev_word(view.buffer, view.caret.byte_offset);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
-                app.animating = true;
+                view_seek_byte_offset(buffer_seek_prev_word(view.buffer, view.caret.byte_offset));
                 break;
             case VC_J:
-                if (view.caret.wrapped_line < view.lines.count-1) {
-                    if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                    
-                    i32 wrapped_line = ++view.caret.wrapped_line;
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-
-                    Buffer *buffer = get_buffer(view.buffer);
-                    ASSERT(buffer);
-
-                    // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
-                    // problems in edge case files with super long lines
-                    // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
-                    // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
-                    view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                    view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                    move_view_to_caret();
-                    app.animating = true;
-                } break;
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(view.caret.wrapped_line+1);
+                break;
             case VC_K:
-                if (view.caret.wrapped_line > 0) {
-                    if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                    
-                    i32 wrapped_line = --view.caret.wrapped_line;
-                    if (!view.lines[view.caret.wrapped_line+1].wrapped) view.caret.line--;
-
-                    Buffer *buffer = get_buffer(view.buffer);
-                    ASSERT(buffer);
-
-                    // NOTE(jesper): these are pretty wasteful and could be combined, and might cause
-                    // problems in edge case files with super long lines
-                    // TODO(jesper): notepad does a funky thing here with the caret when going down into a tab-character wherein
-                    // it rounds up or down to after or before the tab-character depending on the mid point of the current column.
-                    view.caret.wrapped_column = calc_wrapped_column(wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                    view.caret.column = calc_unwrapped_column(wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                    move_view_to_caret();
-                    app.animating = true;
-                } break;
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(view.caret.wrapped_line-1);
+                break;
             case VC_I:
                 app.next_mode = MODE_INSERT;
                 break;
@@ -1245,36 +1295,18 @@ void app_event(InputEvent event)
         }
         
         switch (event.key.virtual_code) {
-        case VC_PAGE_DOWN: {
-                Buffer *buffer = get_buffer(view.buffer);
-                if (!buffer) break;
-
-                for (i32 i = 0; view.caret.wrapped_line < view.lines.count-1 && i < view.lines_visible-1; i++) {
-                    view.caret.wrapped_line++;
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-                }
-
-                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
-        case VC_PAGE_UP: {
-                Buffer *buffer = get_buffer(view.buffer);
-                if (!buffer) break;
-
-                for (i32 i = 0; view.caret.wrapped_line > 0 && i < view.lines_visible-1; i++) {
-                    view.caret.wrapped_line--;
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
-                }
-
-                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                move_view_to_caret();
-                app.animating = true;
-            } break;
+        case VC_PAGE_DOWN: 
+            // TODO(jesper: page up/down should take current caret line into account when moving
+            // view to caret, so that it remains where it was proportionally
+            if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+            view_seek_line(view.caret.wrapped_line+view.lines_visible-1);
+            break;
+        case VC_PAGE_UP:
+            // TODO(jesper: page up/down should take current caret line into account when moving
+            // view to caret, so that it remains where it was proportionally
+            if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+            view_seek_line(view.caret.wrapped_line-view.lines_visible-1);
+            break;
 #if 0
         case VC_S:
             if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
@@ -1324,10 +1356,16 @@ void app_event(InputEvent event)
                 view.caret.preferred_column = view.caret.wrapped_column;
                 view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
                 view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-
+                
+                app.animating = true;
             }
         } break;
     case IE_MOUSE_WHEEL:
+        // TODO(jesper): make a decision/option whether this should be moving
+        // the caret or not. My current gut feeling says no, as a way to allow a
+        // kind of temporary scroll back to check on something, that you then get
+        // taken back to the current caret when you type something
+
         view.voffset += event.mouse_wheel.delta;
         if (view.line_offset == 0 && view.voffset > 0) view.voffset = 0;
 

@@ -4,12 +4,12 @@
 
 bool operator!=(String lhs, String rhs)
 {
-    return lhs.length != rhs.length || memcmp(lhs.data, rhs.data, MIN(lhs.length, rhs.length)) != 0;
+    return lhs.length != rhs.length || memcmp(lhs.data, rhs.data, lhs.length) != 0;
 }
 
 bool operator==(String lhs, String rhs)
 {
-    return lhs.length == rhs.length && memcmp(lhs.data, rhs.data, MIN(lhs.length, rhs.length)) == 0;
+    return lhs.length == rhs.length && memcmp(lhs.data, rhs.data, lhs.length) == 0;
 }
 
 String create_string(char *str, i32 length, Allocator mem = mem_tmp)
