@@ -22,6 +22,10 @@ enum BufferHistoryType {
     BUFFER_HISTORY_GROUP_END
 };
 
+enum ViewFlags : u32 {
+    VIEW_SET_MARK = 1 << 0,
+};
+
 struct BufferLine {
     i64 offset : 63;
     i64 wrapped : 1;
@@ -1236,6 +1240,22 @@ void view_seek_byte_offset(i64 byte_offset)
     }
 }
 
+void write_string(BufferId buffer_id, String str, u32 flags = 0)
+{
+    if (!buffer_valid(buffer_id)) return;
+    
+    BufferHistoryScope h(buffer_id);
+    buffer_insert(buffer_id, view.caret.byte_offset, str);
+    
+    if (flags & VIEW_SET_MARK) view.mark = view.caret;
+    view.caret.byte_offset = buffer_increment_offset(buffer_id, view.caret.byte_offset, str.length);
+    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+    
+    move_view_to_caret();
+    
+    app.animating = true;
+}
+
 void app_event(InputEvent event)
 {
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
@@ -1248,15 +1268,8 @@ void app_event(InputEvent event)
     
     switch (event.type) {
     case IE_TEXT: 
-        if (app.mode == MODE_INSERT && buffer_valid(view.buffer)) {
-            BufferHistoryScope h(view.buffer);
-            buffer_insert(view.buffer, view.caret.byte_offset, String{ (char*)&event.text.c[0], event.text.length });
-
-            // TODO(jesper): calc this from buffer api
-            view.caret.byte_offset += event.text.length;
-            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-
-            app.animating = true;
+        if (app.mode == MODE_INSERT) {
+            write_string(view.buffer, String{ (char*)&event.text.c[0], event.text.length });
         } 
         break;
     case IE_KEY_PRESS: 
@@ -1335,20 +1348,9 @@ void app_event(InputEvent event)
 
                     set_clipboard_data(buffer_read(view.buffer, start, end));
                 } break;
-            case VC_P: {
-                    BufferHistoryScope h(view.buffer);
-                    String s = read_clipboard_str();
-                    
-                    buffer_insert(view.buffer, view.caret.byte_offset, s);
-                    
-                    view.mark = view.caret;
-                    view.caret.byte_offset = buffer_increment_offset(view.buffer, view.caret.byte_offset, s.length);
-                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                    
-                    move_view_to_caret();
-
-                    app.animating = true;
-                } break;
+            case VC_P:
+                write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
+                break;
             case VC_W: 
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_byte_offset(buffer_seek_next_word(view.buffer, view.caret.byte_offset));
@@ -1381,6 +1383,10 @@ void app_event(InputEvent event)
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
+            case VC_S:
+                if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
+                app.animating = true;
+                break;
             default: break;
             }
         } else if (app.mode == MODE_INSERT) {
@@ -1398,30 +1404,12 @@ void app_event(InputEvent event)
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_ENTER: 
-                if (buffer_valid(view.buffer)) {
-                    BufferHistoryScope h(view.buffer);
-                    buffer_insert(view.buffer, view.caret.byte_offset, buffer_newline_str(view.buffer));
-
-                    view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
-                    view.caret.wrapped_line++;
-                    view.caret.line++;
-                    view.caret.column = view.caret.wrapped_column = view.caret.preferred_column = 0;
-
-                    move_view_to_caret();
-                    app.animating = true;
-                } break;
+            case VC_ENTER:
+                write_string(view.buffer, buffer_newline_str(view.buffer));
+                break;
             case VC_TAB: 
-                if (buffer_valid(view.buffer)) {
-                    BufferHistoryScope h(view.buffer);
-                    // TODO(jesper): this should insert tab or spaces depending on buffer setting
-                    buffer_insert(view.buffer, view.caret.byte_offset, "\t");
-
-                    view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
-                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-
-                    move_view_to_caret();
-                } break;
+                write_string(view.buffer, "\t");
+                break;
             case VC_BACKSPACE: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
@@ -1463,23 +1451,6 @@ void app_event(InputEvent event)
             if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
             view_seek_line(view.caret.wrapped_line-view.lines_visible-1);
             break;
-#if 0
-        case VC_S:
-            if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
-            app.animating = true;
-            break;
-        case VC_LEFT: 
-            view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
-            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-            move_view_to_caret();
-            break;
-        case VC_RIGHT:
-            view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
-            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-            move_view_to_caret();
-            break;
-        case VC_DOWN:
-#endif
         default: break;
         }
         break;
