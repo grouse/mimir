@@ -852,3 +852,8 @@ bool is_whitespace(i32 c)
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
+
+bool is_newline(i32 c)
+{
+    return c == '\n' || c == '\r';
+}

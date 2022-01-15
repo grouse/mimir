@@ -139,6 +139,25 @@ void set_clipboard_data(String str)
     if (!SetClipboardData(CF_UNICODETEXT, clip_mem)) return;
 }
 
+String read_clipboard_str(Allocator mem)
+{
+    if (!OpenClipboard(NULL)) return {};
+    defer { CloseClipboard(); };
+
+    HANDLE clip = GetClipboardData(CF_UNICODETEXT);
+    if (!clip) return {};
+
+    wchar_t *ptr = (wchar_t*)GlobalLock(clip);
+    if (!ptr) return {};
+    defer { GlobalUnlock(ptr); };
+
+    String s{};
+    s.length = utf8_length((u16*)ptr, wcslen(ptr));
+    s.data = ALLOC_ARR(mem, char, s.length);
+    utf8_from_utf16((u8*)s.data, s.length, (u16*)ptr, wcslen(ptr));
+    return s;
+}
+
 const char* string_from_file_attribute(DWORD dwFileAttribute)
 {
     switch (dwFileAttribute) {

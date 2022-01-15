@@ -96,6 +96,7 @@ enum LogType {
 bool debugger_attached();
 
 void set_clipboard_data(String str);
+String read_clipboard_str(Allocator mem = mem_tmp);
 
 void log(String path, u32 line, String func, LogType type, const char *fmt, ...);
 void log(const char *fmt, ...);

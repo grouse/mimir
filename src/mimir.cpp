@@ -416,9 +416,9 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
     Vector2 pen = baseline;
 
-    i64 last_line = wrapped_line+1;
+    i64 last_line = wrapped_line;
     while (last_line+1 < existing_lines->count && existing_lines->at(last_line+1).wrapped) last_line++;
-    last_line = MIN(last_line+1, existing_lines->count);
+    i64 end_line = MIN(last_line+1, existing_lines->count);
 
     i64 start = 0;
     i64 end = line_end_offset(last_line, *existing_lines, buffer);
@@ -519,8 +519,8 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     if (end != buffer_end(buffer)) lines = slice(*new_lines, 0, new_lines->count-1);
     
     if (new_lines != existing_lines) {
-        if (wrapped_line == last_line) array_insert(existing_lines, wrapped_line, lines);
-        else array_replace_range(existing_lines, wrapped_line, last_line, lines);
+        if (wrapped_line == end_line) array_insert(existing_lines, wrapped_line, lines);
+        else array_replace_range(existing_lines, wrapped_line, end_line, lines);
     }
 }
 
@@ -550,6 +550,30 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     }
     
     return false;
+}
+
+String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator mem = mem_tmp)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return {};
+
+    String s{};
+    
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        byte_start = MAX(0, byte_start);
+        byte_end = MIN(byte_end, buffer->flat.size);
+
+        i64 num_bytes = byte_end-byte_start;
+        
+        s.length = num_bytes;
+        s.data = ALLOC_ARR(mem, char, s.length);
+        memcpy(s.data, &buffer->flat.data[byte_start], num_bytes);
+        
+        break;
+    }
+
+    return s;
 }
 
 void buffer_save(BufferId buffer_id)
@@ -679,11 +703,9 @@ void buffer_redo(BufferId buffer_id)
 }
 
 
-i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
+i64 buffer_prev_offset(Buffer *buffer, i64 byte_offset)
 {
-    Buffer *buffer = get_buffer(buffer_id);
-    if (!buffer) return byte_offset;
-    
+    ASSERT(buffer);
     i64 prev_offset = byte_offset;
 
     switch (buffer->type) {
@@ -709,6 +731,14 @@ i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
     
     return prev_offset;
 }
+
+i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+    return buffer_prev_offset(buffer, byte_offset);
+}
+
 
 i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
 {
@@ -740,6 +770,22 @@ i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
     }
 
     return next_offset;
+}
+
+i64 buffer_increment_offset(BufferId buffer_id, i64 byte_offset, i64 count)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
+    i64 end_offset = buffer_end(buffer_id);
+    if (byte_offset >= end_offset) return end_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        return MIN(end_offset, byte_offset+count);
+    }
+
+    return byte_offset;
 }
 
 bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
@@ -869,9 +915,11 @@ i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 lin
 
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return 0;
+    
+    if (line == lines.count-1) return buffer_end(buffer_id);
 
     i64 end = line_end_offset(line, lines, buffer);
-    return prev_byte(buffer, end);
+    return buffer_prev_offset(buffer, end);
 }
 
 i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
@@ -1253,6 +1301,47 @@ void app_event(InputEvent event)
 
                         move_view_to_caret();
                     }
+                } break;
+            case VC_X: {
+                    BufferHistoryScope h(view.buffer);
+                    
+                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
+                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
+                    if (start == end) end += 1;
+                    
+                    String str = buffer_read(view.buffer, start, end);
+                    set_clipboard_data(str);
+                    
+                    if (buffer_remove(view.buffer, start, end)) {
+                        view.lines_dirty = true;
+
+                        view.caret.byte_offset = start;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        view.mark = view.caret;
+
+                        move_view_to_caret();
+                    }
+                } break;
+            case VC_Y: {
+                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
+                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
+                    if (start == end) end += 1;
+
+                    set_clipboard_data(buffer_read(view.buffer, start, end));
+                } break;
+            case VC_P: {
+                    BufferHistoryScope h(view.buffer);
+                    String s = read_clipboard_str();
+                    
+                    buffer_insert(view.buffer, view.caret.byte_offset, s);
+                    
+                    view.mark = view.caret;
+                    view.caret.byte_offset = buffer_increment_offset(view.buffer, view.caret.byte_offset, s.length);
+                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                    
+                    move_view_to_caret();
+
+                    app.animating = true;
                 } break;
             case VC_W: 
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;

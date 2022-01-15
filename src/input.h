@@ -26,6 +26,8 @@ enum VirtualCode : u8 {
     VC_OPEN_BRACKET,  // [{ on US/UK
     VC_CLOSE_BRACKET, // ]} on US/UK
     
+    VC_X,
+    VC_P,
     VC_Q,
     VC_Z,
     VC_R,
@@ -38,6 +40,7 @@ enum VirtualCode : u8 {
     VC_K,
     VC_D,
     VC_U,
+    VC_Y,
 };
 
 enum ScanCode : u8 {
