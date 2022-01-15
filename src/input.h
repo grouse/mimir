@@ -41,6 +41,8 @@ enum VirtualCode : u8 {
     VC_D,
     VC_U,
     VC_Y,
+    VC_H,
+    VC_L
 };
 
 enum ScanCode : u8 {

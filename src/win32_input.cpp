@@ -32,6 +32,8 @@ VirtualCode virtual_code_from_wparam(WPARAM wparam)
     case 0x58: return VC_X;
     case 0x59: return VC_Y;
     case 0x50: return VC_P;
+    case 0x48: return VC_H;
+    case 0x4C: return VC_L;
     }
     
     return (VirtualCode)0;

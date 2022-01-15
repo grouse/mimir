@@ -1204,7 +1204,13 @@ void view_seek_line(i32 wrapped_line)
     Buffer *buffer = get_buffer(view.buffer);
     
     if (buffer && wrapped_line != view.caret.wrapped_line) {
-        view.caret.wrapped_line = wrapped_line;
+        while (view.caret.wrapped_line > wrapped_line) {
+            if (!view.lines[view.caret.wrapped_line--].wrapped) view.caret.line--;
+        }
+        
+        while (view.caret.wrapped_line < wrapped_line) {
+            if (!view.lines[++view.caret.wrapped_line].wrapped) view.caret.line++;
+        }
 
         view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
         view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
@@ -1361,6 +1367,19 @@ void app_event(InputEvent event)
                 break;
             case VC_I:
                 app.next_mode = MODE_INSERT;
+                view.mark = view.caret;
+                break;
+            case VC_L: 
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
+                break;
+            case VC_H:
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
                 break;
             default: break;
             }
@@ -1368,6 +1387,16 @@ void app_event(InputEvent event)
             switch (event.key.virtual_code) {
             case VC_ESC:
                 app.next_mode = MODE_EDIT;
+                break;
+            case VC_LEFT: 
+                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
+                break;
+            case VC_RIGHT:
+                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
+                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                move_view_to_caret();
                 break;
             case VC_ENTER: 
                 if (buffer_valid(view.buffer)) {
