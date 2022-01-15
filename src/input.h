@@ -26,6 +26,7 @@ enum VirtualCode : u8 {
     VC_OPEN_BRACKET,  // [{ on US/UK
     VC_CLOSE_BRACKET, // ]} on US/UK
     
+    VC_Q,
     VC_Z,
     VC_R,
     VC_E,

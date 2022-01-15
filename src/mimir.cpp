@@ -844,6 +844,36 @@ i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
     return byte_offset;
 }
 
+i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+{
+    if (line >= lines.count) return 0;
+    
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return 0;
+    
+    i64 start = lines[line].offset;
+    i64 end = line_end_offset(line, lines, buffer);
+    
+    i64 offset = start;
+    while (offset < end) {
+        if (!is_whitespace(char_at(buffer, offset))) return offset;
+        offset = next_byte(buffer, offset);
+    }
+    
+    return offset;
+}
+
+i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+{
+    if (line >= lines.count) return 0;
+
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return 0;
+
+    i64 end = line_end_offset(line, lines, buffer);
+    return prev_byte(buffer, end);
+}
+
 i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
 {
     Buffer *buffer = get_buffer(buffer_id);
@@ -1178,6 +1208,14 @@ void app_event(InputEvent event)
     case IE_KEY_PRESS: 
         if (app.mode == MODE_EDIT) {
             switch (event.key.virtual_code) {
+            case VC_Q:
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_byte_offset(buffer_seek_beginning_of_line(view.buffer, view.lines, view.caret.wrapped_line));
+                break;
+            case VC_E:
+                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_byte_offset(buffer_seek_end_of_line(view.buffer, view.lines, view.caret.wrapped_line));
+                break;
             case VC_CLOSE_BRACKET:
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_line(buffer_seek_next_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
