@@ -1186,7 +1186,7 @@ void move_view_to_caret()
 }
 
 // NOTE(jesper): this is poorly named. It starts/stops a history group and records the active view's
-// cursor position appropriately
+// caret and mark appropriately so that undo/redo also moves the carets appropriately
 struct BufferHistoryScope {
     BufferId buffer;
     
@@ -1531,16 +1531,18 @@ void update_and_render(f32 dt)
     GuiLayout *root = gui_current_layout();
     gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = root->pos, .size = root->size });
     
-    if (gui_begin_menu()) {
-        if (gui_begin_menu("debug")) {
+    gui_menu() {
+        gui_menu("file") {
+            if (gui_menu_button("save")) buffer_save(view.buffer);
+        }
+
+        gui_menu("debug") {
             gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
-            gui_end_menu();
         }
         
-        gui_end_menu();
     }
     
-    if (gui_begin_window("buffer history", &debug.buffer_history.wnd)) {
+    gui_window("buffer history", &debug.buffer_history.wnd) {
         char str[256];
 
         Buffer *buffer = &buffers[view.buffer.index];
@@ -1563,8 +1565,6 @@ void update_and_render(f32 dt)
                 break;
             }
         }
-
-        gui_end_window();
     }
 
     view.caret_dirty |= view.lines_dirty;
