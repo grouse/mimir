@@ -381,3 +381,52 @@ void close_file(FileHandle handle)
 {
     CloseHandle(handle);
 }
+
+String get_exe_folder(Allocator mem)
+{
+    wchar_t buffer[255];
+    i32 size = ARRAY_COUNT(buffer);
+    
+    wchar_t *sw = buffer;
+    i32 length = GetModuleFileNameW(NULL, sw, size);
+
+    while (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+        if (sw == buffer) {
+            sw = ALLOC_ARR(mem, wchar_t, size+10);
+        } else {
+            sw = REALLOC_ARR(mem, wchar_t, sw, size, size+10);
+        }
+        
+        size += 10;
+
+        length = GetModuleFileNameW(NULL, sw, size);
+    }
+
+    for (wchar_t *p = sw+length; p >= sw; p--) {
+        if (*p == '\\') {
+            length = (i32)(p - sw);
+            break;
+        }
+    }
+    
+    String s = string_from_utf16(sw, length, mem);
+    return s;
+}
+
+String get_current_working_dir(Allocator mem)
+{
+    wchar_t buffer[255];
+    i32 size = ARRAY_COUNT(buffer);
+    
+    wchar_t *sw = buffer;
+    i32 length = GetCurrentDirectoryW(size, sw); 
+    
+    if (length > size) {
+        i32 req_size = length;
+        sw = ALLOC_ARR(mem_tmp, wchar_t, req_size);
+        length = GetCurrentDirectoryW(req_size, sw);
+    }
+    
+    String s = string_from_utf16(sw, length, mem);
+    return s;
+}

@@ -34,4 +34,7 @@ bool file_exists(String path);
 
 void remove_file(String path);
 
+String get_exe_folder(Allocator mem = mem_tmp);
+String get_current_working_dir(Allocator mem = mem_tmp);
+
 #endif //FILE_H

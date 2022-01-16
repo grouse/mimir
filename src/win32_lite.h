@@ -720,6 +720,15 @@ extern "C" {
         HMODULE hModule,
         LPSTR   lpFilename,
         DWORD   nSize);
+    
+    DWORD GetModuleFileNameW(
+        HMODULE hModule,
+        LPWSTR  lpFilename,
+        DWORD   nSize);
+    
+    DWORD GetCurrentDirectoryW(
+        DWORD  nBufferLength,
+        LPWSTR lpBuffer);
 }
 
 #endif // WIN32_LITE_H
