@@ -27,7 +27,7 @@
 #define ERROR_FILE_NOT_FOUND 0x2
 #define ERROR_SHARING_VIOLATION 0x20
 #define ERROR_ALREADY_EXISTS 0xB7
-
+#define ERROR_INSUFFICIENT_BUFFER 0x7A
 
 #define FILE_LIST_DIRECTORY 1 
 
@@ -715,6 +715,11 @@ extern "C" {
     LPWSTR* CommandLineToArgvW(
         LPCWSTR lpCmdLine,
         int *pNumArgs);
+    
+    DWORD GetModuleFileNameA(
+        HMODULE hModule,
+        LPSTR   lpFilename,
+        DWORD   nSize);
 }
 
 #endif // WIN32_LITE_H

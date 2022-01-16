@@ -284,7 +284,7 @@ BufferId create_buffer(String file)
 {
     // TODO(jesper): do something to try and figure out/guess file type,
     // in particular try to detect whether the file is a binary so that we can
-    // write a binary blob visualiser, or at least something that won't choke and
+    // write a binary blob visualiser, or at least something that won't choke or
     // crash trying to render invalid text
     
     Buffer b{ .type = BUFFER_FLAT };
@@ -326,7 +326,8 @@ void init_app()
     String asset_folders[] = {
         "./",
         "../assets",
-        // bin_folder
+        get_exe_folder(),
+        join_path(get_exe_folder(), "../assets"),
     };
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
     

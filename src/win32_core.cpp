@@ -196,3 +196,28 @@ void win32_client_rect(HWND hwnd, f32 *x, f32 *y)
         *y = (f32)(client_rect.bottom - client_rect.top);
     }
 }
+
+String get_exe_folder(Allocator mem)
+{
+    String s{};
+
+    i32 size = 255;
+    s.data = ALLOC_ARR(mem, char, size);
+    s.length = GetModuleFileNameA(NULL, s.data, size);
+    
+    while (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+        s.data = REALLOC_ARR(mem, char, s.data, size, size+10);
+        size += 10;
+        
+        s.length = GetModuleFileNameA(NULL, s.data, size);
+    }
+    
+    for (char *p = s.data+s.length; p >= s.data; p--) {
+        if (*p == '\\') {
+            s.length = (i32)(p - s.data);
+            break;
+        }
+    }
+
+    return s;
+}
