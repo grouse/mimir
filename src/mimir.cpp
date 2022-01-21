@@ -11,6 +11,7 @@
 enum EditMode {
     MODE_EDIT,
     MODE_INSERT,
+    MODE_DIALOG,
 };
 
 enum BufferHistoryType {
@@ -36,6 +37,8 @@ struct Application {
     i32 tab_width = 4;
     bool animating = true;
     
+    GuiWindowState fuzzy_lister;
+
     EditMode mode, next_mode;
     
     Vector3 bg = rgb_unpack(0x00142825);
@@ -73,8 +76,20 @@ enum BufferType {
     BUFFER_FLAT,
 };
 
+#define BUFFER_INVALID BufferId{ -1 }
+
+struct BufferId {
+    i32 index = -1;
+
+    bool operator==(const BufferId &rhs) { return index == rhs.index; }
+    bool operator!=(const BufferId &rhs) { return index != rhs.index; }
+    operator bool() { return *this != BUFFER_INVALID; }
+};
+
 
 struct Buffer {
+    BufferId id;
+    
     String name;
     String file_path;
     
@@ -89,16 +104,6 @@ struct Buffer {
         struct { char *data; i64 size; i64 capacity; } flat;
     };
 };
-
-struct BufferId {
-    i32 index = -1;
-};
-
-bool operator==(const BufferId &lhs, const BufferId &rhs)
-{
-    static_assert(sizeof lhs == sizeof lhs.index);
-    return memcmp(&lhs, &rhs, sizeof lhs) == 0;
-}
 
 struct Caret {
     i64 byte_offset = 0;
@@ -288,8 +293,10 @@ BufferId create_buffer(String file)
     // crash trying to render invalid text
     
     Buffer b{ .type = BUFFER_FLAT };
+    b.id = { .index = buffers.count };
     b.file_path = absolute_path(file, mem_dynamic);
     b.name = filename_of(b.file_path);
+    b.newline_mode = NEWLINE_LF;
     
     FileInfo f = read_file(file, mem_dynamic);
     b.flat.data = (char*)f.data;
@@ -312,13 +319,20 @@ BufferId create_buffer(String file)
         p--;
     }
     
-    ASSERT(b.newline_mode != 0);
     String newline_str = string_from_enum(b.newline_mode);
     LOG_INFO("created buffer: %.*s, newline mode: %.*s", STRFMT(file), STRFMT(newline_str));
     
-    BufferId id{};
-    id.index = array_add(&buffers, b);
-    return id;
+    array_add(&buffers, b);
+    return b.id;
+}
+
+BufferId find_buffer(String file)
+{
+    for (auto b : buffers) {
+        if (b.file_path == file) return b.id;
+    }
+    
+    return BUFFER_INVALID;
 }
 
 void init_app()
@@ -330,6 +344,8 @@ void init_app()
         join_path(get_exe_folder(), "../assets"),
     };
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
+    
+    get_current_working_dir();
     
     init_gui();
     
@@ -1259,6 +1275,11 @@ void write_string(BufferId buffer_id, String str, u32 flags = 0)
 
 void app_event(InputEvent event)
 {
+    if (gui_input(event)) {
+        app.animating = true;
+        return;
+    }
+    
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
     // management in order to record the cursor position in the history groups, so that when
     // a user undo/redo the cursor is repositioned to where it was before/after the edit 
@@ -1303,6 +1324,10 @@ void app_event(InputEvent event)
                 view.lines_dirty = true;
                 view.caret_dirty = true;
                 app.animating = true;
+                break;
+            case VC_O:
+                app.fuzzy_lister.active = true;
+                app.mode = MODE_DIALOG;
                 break;
             case VC_D: {
                     BufferHistoryScope h(view.buffer);
@@ -1439,20 +1464,22 @@ void app_event(InputEvent event)
             }
         }
         
-        switch (event.key.virtual_code) {
-        case VC_PAGE_DOWN: 
-            // TODO(jesper: page up/down should take current caret line into account when moving
-            // view to caret, so that it remains where it was proportionally
-            if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
-            view_seek_line(view.caret.wrapped_line+view.lines_visible-1);
-            break;
-        case VC_PAGE_UP:
-            // TODO(jesper: page up/down should take current caret line into account when moving
-            // view to caret, so that it remains where it was proportionally
-            if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
-            view_seek_line(view.caret.wrapped_line-view.lines_visible-1);
-            break;
-        default: break;
+        if (app.mode == MODE_EDIT || app.mode == MODE_INSERT) {
+            switch (event.key.virtual_code) {
+            case VC_PAGE_DOWN: 
+                // TODO(jesper: page up/down should take current caret line into account when moving
+                // view to caret, so that it remains where it was proportionally
+                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(view.caret.wrapped_line+view.lines_visible-1);
+                break;
+            case VC_PAGE_UP:
+                // TODO(jesper: page up/down should take current caret line into account when moving
+                // view to caret, so that it remains where it was proportionally
+                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
+                view_seek_line(view.caret.wrapped_line-view.lines_visible-1);
+                break;
+            default: break;
+            }
         }
         break;
     case IE_KEY_RELEASE: break;
@@ -1539,7 +1566,6 @@ void update_and_render(f32 dt)
         gui_menu("debug") {
             gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
         }
-        
     }
     
     gui_window("buffer history", &debug.buffer_history.wnd) {
@@ -1566,7 +1592,26 @@ void update_and_render(f32 dt)
             }
         }
     }
-
+    
+    gui_window("fuzzy lister", &app.fuzzy_lister) {
+        gui_textbox("files");
+        
+        Array<String> files = list_files("./", FILE_LIST_RECURSIVE);
+        
+        static i32 selected_item = 0;
+        if (gui_lister(files, &selected_item) == GUI_LISTER_FINISH) {
+            String file = files[selected_item];
+            String path = absolute_path(file);
+            
+            BufferId buffer = find_buffer(path);
+            if (!buffer) buffer = create_buffer(path);
+            
+            view.buffer = buffer;
+            view.caret_dirty = true;
+            view.lines_dirty = true;
+        }
+    }
+    
     view.caret_dirty |= view.lines_dirty;
     {
         Rect tr = gui_layout_widget_fill();

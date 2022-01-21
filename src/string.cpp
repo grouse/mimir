@@ -664,6 +664,33 @@ String join_path(String root, String filename, Allocator mem)
     return path;
 }
 
+char* join_path(const char *sz_root, const char *sz_filename, Allocator mem)
+{
+    i32 root_length = strlen(sz_root);
+    i32 filename_length = strlen(sz_filename);
+    
+    bool add_slash = false;
+    i32 required_length = root_length + filename_length;
+
+    if (sz_root[root_length-1] != '/' && sz_filename[0] != '/' &&
+        sz_root[root_length-1] != '\\' && sz_filename[0] != '/')
+    {
+        required_length += 1;
+        add_slash = true;
+    }
+
+    char *sz_path = (char*)ALLOC(mem, required_length+1);
+    memcpy(sz_path, sz_root, root_length);
+    i32 path_length = root_length;
+
+    if (add_slash) sz_path[path_length++] = '/';
+
+    memcpy(sz_path+path_length, sz_filename, filename_length);
+    path_length += filename_length;
+    sz_path[path_length] = '\0';
+    return sz_path;
+}
+
 i32 utf8_from_utf32(u8 utf8[4], i32 utf32)
 {
     if (utf32 <= 0x007F) {

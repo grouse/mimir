@@ -143,28 +143,38 @@ bool is_directory(String path)
     return attribs == FILE_ATTRIBUTE_DIRECTORY;
 }
                    
-Array<String> win32_list_files(String dir, Allocator mem = mem_tmp)
+Array<String> list_files(String dir, u32 flags, Allocator mem)
 {
     DynamicArray<String> files{ .alloc = mem };
     
-    String dir2 = join_path(dir, "/*");
-    char *sz_path = sz_string(dir2);
-    
-    WIN32_FIND_DATAA ffd{};
-    HANDLE ff = FindFirstFileA(sz_path, &ffd);
-    
-    do {
-        if (ffd.cFileName[0] == '.') continue;
+    DynamicArray<char*> folders{ .alloc = mem_tmp };
+    array_add(&folders, sz_string(dir));
+
+    for (i32 i = 0; i < folders.count; i++) {
+        char *folder = folders[i];
+        char *f = join_path(folder, "/*");
         
-        if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
-            String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
-            String path = join_path(dir, filename, mem);
-            array_add(&files, path);
-        } else {
-            LOG_ERROR("unsupported file attribute for file '%s': %s", 
-                      ffd.cFileName, string_from_file_attribute(ffd.dwFileAttributes));
-        }
-    } while (FindNextFileA(ff, &ffd));
+        WIN32_FIND_DATAA ffd{};
+        HANDLE ff = FindFirstFileA(f, &ffd);
+
+        do {
+            if (ffd.cFileName[0] == '.') continue;
+
+            if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
+                String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
+                String path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem);
+                array_add(&files, path);
+            } else if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (flags & FILE_LIST_RECURSIVE) {
+                    char *child = join_path(folder, ffd.cFileName);
+                    array_add(&folders, child);
+                }
+            } else {
+                LOG_ERROR("unsupported file attribute for file '%s': %s", 
+                          ffd.cFileName, string_from_file_attribute(ffd.dwFileAttributes));
+            }
+        } while (FindNextFileA(ff, &ffd));
+    }
     
     
     return files;

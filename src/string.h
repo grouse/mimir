@@ -57,6 +57,7 @@ String filename_of(String path);
 String extension_of(String path);
 String path_relative_to(String path, String root);
 String join_path(String root, String filename, Allocator mem = mem_tmp);
+char* join_path(const char *sz_root, const char *sz_filename, Allocator mem = mem_tmp);
 
 String slice(String str, i32 start, i32 end);
 String slice(String str, i32 start);

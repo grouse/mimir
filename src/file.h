@@ -17,8 +17,12 @@ enum FileOpenMode {
     FILE_OPEN_TRUNCATE,
 };
 
+enum ListFileFlags : u32 {
+    FILE_LIST_RECURSIVE = 1 << 0,
+};
+
 FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
-Array<String> list_files(String dir, Allocator mem = mem_tmp);
+Array<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
 
 String absolute_path(String relative, Allocator mem = mem_tmp);
 

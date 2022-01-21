@@ -86,9 +86,17 @@ GuiLayout *gui_current_layout()
     return &gui.layout_stack[gui.layout_stack.count-1];
 }
 
+bool gui_capture(bool capture_var[2]) 
+{
+    capture_var[1] = true;
+    
+    GuiWindow *wnd = &gui.windows[gui.current_window];
+    return capture_var[0] && gui.active_window == wnd->id;
+}
+
 void gui_hot(GuiId id, i32 hot_z)
 {
-    gui.hot = gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z ? id : gui.hot;
+    gui.hot = (gui.active == GUI_ID_INVALID || gui.active == id) && (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
     gui.hot_z = gui.hot_z <= hot_z ? hot_z : gui.hot_z;
 }
 
@@ -107,7 +115,11 @@ void gui_begin_frame()
 {
     for (GuiWindow &wnd : gui.windows) {
         array_reset(&wnd.command_buffer.commands, mem_frame, wnd.command_buffer.commands.capacity);
+        
+        wnd.last_active = wnd.active;
+        wnd.active = false;
     }
+    
     array_reset(&gui.vertices, mem_frame, gui.vertices.count);
     array_reset(&gui.layout_stack, mem_frame, gui.layout_stack.count);
     
@@ -124,6 +136,7 @@ void gui_begin_frame()
     gui_begin_layout(root_layout);
     
     gui.last_active = gui.active;
+    
 }
 
 void gui_end_frame()
@@ -135,6 +148,19 @@ void gui_end_frame()
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
     if (!gui.mouse.left_pressed) gui.active_press = GUI_ID_INVALID;
+    
+    gui.events.count = 0;
+    gui.capture_keyboard[0] = gui.capture_keyboard[1];
+    gui.capture_keyboard[1] = false;
+    
+    gui.capture_mouse_wheel[0] = gui.capture_mouse_wheel[1];
+    gui.capture_mouse_wheel[1] = false;
+
+    for (GuiWindow &wnd : gui.windows) {
+        if (!wnd.active && gui.active_window == wnd.id) {
+            gui.active_window = GUI_ID_INVALID;
+        }
+    }
 }
 
 void gui_render()
@@ -265,9 +291,14 @@ void gui_draw_rect(
     if (left >= clip_rect.pos.x + clip_rect.size.x) return;
     if (top >= clip_rect.pos.y + clip_rect.size.y) return;
 
+    top = MAX(top, clip_rect.pos.y);
+    left = MAX(left, clip_rect.pos.x);
+    
     right = MIN(right, clip_rect.pos.x + clip_rect.size.x);
     bottom = MIN(bottom, clip_rect.pos.y + clip_rect.size.y);
-
+    
+    if (bottom < clip_rect.pos.y) return;
+    
     color = linear_from_sRGB(color);
 
     f32 vertices[] = {
@@ -527,6 +558,16 @@ void gui_textbox(String str, Vector2 pos, Font *font = &gui.style.text.font)
     gui_draw_text(cmdbuf, td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
+void gui_textbox(String str, Vector2 pos, Rect clip_rect, Font *font = &gui.style.text.font)
+{
+    GuiWindow *wnd = &gui.windows[gui.current_window];
+    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
+
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
+    // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
+    gui_draw_text(cmdbuf, td.quads, pos, clip_rect, gui.style.text.color, font);
+}
+
 
 GuiWindow* push_window_to_top(i32 index)
 {
@@ -552,13 +593,27 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_windo
          rel.y >= 0.0f && rel.y < size.y))
     {
         gui_hot(id, z);
-        return true;
     } else if (gui.hot == id) {
         gui_hot(GUI_ID_INVALID);
     }
     
+    return gui.hot == id;
+}
+
+bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
+{
+    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+    Vector2 rel = mouse - pos;
+
+    if ((rel.x >= 0.0f && rel.x < size.x &&
+         rel.y >= 0.0f && rel.y < size.y))
+    {
+        return true;
+    }
+
     return false;
 }
+
 
 void gui_drag_start(Vector2 data)
 {
@@ -1031,7 +1086,14 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, Vector2 size
     return gui_editbox_id(id, value, Vector2{ pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
-i32 find_or_create_window(GuiId id)
+GuiLister* gui_find_or_create_lister(GuiId id)
+{
+    for (auto &l : gui.listers) if (l.id == id) return &l;
+    i32 i = array_add(&gui.listers, GuiLister{ .id = id });
+    return &gui.listers[i];
+}
+
+i32 gui_create_window(GuiId id)
 {
     for (i32 i = 0; i < gui.windows.count; i++) {
         if (gui.windows[i].id == id) {
@@ -1039,17 +1101,28 @@ i32 find_or_create_window(GuiId id)
         }
     }
 
-    GuiWindow wnd;
+    GuiWindow wnd{};
     wnd.id = id;
-    wnd.command_buffer = {};
     wnd.command_buffer.commands.alloc = mem_frame;
+    
+    if (gui.active_window == GUI_ID_INVALID) gui.active_window = id;
+    
     return array_add(&gui.windows, wnd);
+}
+
+GuiWindow *gui_get_window(GuiId id)
+{
+    for (i32 i = 0; i < gui.windows.count; i++) {
+        if (gui.windows[i].id == id) return &gui.windows[i];
+    }
+
+    return nullptr;
 }
 
 bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size, bool *visible)
 {
-    i32 index = find_or_create_window(id);
-    GuiWindow *wnd = &gui.windows[index];
+    GuiWindow *wnd = gui_get_window(id);
+    ASSERT(wnd);
     
     GuiId close_id = GUI_ID_INTERNAL(id, 3);
 
@@ -1083,7 +1156,12 @@ bool gui_begin_window_id(
 {
     if (!*visible) return false;
     ASSERT(gui.current_window == 1);
-    gui_begin_window_id(id, title, pos, size);
+    
+    if (!gui_begin_window_id(id, title, pos, size)) {
+        *visible = false;
+        return false;
+    }
+    
     return gui_window_close_button(id, pos, size, visible);
 }
 
@@ -1096,7 +1174,12 @@ bool gui_begin_window_id(
 {
     if (!*visible) return false;
     ASSERT(gui.current_window == 1);
-    gui_begin_window_id(id, title, pos, size);
+    
+    if (!gui_begin_window_id(id, title, pos, size)) {
+        *visible = false;
+        return false;
+    }
+    
     return gui_window_close_button(id, *pos, *size, visible);
 }
 
@@ -1106,10 +1189,12 @@ bool gui_begin_window_id(
     Vector2 *pos, 
     Vector2 *size)
 {
+    if (!gui_begin_window_id(id, title, *pos, *size)) {
+        return false;
+    }
+    
     GuiId title_id = GUI_ID_INTERNAL(id, 1);
-    
-    gui_begin_window_id(id, title, *pos, *size);
-    
+
     gui.current_window_data.pos = *pos;
     gui.current_window_data.size = size;
     
@@ -1141,7 +1226,7 @@ bool gui_begin_window_id(
 {
     ASSERT(gui.current_window == 1);
     
-    i32 index = find_or_create_window(id);
+    i32 index = gui_create_window(id);
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
@@ -1150,9 +1235,14 @@ bool gui_begin_window_id(
 
     GuiId title_id = GUI_ID_INTERNAL(id, 1);
 
-    if (gui_hot_rect(id, pos, size)) {
-        if (gui.hot == id &&
-            gui.mouse.left_pressed && 
+    gui_hot_rect(id, pos, size);
+    
+    wnd->active = true;
+    if (!wnd->last_active) {
+        wnd = push_window_to_top(index);
+        gui.active_window = id;
+    } else if (gui.hot == id) {
+        if (gui.mouse.left_pressed && 
             !gui.mouse.left_was_pressed) 
         {
             wnd = push_window_to_top(index);
@@ -1169,11 +1259,39 @@ bool gui_begin_window_id(
     
     if (gui.active == title_id) gui_hot(title_id, index);
     else gui_hot_rect(title_id, pos, title_size);
+    
+    if (gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_ESC: 
+                    gui.active_window = GUI_ID_INVALID;
+                    break;
+                case VC_Q:
+                    if (e.key.modifiers == MF_CTRL) {
+                        gui.active_window = GUI_ID_INVALID;
+                        
+                        if (gui.hot == id) gui.hot = GUI_ID_INVALID;
+                        if (gui.active == id) gui.active = GUI_ID_INVALID;
+                        
+                        if (gui.current_window == index) gui.current_window = 1;
+                        return false;
+                    }
+                    break;
+                default: break;
+                }
+                break;
+            default: break;
+            }
+        }
 
+    }
+    
     GuiLayout layout{
         .type = GUI_LAYOUT_ROW,
-        .pos = pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f },
-        .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f },
+        .pos = pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin,
+        .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin,
         .row.margin = 2.0f
     };
     gui_begin_layout(layout);
@@ -1293,6 +1411,16 @@ Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
     }
     
     return pos;
+}
+
+Rect gui_layout_rect(GuiLayout *cl)
+{
+    ASSERT(cl);
+    
+    Rect r;
+    r.pos = cl->pos+cl->current;
+    r.size = cl->available_space;
+    return r;
 }
 
 bool gui_active_parent(GuiId id)
@@ -2049,7 +2177,6 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     GuiId dwn_id = GUI_ID_INTERNAL(id, 2);
     GuiId handle_id = GUI_ID_INTERNAL(id, 3);
     
-    // TODO(jesper): support left hand side scroll bars
     Vector2 total_size{ gui.style.scrollbar.thickness, cl->size.y };
     Vector2 total_pos = gui_layout_widget(total_size, anchor);
     
@@ -2108,22 +2235,20 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     }
     
     f32 min_h = 8.0f;
-    f32 max_y = scroll_pos.y + scroll_size.y - gui.style.scrollbar.thickness;
     
     f32 y0 = *current*pixels_per_i + *offset*total_to_scroll;
     f32 yh = MIN(num_visible, max) * pixels_per_i;
     f32 y1 = y0 + yh;
     
-    y1 = MIN(y1, max_y);
+    y1 = MIN(y1, scroll_size.y);
     
     // TODO(jesper) find a more appealing version of this that ensures a pixel of distance
     // between scroll handle and bottom/top until it's actually at the bottom/top
     if (yh < min_h) {
         y0 = MAX(0, y0-min_h/2.0f);
-        y1 = MIN(max_y, y0+min_h);
+        y1 = MIN(scroll_size.y, y0+min_h);
     }
     
-
     Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
     Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
     gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
@@ -2137,14 +2262,102 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     gui_draw_rect(cmdbuf, scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
 }
 
+void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, GuiAnchor anchor)
+{
+    GuiWindow *wnd = &gui.windows[gui.current_window];
+    GuiLayout *cl = gui_current_layout();
+    Rect lr = gui_layout_rect(cl);
+
+    GuiId up_id = GUI_ID_INTERNAL(id, 1);
+    GuiId dwn_id = GUI_ID_INTERNAL(id, 2);
+    GuiId handle_id = GUI_ID_INTERNAL(id, 3);
+    
+    Vector2 total_size{ gui.style.scrollbar.thickness, cl->size.y };
+    Vector2 total_pos = gui_layout_widget(total_size, anchor);
+
+    Vector2 btn_size{ gui.style.scrollbar.thickness, gui.style.scrollbar.thickness };
+    Vector2 btn_up_p{ total_pos.x, total_pos.y };
+    Vector2 btn_dwn_p{ total_pos.x, total_pos.y + total_size.y - btn_size.y };
+
+    Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
+    Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
+
+    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
+    gui_draw_rect(cmdbuf, total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
+
+    f32 scroll_to_total = total_height/scroll_size.y;
+    f32 total_to_scroll = scroll_size.y/total_height;
+    f32 yh = total_size.y*total_to_scroll;
+
+    f32 max_c = total_height > total_size.y ? total_height - total_size.y : 0;
+    
+    if (gui_mouse_over_rect(lr.pos, lr.size) &&
+        gui_capture(gui.capture_mouse_wheel)) 
+    {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_MOUSE_WHEEL:
+                *current -= step_size*e.mouse_wheel.delta;
+                *current = CLAMP(*current, 0, max_c);
+                break;
+            default: break;
+            }
+        }
+    }
+
+    if (gui_button_id(up_id, btn_up_p, btn_size)) {
+        *current -= step_size;
+        *current = MAX(*current, 0);
+    }
+
+    if (total_height > total_size.y) {
+        f32 y0 = *current*total_to_scroll;
+        f32 y1 = y0 + yh;
+
+        Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
+        Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
+        gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
+
+        if (gui_active_drag(handle_id, { 0, *current }) && gui.mouse.dy != 0) {
+            f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
+
+            f32 c = gui.drag_start_data.y + scroll_to_total*dy;
+            c = CLAMP(c, 0, max_c);
+
+            if (c != *current) {
+                *current = c;
+
+                y0 = *current*total_to_scroll;
+                y1 = y0 + yh;
+
+                scroll_handle_p = { scroll_pos.x, scroll_pos.y + y0 };
+                scroll_handle_s = { gui.style.scrollbar.thickness, y1 - y0 };
+            }
+        }
+
+        Vector3 scroll_handle_bg = gui.active == handle_id ? 
+            gui.style.scrollbar.scroll_btn_active : 
+            gui.hot == handle_id ? 
+            gui.style.scrollbar.scroll_btn_hot : 
+            gui.style.scrollbar.scroll_btn;
+
+        gui_draw_rect(cmdbuf, scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
+    }
+    
+    if (gui_button_id(dwn_id, btn_dwn_p, btn_size)) {
+        *current += step_size;
+        *current = MIN(*current, max_c);
+    }
+    
+    *current = CLAMP(*current, 0, max_c);
+}
+
 Rect gui_layout_widget_fill()
 {
     GuiLayout *cl = gui_current_layout();
     
-    Rect r;
-    r.pos = cl->pos + cl->current;
-    r.size = cl->available_space;
-
+    Rect r = gui_layout_rect(cl);
+    
     switch (cl->type) {
     case GUI_LAYOUT_ABSOLUTE:
         break;
@@ -2168,3 +2381,102 @@ void gui_end_layout()
     ASSERT(gui.layout_stack.count > 1);
     gui.layout_stack.count--;
 }
+
+GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
+{
+    GuiListerAction result = GUI_LISTER_NONE;
+    
+    GuiLister *lister = gui_find_or_create_lister(id);
+    
+    GuiWindow *wnd = &gui.windows[gui.current_window];
+    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
+
+    if (gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_DOWN:
+                    *selected_item = MIN((*selected_item)+1, items.count-1);
+                    break;
+                case VC_UP:
+                    *selected_item = MAX((*selected_item)-1, 0);
+                    break;
+                case VC_ENTER:
+                    result = GUI_LISTER_FINISH;
+                    break;
+                default: break;
+                }
+                break;
+            default: break;
+            }
+        }
+    }
+    
+    Rect r = gui_layout_widget_fill();
+    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
+    defer { gui_end_layout(); };
+    
+    gui_draw_rect(cmdbuf, r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
+    gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
+
+    Font *font = &gui.style.text.font;
+    f32 item_height = font->line_height;
+    
+    f32 total_height = item_height*items.count;
+    f32 step_size = 5.0f;
+    
+    gui_vscrollbar_id(GUI_ID_INDEX(id, 1), &lister->offset, total_height, step_size);
+
+    Rect r2 = gui_layout_widget_fill();
+    gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = r2.pos, .size = r2.size });
+    defer { gui_end_layout(); };
+    
+    for (i32 i = 0; i < items.count; i++) {
+        Vector2 size{ 0, item_height };
+        Vector2 pos = gui_layout_widget(&size);
+        pos.y -= lister->offset;
+        
+        GuiId item_id = GUI_ID_INTERNAL(id, i+10);
+        
+        gui_hot_rect(item_id, pos, size);
+        if (gui_active_click(item_id)) {
+            *selected_item = i;
+            result = GUI_LISTER_SELECT;
+        }
+
+        if (gui.hot == item_id) gui_draw_rect(cmdbuf, pos, size, r2, gui.style.lister.hot_bg);
+        else if (i == *selected_item) gui_draw_rect(cmdbuf, pos, size, r2, gui.style.lister.selected_bg);
+
+        gui_textbox(items[i], pos, r2);
+    }
+    
+    return result;
+}
+
+bool gui_input(InputEvent event)
+{
+    switch (event.type) {
+    case IE_TEXT:
+        break;
+    case IE_MOUSE_WHEEL:
+        if (gui.capture_mouse_wheel[0]) {
+            array_add(&gui.events, event);
+            return true;
+        }
+        break;
+    case IE_MOUSE_PRESS:
+    case IE_MOUSE_RELEASE:
+        break;
+    case IE_KEY_RELEASE:
+    case IE_KEY_PRESS:
+        if (gui.capture_keyboard[0]) {
+            array_add(&gui.events, event);
+            return true;
+        }
+        break;
+    }
+    
+    return false;
+}
+        

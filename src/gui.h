@@ -11,20 +11,22 @@
 #define GUI_ID(index) GuiId{ __COUNTER__, index, -1 }
 #define GUI_ID_INVALID GuiId{ -1, -1, -1 }
 #define GUI_ID_INTERNAL(id, internal) GuiId{ id.owner, id.index, internal }
+#define GUI_ID_INDEX(id, index) GuiId{ id.owner, index, id.internal }
 
-#define gui_button(...) gui_button_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_dropdown(...) gui_dropdown_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_checkbox(...) gui_checkbox_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_checkbox(...) gui_checkbox_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_editbox(...) gui_editbox_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_2d_gizmo_translate(...) gui_2d_gizmo_translate_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_2d_gizmo_translate_axis(...) gui_2d_gizmo_translate_axis_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_2d_gizmo_size(...) gui_2d_gizmo_size_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_2d_gizmo_size_square(...) gui_2d_gizmo_size_square_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_2d_gizmo_size_axis(...) gui_2d_gizmo_size_axis_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_begin_window(...) gui_begin_window_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_scrollbar(...) gui_vscrollbar_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
-#define gui_vscrollbar(...) gui_vscrollbar_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
+#define gui_button(...) gui_button_id(GUI_ID(0), __VA_ARGS__)
+#define gui_dropdown(...) gui_dropdown_id(GUI_ID(0), __VA_ARGS__)
+#define gui_checkbox(...) gui_checkbox_id(GUI_ID(0), __VA_ARGS__)
+#define gui_checkbox(...) gui_checkbox_id(GUI_ID(0), __VA_ARGS__)
+#define gui_editbox(...) gui_editbox_id(GUI_ID(0), __VA_ARGS__)
+#define gui_2d_gizmo_translate(...) gui_2d_gizmo_translate_id(GUI_ID(0), __VA_ARGS__)
+#define gui_2d_gizmo_translate_axis(...) gui_2d_gizmo_translate_axis_id(GUI_ID(0), __VA_ARGS__)
+#define gui_2d_gizmo_size(...) gui_2d_gizmo_size_id(GUI_ID(0), __VA_ARGS__)
+#define gui_2d_gizmo_size_square(...) gui_2d_gizmo_size_square_id(GUI_ID(0), __VA_ARGS__)
+#define gui_2d_gizmo_size_axis(...) gui_2d_gizmo_size_axis_id(GUI_ID(0), __VA_ARGS__)
+#define gui_begin_window(...) gui_begin_window_id(GUI_ID(0), __VA_ARGS__)
+#define gui_scrollbar(...) gui_vscrollbar_id(GUI_ID(0), __VA_ARGS__)
+#define gui_vscrollbar(...) gui_vscrollbar_id(GUI_ID(0), __VA_ARGS__)
+#define gui_lister(...) gui_lister_id(GUI_ID(0), __VA_ARGS__)
 
 #define gui_begin_menu(...) gui_begin_menu_id(GuiId{ __COUNTER__, 0, -1 } ARGS(__VA_ARGS__))
 
@@ -40,6 +42,12 @@ enum GuiEditboxAction {
     GUI_EDITBOX_CANCEL = 1 << 0,
     GUI_EDITBOX_CHANGE = 1 << 1,
     GUI_EDITBOX_FINISH = 1 << 2,
+};
+
+enum GuiListerAction {
+    GUI_LISTER_NONE,
+    GUI_LISTER_SELECT,
+    GUI_LISTER_FINISH,
 };
 
 enum GuiGizmoAction {
@@ -81,8 +89,12 @@ struct TextQuadsAndBounds {
 
 struct GuiWindow {
     GuiId id;
+    
     Rect clip_rect;
+    
     GfxCommandBuffer command_buffer;
+    
+    bool active, last_active;
 };
 
 struct GuiWindowState {
@@ -110,7 +122,13 @@ struct GuiLayout {
             f32 margin;
         } row, column;
     };
-    
+};
+
+// TODO(jesper0): this is really more like scrollarea state, I just need to do a couple
+// passes on the API before it gets there
+struct GuiLister {
+    GuiId id;
+    f32 offset;
 };
 
 enum TextInputType {
@@ -183,6 +201,7 @@ struct GuiContext {
     } current_window_data;
     
     DynamicArray<GuiWindow> windows;
+    DynamicArray<GuiLister> listers;
     DynamicArray<GuiLayout> layout_stack;
     
     GuiId current_id;
@@ -190,8 +209,13 @@ struct GuiContext {
 
     DynamicArray<f32> vertices;
     
-    bool text_input = false;
     DynamicArray<TextInput> text_input_queue;
+    
+    bool text_input = false;
+    bool capture_keyboard[2];
+    bool capture_mouse_wheel[2];
+    
+    DynamicArray<InputEvent> events;
 
     Vector2 drag_start_mouse;
     Vector2 drag_start_data;
@@ -214,6 +238,10 @@ struct GuiContext {
             
             Vector3 color = Vector3{ 1.0f, 1.0f, 1.0f };
         } text;
+        
+        struct {
+            Vector2 margin = { 5.0f, 5.0f };
+        } window;
         
         struct {
             Font font;
@@ -242,6 +270,14 @@ struct GuiContext {
             
             f32 thickness = 15.0f;
         } scrollbar;
+        
+        struct {
+            Vector3 bg = rgb_unpack(0xFF383838);
+            Vector3 border = rgb_unpack(0xFFAAAAAA);
+            Vector3 fg = rgb_unpack(0xFFFFFFFF);
+            Vector3 selected_bg = rgb_unpack(0xFF282828);
+            Vector3 hot_bg = rgb_unpack(0xFF2F2F2F);
+        } lister;
     } style;
 
 };
@@ -250,6 +286,7 @@ extern GuiContext gui;
 
 void init_gui();
 void gui_begin_frame();
+bool gui_input(InputEvent event);
 void gui_render(Camera camera);
 
 void gui_begin_layout(GuiLayout layout);
@@ -281,6 +318,9 @@ template<typename T> T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> 
 template<typename T> T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value);
 
 void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor = GUI_ANCHOR_RIGHT);
+void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, GuiAnchor anchor = GUI_ANCHOR_RIGHT);
+
+GuiListerAction gui_lister_id(GuiId id, Array<String> items);
 
 GuiGizmoAction gui_2d_gizmo_translate_id(GuiId id, Camera camera, Vector2 *position);
 GuiGizmoAction gui_2d_gizmo_translate_id(GuiId id, Camera camera, Vector2 *position, f32 multiple);

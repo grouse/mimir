@@ -140,6 +140,7 @@ void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCom
 
 void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
+void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height);
 GLuint gfx_load_texture(u8 *data, i32 size);

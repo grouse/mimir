@@ -510,6 +510,43 @@ void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxComman
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
+void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf)
+{
+    GfxCommand cmd;
+    cmd.type = GFX_COMMAND_COLORED_LINE;
+    cmd.colored_prim.vbo = gfx.vbos.frame;
+    cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
+    cmd.colored_prim.vertex_count = 8;
+    gfx_push_command(cmdbuf, cmd);
+
+    f32 left = tl.x;
+    f32 right = tl.x + size.x;
+    f32 top = tl.y;
+    f32 bottom = tl.y + size.y;
+
+    color = linear_from_sRGB(color);
+
+    f32 vertices[] = {
+        // ---
+        left, top, color.r, color.g, color.b, 1.0f,
+        right, top, color.r, color.g, color.b, 1.0f, 
+
+        //   |
+        right, top, color.r, color.g, color.b, 1.0f,
+        right, bottom, color.r, color.g, color.b, 1.0f, 
+
+        // ___
+        right, bottom - 1, color.r, color.g, color.b, 1.0f, 
+        left, bottom - 1, color.r, color.g, color.b, 1.0f, 
+
+        // |
+        left, bottom, color.r, color.g, color.b, 1.0f, 
+        left, top, color.r, color.g, color.b, 1.0f, 
+    };
+    array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
+}
+
+
 
 void gfx_begin_frame()
 {
