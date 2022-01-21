@@ -2433,6 +2433,13 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
+    
+    Font *font = &gui.style.text.font;
+    f32 item_height = font->line_height;
+    
+    Rect r = gui_layout_widget_fill();
+    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
+    defer { gui_end_layout(); };
 
     if (gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
@@ -2456,19 +2463,21 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         }
     }
     
-    Rect r = gui_layout_widget_fill();
-    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
-    defer { gui_end_layout(); };
+    f32 selected_item_y0 = (*selected_item)*item_height;
+    f32 selected_item_y1 = selected_item_y0 + item_height;
+    
+    if (selected_item_y0 - lister->offset < 0) {
+        lister->offset += selected_item_y0 - lister->offset;
+    } else if (selected_item_y1 - lister->offset > r.size.y) {
+        lister->offset += selected_item_y1 - lister->offset - r.size.y + 2;
+    }
     
     gui_draw_rect(r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
     gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
 
-    Font *font = &gui.style.text.font;
-    f32 item_height = font->line_height;
-    
-    f32 total_height = item_height*items.count;
     f32 step_size = 5.0f;
-    
+    f32 total_height = item_height*items.count;
+
     gui_vscrollbar_id(GUI_ID_INDEX(id, 1), &lister->offset, total_height, step_size);
 
     Rect r2 = gui_layout_widget_fill();
