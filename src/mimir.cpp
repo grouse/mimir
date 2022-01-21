@@ -1678,12 +1678,12 @@ void update_and_render(f32 dt)
         };
         Vector2 p1{ p0.x, p0.y + h };
         
-        gui_draw_rect(&gfx.frame_cmdbuf, { view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg);
+        gui_draw_rect({ view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg, &gfx.frame_cmdbuf);
 
-        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, h }, app.caret_bg);
-        gui_draw_rect(&gfx.frame_cmdbuf, p0, { 1.0f, h }, app.caret_fg);
-        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, 1.0f }, app.caret_fg);
-        gui_draw_rect(&gfx.frame_cmdbuf, p1, { w, 1.0f }, app.caret_fg);
+        gui_draw_rect(p0, { w, h }, app.caret_bg, &gfx.frame_cmdbuf);
+        gui_draw_rect(p0, { 1.0f, h }, app.caret_fg, &gfx.frame_cmdbuf);
+        gui_draw_rect(p0, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
+        gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
     }
     
     view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
@@ -1700,9 +1700,9 @@ void update_and_render(f32 dt)
         };
         Vector2 p1{ p0.x, p0.y + h };
 
-        gui_draw_rect(&gfx.frame_cmdbuf, p0, { 1.0f, h }, app.mark_fg);
-        gui_draw_rect(&gfx.frame_cmdbuf, p0, { w, 1.0f }, app.mark_fg);
-        gui_draw_rect(&gfx.frame_cmdbuf, p1, { w, 1.0f }, app.mark_fg);
+        gui_draw_rect(p0, { 1.0f, h }, app.mark_fg, &gfx.frame_cmdbuf);
+        gui_draw_rect(p0, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
+        gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
     }
 
     Buffer *buffer = get_buffer(view.buffer);

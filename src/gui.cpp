@@ -86,6 +86,12 @@ GuiLayout *gui_current_layout()
     return &gui.layout_stack[gui.layout_stack.count-1];
 }
 
+GuiWindow* gui_current_window()
+{
+    ASSERT(gui.current_window < gui.windows.count);
+    return &gui.windows[gui.current_window];
+}
+
 bool gui_capture(bool capture_var[2]) 
 {
     capture_var[1] = true;
@@ -244,12 +250,14 @@ void gui_push_command(GfxCommandBuffer *cmdbuf, GfxCommand cmd, i32 draw_index =
 }
 
 void gui_draw_rect(
-    GfxCommandBuffer *cmdbuf,
     Vector2 pos, 
     Vector2 size, 
     Rect clip_rect,
-    GLuint texture)
+    GLuint texture,
+    GfxCommandBuffer *cmdbuf = nullptr)
 {
+    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
+    
     f32 left = pos.x;
     f32 right = pos.x + size.x;
     f32 top = pos.y;
@@ -280,12 +288,14 @@ void gui_draw_rect(
 }
 
 void gui_draw_rect(
-    GfxCommandBuffer *cmdbuf,
     Vector2 pos, 
     Vector2 size, 
     Rect clip_rect,
-    Vector3 color)
+    Vector3 color,
+    GfxCommandBuffer *cmdbuf = nullptr)
 {
+    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
+
     f32 left = pos.x;
     f32 right = pos.x + size.x;
     f32 top = pos.y;
@@ -322,12 +332,14 @@ void gui_draw_rect(
 }
 
 void gui_draw_rect(
-    GfxCommandBuffer *cmdbuf,
     Vector2 pos, 
     Vector2 size, 
     Vector3 color,
+    GfxCommandBuffer *cmdbuf = nullptr,
     i32 draw_index = -1)
 {
+    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
+    
     f32 left = pos.x;
     f32 right = pos.x + size.x;
     f32 top = pos.y;
@@ -462,13 +474,15 @@ bool apply_clip_rect(TextQuad *q, Rect clip_rect)
 }
 
 Vector2 gui_draw_text(
-    GfxCommandBuffer *cmdbuf,
     Array<TextQuad> quads,
     Vector2 pos,
     Rect clip_rect,
     Vector3 color,
-    Font *font)
+    Font *font,
+    GfxCommandBuffer *cmdbuf = nullptr)
 {
+    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
+    
     Vector2 cursor = pos;
     cursor.y += font->baseline;
 
@@ -503,13 +517,15 @@ Vector2 gui_draw_text(
 }
 
 Vector2 gui_draw_text(
-    GfxCommandBuffer *cmdbuf,
     String text,
     Vector2 pos,
     Rect clip_rect,
     Vector3 color,
-    Font *font)
+    Font *font,
+    GfxCommandBuffer *cmdbuf = nullptr)
 {
+    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
+    
     Vector2 cursor = pos;
     cursor.y += gui.style.text.font.baseline;
 
@@ -554,32 +570,27 @@ Vector2 gui_draw_text(
 void gui_textbox(String str, Font *font = &gui.style.text.font)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x, MAX(td.bounds.size.y, font->line_height) });
     
-    gui_draw_text(cmdbuf, td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Font *font = &gui.style.text.font)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
-    gui_draw_text(cmdbuf, td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Rect clip_rect, Font *font = &gui.style.text.font)
 {
-    GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
-
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
-    gui_draw_text(cmdbuf, td.quads, pos, clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.quads, pos, clip_rect, gui.style.text.color, font);
 }
 
 
@@ -681,7 +692,6 @@ bool gui_active_drag(GuiId id, Vector2 data)
 bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
 
     gui_hot_rect(id, pos, size);
     bool clicked = gui_active_click(id);
@@ -692,20 +702,19 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
     Vector3 btn_bg_acc2 = gui.style.button.accent2;
 
     Rect clip_rect{ wnd->clip_rect };
-    gui_draw_rect(cmdbuf, pos, { size.x - 1.0f, 1.0f }, clip_rect, btn_bg_acc0);
-    gui_draw_rect(cmdbuf, pos, { 1.0f, size.y - 1.0f }, clip_rect, btn_bg_acc0);
-    gui_draw_rect(cmdbuf, pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, clip_rect, btn_bg_acc1);
-    gui_draw_rect(cmdbuf, pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, clip_rect, btn_bg_acc1);
-    gui_draw_rect(cmdbuf, pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, clip_rect, btn_bg_acc2);
-    gui_draw_rect(cmdbuf, pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, clip_rect, btn_bg_acc2);
-    gui_draw_rect(cmdbuf, pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, clip_rect, btn_bg);
+    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, clip_rect, btn_bg_acc0);
+    gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, clip_rect, btn_bg_acc0);
+    gui_draw_rect(pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, clip_rect, btn_bg_acc1);
+    gui_draw_rect(pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, clip_rect, btn_bg_acc1);
+    gui_draw_rect(pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, clip_rect, btn_bg_acc2);
+    gui_draw_rect(pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, clip_rect, btn_bg_acc2);
+    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, clip_rect, btn_bg);
     return clicked;
 }
 
 bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     Vector2 pos = gui_layout_widget(size);
     
@@ -719,7 +728,7 @@ bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size)
     Vector2 btn_center = size * 0.5f;
     Vector2 text_offset = btn_center - text_center;
 
-    gui_draw_text(cmdbuf, td.quads, pos + text_offset, clip_rect, btn_fg, font);
+    gui_draw_text(td.quads, pos + text_offset, clip_rect, btn_fg, font);
     return clicked;
 }
 
@@ -743,7 +752,6 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
     id.owner = gui.current_id.owner;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
 
@@ -770,10 +778,10 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
     Vector3 checked_col = rgb_unpack(0xFFCCCCCC);
     Vector3 label_col = rgb_unpack(0xFFFFFFFF);
 
-    gui_draw_rect(cmdbuf, btn_pos, btn_size, wnd->clip_rect, border_col);
-    gui_draw_rect(cmdbuf, btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
-    if (*checked) gui_draw_rect(cmdbuf, btn_pos + inner_margin, inner_size, wnd->clip_rect, checked_col);
-    gui_draw_text(cmdbuf, td.quads, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
+    gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
+    gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
+    if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, wnd->clip_rect, checked_col);
+    gui_draw_text(td.quads, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
     
     return toggled;
 }
@@ -783,7 +791,6 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     u32 action = GUI_EDITBOX_NONE;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
     Vector2 rel = mouse - pos;
@@ -961,8 +968,8 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     String str = gui.active == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
     Array<TextQuad> quads = calc_text_quads(str, &gui.style.text.font);
 
-    gui_draw_rect(cmdbuf, pos, size, wnd->clip_rect, edit_acc0);
-    gui_draw_rect(cmdbuf, edit_pos, edit_size, wnd->clip_rect, edit_bg);
+    gui_draw_rect(pos, size, wnd->clip_rect, edit_acc0);
+    gui_draw_rect(edit_pos, edit_size, wnd->clip_rect, edit_bg);
 
     Vector2 cursor_pos = pos + Vector2{ 1.0f, 0.0f };
     Vector2 text_offset{}; 
@@ -1018,7 +1025,6 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                 if (x0 > x1) SWAP(x0, x1);
 
                 gui_draw_rect(
-                    cmdbuf, 
                     Vector2{ x0, cursor_pos.y } + text_offset, 
                     Vector2{ x1-x0, gui.style.text.font.line_height }, 
                     wnd->clip_rect, 
@@ -1026,12 +1032,11 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
             }
         }
 
-        gui_draw_text(cmdbuf, slice(quads, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
+        gui_draw_text(slice(quads, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
     }
 
     if (gui.active == id) {
         gui_draw_rect(
-            cmdbuf, 
             cursor_pos + text_offset, 
             Vector2{ 1.0f, gui.style.text.font.line_height }, 
             wnd->clip_rect, edit_fg);
@@ -1061,11 +1066,10 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, String in_str, Vector2 s
     f32 margin = 5.0f;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
-    gui_draw_text(cmdbuf, td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_text(td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     return gui_editbox_id(id, in_str, { pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
@@ -1103,11 +1107,10 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, Vector2 size
     f32 margin = 5.0f;
 
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
-    gui_draw_text(cmdbuf, td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_text(td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     return gui_editbox_id(id, value, Vector2{ pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
@@ -1165,10 +1168,10 @@ bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size, bool *
     }
     
     if (gui.hot == close_id) {
-        gui_draw_rect(&wnd->command_buffer, close_pos, close_size, wnd->clip_rect, rgb_unpack(0xFFFF0000));
+        gui_draw_rect(close_pos, close_size, wnd->clip_rect, rgb_unpack(0xFFFF0000), &wnd->command_buffer);
     }
     
-    gui_draw_rect(&wnd->command_buffer, icon_pos, icon_size, wnd->clip_rect, gui.style.icons.close);
+    gui_draw_rect(icon_pos, icon_size, wnd->clip_rect, gui.style.icons.close, &wnd->command_buffer);
     return true;
 }
 
@@ -1328,10 +1331,10 @@ bool gui_begin_window_id(
     Vector2 title_pos = pos + window_border + Vector2{ 2.0f, 2.0f };
     Vector3 wnd_bg = rgb_unpack(0xFF282828);
 
-    gui_draw_rect(&wnd->command_buffer, pos, size, title_bg);
-    gui_draw_rect(&wnd->command_buffer, pos + window_border, size - 2.0f*window_border, wnd_bg);
-    gui_draw_rect(&wnd->command_buffer, pos + window_border, title_size, title_bg);
-    gui_draw_text(&wnd->command_buffer, title, title_pos, { title_pos, title_size }, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_rect(pos, size, title_bg);
+    gui_draw_rect(pos + window_border, size - 2.0f*window_border, wnd_bg);
+    gui_draw_rect(pos + window_border, title_size, title_bg);
+    gui_draw_text(title, title_pos, { title_pos, title_size }, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     
     return true;
 }
@@ -1999,10 +2002,10 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
     Vector3 rhs_col = gui.hot == id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
     Vector3 bg_col = gui.hot == id ? bg_hot : bg_def;
     
-    gui_draw_rect(cmdbuf, pos, total_size, wnd->clip_rect, border_col);
-    gui_draw_rect(cmdbuf, inner_pos, inner_size, wnd->clip_rect, bg_col);
-    gui_draw_text(cmdbuf, labels[current_index], text_pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f });
-    gui_draw_rect(cmdbuf, rhs_p, { border, inner_size.y }, border_col);
+    gui_draw_rect(pos, total_size, wnd->clip_rect, border_col);
+    gui_draw_rect(inner_pos, inner_size, wnd->clip_rect, bg_col);
+    gui_draw_text(labels[current_index], text_pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f });
+    gui_draw_rect(rhs_p, { border, inner_size.y }, border_col);
     gfx_draw_triangle(rhs_p0, rhs_p1, rhs_p2, rhs_col, cmdbuf);
 
     if (gui.active.owner == id.owner && gui.active.index == id.index) {
@@ -2014,8 +2017,8 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
         Vector2 total_s{ total_size.x, labels.count * gui.font.line_height + border + 0.5f*margin };
         Vector2 inner_s{ total_s.x - 2*border, total_s.y - border };
         
-        gui_draw_rect(&gui.windows[1].command_buffer, p, total_s, gui.windows[0].clip_rect, border_col);
-        gui_draw_rect(&gui.windows[1].command_buffer, inner_p, inner_s, gui.windows[0].clip_rect, bg_def);
+        gui_draw_rect(p, total_s, gui.windows[0].clip_rect, border_col, &gui.windows[1].command_buffer);
+        gui_draw_rect(inner_p, inner_s, gui.windows[0].clip_rect, bg_def, &gui.windows[1].command_buffer);
         
         for (i32 i = 0; i < labels.count; i++) {
             String label = labels[i];
@@ -2025,8 +2028,8 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             Vector2 rect_s{ inner_s.x, gui.font.line_height + border };
             gui_hot_rect(label_id, rect_p, rect_s);
 
-            if (gui.hot == label_id) gui_draw_rect(&gui.windows[1].command_buffer, rect_p, rect_s, bg_hot);
-            gui_draw_text(&gui.windows[1].command_buffer, label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f });
+            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, bg_hot, &gui.windows[1].command_buffer);
+            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, &gui.windows[1].command_buffer);
             text_p.y += gui.font.line_height;
             
             if ((gui.hot == label_id && gui.active_press == id && !gui.mouse.left_pressed) || 
@@ -2100,7 +2103,7 @@ bool gui_begin_menu_id(GuiId id)
     gui_begin_layout(layout);
 
     Vector3 bg = rgb_unpack(0xFF212121);
-    gui_draw_rect(&wnd->command_buffer, layout.pos, layout.size, wnd->clip_rect, bg);
+    gui_draw_rect(layout.pos, layout.size, wnd->clip_rect, bg);
     
     gui_push_id(id);
     return true;
@@ -2115,7 +2118,7 @@ void gui_end_menu()
     {    
         Vector3 bg = rgb_unpack(0xFF212121);
         Vector2 size{ layout->size.x, layout->size.y + layout->current.y };
-        gui_draw_rect(&gui.windows[1].command_buffer, layout->pos, size, bg, 0);
+        gui_draw_rect(layout->pos, size, bg, &gui.windows[1].command_buffer, 0);
     }
     
     gui_end_layout();
@@ -2149,8 +2152,8 @@ bool gui_begin_menu_id(GuiId id, String label)
     
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
-    gui_draw_rect(&wnd->command_buffer, pos, size, wnd->clip_rect, btn_bg);
-    gui_draw_text(&wnd->command_buffer, td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
+    gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
+    gui_draw_text(td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
     
     if (gui.active == id || gui.active.owner == id.owner) {
         gui_push_id(id);
@@ -2182,7 +2185,6 @@ bool gui_menu_button_id(GuiId id, String label)
     
     // TODO(jesper): can we just make this a regular button? only difference is styling
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 text_offset{ 5.0f, 5.0f };
@@ -2197,8 +2199,8 @@ bool gui_menu_button_id(GuiId id, String label)
 
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
-    gui_draw_rect(cmdbuf, pos, size, wnd->clip_rect, btn_bg);
-    gui_draw_text(cmdbuf, td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
+    gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
+    gui_draw_text(td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
     return clicked;
 }
 
@@ -2230,8 +2232,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
     
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
-    gui_draw_rect(cmdbuf, total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
     
     i32 step_size = 3;
     if (gui_button_id(up_id, btn_up_p, btn_size)) {
@@ -2302,7 +2303,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
         gui.style.scrollbar.scroll_btn_hot : 
         gui.style.scrollbar.scroll_btn;
     
-    gui_draw_rect(cmdbuf, scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
+    gui_draw_rect(scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
 }
 
 void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, GuiAnchor anchor)
@@ -2325,8 +2326,7 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
 
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
-    gui_draw_rect(cmdbuf, total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
 
     f32 scroll_to_total = total_height/scroll_size.y;
     f32 total_to_scroll = scroll_size.y/total_height;
@@ -2384,7 +2384,7 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
             gui.style.scrollbar.scroll_btn_hot : 
             gui.style.scrollbar.scroll_btn;
 
-        gui_draw_rect(cmdbuf, scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
+        gui_draw_rect(scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
     }
     
     if (gui_button_id(dwn_id, btn_dwn_p, btn_size)) {
@@ -2460,7 +2460,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
     defer { gui_end_layout(); };
     
-    gui_draw_rect(cmdbuf, r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
+    gui_draw_rect(r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
     gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
 
     Font *font = &gui.style.text.font;
@@ -2488,8 +2488,8 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
             result = GUI_LISTER_SELECT;
         }
 
-        if (gui.hot == item_id) gui_draw_rect(cmdbuf, pos, size, r2, gui.style.lister.hot_bg);
-        else if (i == *selected_item) gui_draw_rect(cmdbuf, pos, size, r2, gui.style.lister.selected_bg);
+        if (gui.hot == item_id) gui_draw_rect(pos, size, r2, gui.style.lister.hot_bg);
+        else if (i == *selected_item) gui_draw_rect(pos, size, r2, gui.style.lister.selected_bg);
 
         gui_textbox(items[i], pos, r2);
     }
