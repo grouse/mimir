@@ -1598,6 +1598,12 @@ void update_and_render(f32 dt)
         
         Array<String> files = list_files("./", FILE_LIST_RECURSIVE);
         
+        String prompt = "";
+        GuiEditboxAction action = gui_editbox(prompt);
+        if (action == GUI_EDITBOX_CHANGE) {
+            
+        }
+        
         static i32 selected_item = 0;
         if (gui_lister(files, &selected_item) == GUI_LISTER_FINISH) {
             String file = files[selected_item];
@@ -1615,7 +1621,7 @@ void update_and_render(f32 dt)
     view.caret_dirty |= view.lines_dirty;
     {
         Rect tr = gui_layout_widget_fill();
-        gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = tr.pos, .size = tr.size });
+        gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = tr });
         defer { gui_end_layout(); };
 
         {
@@ -1631,7 +1637,7 @@ void update_and_render(f32 dt)
 
         {
             Rect r = gui_layout_widget_fill();
-            gui_begin_layout( { .type = GUI_LAYOUT_COLUMN, .pos = r.pos, .size = r.size });
+            gui_begin_layout( { .type = GUI_LAYOUT_COLUMN, .rect = r });
             defer { gui_end_layout(); };
 
             // NOTE(jesper): the scrollbar is 1 frame delayed if the reflowing results in a different number of lines,

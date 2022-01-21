@@ -10,7 +10,6 @@
 
 
 #include "win32_core.cpp"
-#include "win32_gui.cpp"
 #include "win32_opengl.cpp"
 #include "win32_file.cpp"
 #include "win32_input.cpp"

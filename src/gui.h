@@ -23,11 +23,11 @@
 #define gui_2d_gizmo_size(...) gui_2d_gizmo_size_id(GUI_ID(0), __VA_ARGS__)
 #define gui_2d_gizmo_size_square(...) gui_2d_gizmo_size_square_id(GUI_ID(0), __VA_ARGS__)
 #define gui_2d_gizmo_size_axis(...) gui_2d_gizmo_size_axis_id(GUI_ID(0), __VA_ARGS__)
-#define gui_begin_window(...) gui_begin_window_id(GUI_ID(0), __VA_ARGS__)
 #define gui_scrollbar(...) gui_vscrollbar_id(GUI_ID(0), __VA_ARGS__)
 #define gui_vscrollbar(...) gui_vscrollbar_id(GUI_ID(0), __VA_ARGS__)
 #define gui_lister(...) gui_lister_id(GUI_ID(0), __VA_ARGS__)
 
+#define gui_begin_window(...) gui_begin_window_id(GUI_ID(0), __VA_ARGS__)
 #define gui_begin_menu(...) gui_begin_menu_id(GuiId{ __COUNTER__, 0, -1 } ARGS(__VA_ARGS__))
 
 // TODO(jesper): this needs to be just gui_button by making the styling powerful enough
@@ -111,8 +111,16 @@ enum GuiLayoutType {
 
 struct GuiLayout {
     GuiLayoutType type;
-    Vector2 pos;
-    Vector2 size;
+    
+    
+    union {
+        struct {
+            Vector2 pos;
+            Vector2 size;
+        };
+        
+        Rect rect;
+    };
     
     Vector2 current;
     Vector2 available_space;
@@ -129,35 +137,6 @@ struct GuiLayout {
 struct GuiLister {
     GuiId id;
     f32 offset;
-};
-
-enum TextInputType {
-    TEXT_INPUT_INVALID,
-    TEXT_INPUT_CHAR,
-    TEXT_INPUT_CURSOR_LEFT,
-    TEXT_INPUT_CURSOR_RIGHT,
-    TEXT_INPUT_BACKSPACE,
-    TEXT_INPUT_DEL,
-    TEXT_INPUT_SELECT_ALL,
-    TEXT_INPUT_PASTE,
-    TEXT_INPUT_COPY,
-    TEXT_INPUT_ENTER,
-    TEXT_INPUT_CANCEL,
-};
-
-struct TextInput {
-    TextInputType type;
-    union {
-        struct {
-            u8 c[4] = { 0 };
-            u8 length = 0;
-        }; 
-        struct {
-            String str;
-        };
-    };
-
-    TextInput(TextInputType itype) : type(itype) {}
 };
 
 struct Font {
@@ -209,9 +188,7 @@ struct GuiContext {
 
     DynamicArray<f32> vertices;
     
-    DynamicArray<TextInput> text_input_queue;
-    
-    bool text_input = false;
+    bool capture_text[2];
     bool capture_keyboard[2];
     bool capture_mouse_wheel[2];
     
@@ -299,6 +276,7 @@ bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool
 void gui_end_window(Vector2 pos, Vector2 *size);
 void gui_end_window();
 
+GuiEditboxAction gui_editbox_id(GuiId id, String in_str);
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 size);
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size);
 

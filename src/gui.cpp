@@ -150,6 +150,9 @@ void gui_end_frame()
     if (!gui.mouse.left_pressed) gui.active_press = GUI_ID_INVALID;
     
     gui.events.count = 0;
+    gui.capture_text[0] = gui.capture_text[1];
+    gui.capture_text[1] = false;
+    
     gui.capture_keyboard[0] = gui.capture_keyboard[1];
     gui.capture_keyboard[1] = false;
     
@@ -361,14 +364,20 @@ TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator
     while (p < end) {
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return r;
-
-        if (c == ' ') {
-            cursor.x += font->space_width;
-            continue;
-        }
         
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+        stbtt_aligned_quad q{};
+        
+        if (c == ' ') {
+            q.y0 = cursor.y;
+            q.y1 = q.y0;
+            
+            q.x0 = cursor.x;
+            q.x1 = cursor.x + font->space_width;
+            
+            cursor.x = q.x1;
+        } else {
+            stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+        }
         
         array_add(&r.quads, q);
         
@@ -395,13 +404,18 @@ DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc 
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return quads;
         
-        if (c == ' ') {
-            cursor.x += font->space_width;
-            continue;
-        }
-
         stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+        if (c == ' ') {
+            q.y0 = cursor.y;
+            q.y1 = q.y0;
+
+            q.x0 = cursor.x;
+            q.x1 = cursor.x + font->space_width;
+
+            cursor.x = q.x1;
+        } else {
+            stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+        }
 
         array_add(&quads, q);
     }
@@ -784,7 +798,6 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     if (gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
         if (gui.hot == id) {
             gui_active(id);
-            gui.text_input = true;
             gui.edit.selection = 0;
             gui.edit.cursor = 0;
             gui.edit.offset = 0;
@@ -804,90 +817,107 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     Vector2 edit_pos = pos + Vector2{ 1.0f, 1.0f };
     Vector2 edit_size = size - Vector2{ 2.0f, 2.0f };
     
-    if (gui.active == id) {
-        for (TextInput in : gui.text_input_queue) {
-            switch (in.type) {
-            case TEXT_INPUT_INVALID:
-                LOG_ERROR("invalid text input event received");
-                break;
-            case TEXT_INPUT_CURSOR_LEFT:
-                gui.edit.cursor = utf8_decr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
-                gui.edit.cursor = MAX(0, gui.edit.cursor);
-                gui.edit.selection = gui.edit.cursor;
-                break;
-            case TEXT_INPUT_CURSOR_RIGHT:
-                gui.edit.cursor = utf8_incr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
-                gui.edit.selection = gui.edit.cursor;
-                break;
-            case TEXT_INPUT_SELECT_ALL:
-                gui.edit.selection = 0;
-                gui.edit.cursor = gui.edit.length;
-                break;
-            case TEXT_INPUT_COPY: {
-                    if (gui.edit.cursor != gui.edit.selection) {
+    if (gui.active == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_LEFT:
+                    gui.edit.cursor = utf8_decr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
+                    gui.edit.cursor = MAX(0, gui.edit.cursor);
+                    gui.edit.selection = gui.edit.cursor;
+                    break;
+                case VC_RIGHT:
+                    gui.edit.cursor = utf8_incr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
+                    gui.edit.selection = gui.edit.cursor;
+                    break;
+                case VC_A:
+                    if (e.key.modifiers == MF_CTRL) {
+                        gui.edit.selection = 0;
+                        gui.edit.cursor = gui.edit.length;
+                    } break;
+                case VC_C: 
+                    if (e.key.modifiers == MF_CTRL &&
+                        gui.edit.cursor != gui.edit.selection) 
+                    {
                         i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                         i32 end = MAX(gui.edit.cursor, gui.edit.selection);
-                        
+
                         String selected = slice({ gui.edit.buffer, gui.edit.length }, start, end);
                         set_clipboard_data(selected);
-                    }
-                } break;
-            case TEXT_INPUT_PASTE: {
-                    i32 start = MIN(gui.edit.cursor, gui.edit.selection);
-                    i32 end = MAX(gui.edit.cursor, gui.edit.selection);
+                    } break;
+                case VC_V: 
+                    if (e.key.modifiers == MF_CTRL) {
+                        i32 start = MIN(gui.edit.cursor, gui.edit.selection);
+                        i32 end = MAX(gui.edit.cursor, gui.edit.selection);
 
-                    i32 limit = sizeof gui.edit.buffer - (gui.edit.length - (end-start));
-                    in.str.length = utf8_truncate(in.str, limit);
-                    
-                    if (in.str.length > (end-start)) { 
-                        memmove(
-                            gui.edit.buffer+end+in.str.length-(end-start), 
-                            gui.edit.buffer+end, 
-                            gui.edit.length-end);
-                    }
-                    
-                    memcpy(gui.edit.buffer+start, in.str.data, in.str.length);
-                    
-                    if (in.str.length < (end-start)) {
-                        memmove(
-                            gui.edit.buffer+start+in.str.length, 
-                            gui.edit.buffer+end, 
-                            gui.edit.length-end);
-                    }
+                        i32 limit = sizeof gui.edit.buffer - (gui.edit.length - (end-start));
+                        
+                        String str = read_clipboard_str();
+                        str.length = utf8_truncate(str, limit);
 
-                    gui.edit.cursor = gui.edit.selection = start+in.str.length;
-                    gui.edit.length = gui.edit.length - (end-start) + in.str.length;
-                    action |= GUI_EDITBOX_CHANGE;
-                } break;
-            case TEXT_INPUT_DEL:
-                if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor < gui.edit.length) {
-                    i32 start = MIN(gui.edit.cursor, gui.edit.selection);
-                    i32 end = MAX(gui.edit.cursor, gui.edit.selection);
-                    if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
-                    
-                    i32 new_length = gui.edit.length-(end-start);
-                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, new_length-start);
-                    gui.edit.length = new_length;
-                    gui.edit.cursor = gui.edit.selection = start;
-                    
-                    i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length}, gui.edit.cursor);
-                    gui.edit.offset = MIN(gui.edit.offset, new_offset);
-                    action |= GUI_EDITBOX_CHANGE;
-                } break;
-            case TEXT_INPUT_BACKSPACE:
-                if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor > 0) {
-                    i32 start = MIN(gui.edit.cursor, gui.edit.selection);
-                    i32 end = MAX(gui.edit.cursor, gui.edit.selection);
-                    if (start == end) start = utf8_decr({ gui.edit.buffer, gui.edit.length }, start);
+                        if (str.length > (end-start)) { 
+                            memmove(
+                                gui.edit.buffer+end+str.length-(end-start), 
+                                gui.edit.buffer+end, 
+                                gui.edit.length-end);
+                        }
 
-                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-(end-start));
-                    gui.edit.length = gui.edit.length-(end-start);
-                    gui.edit.cursor = gui.edit.selection = start;
-                    gui.edit.offset = MIN(gui.edit.offset, codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length}, gui.edit.cursor));
-                    action |= GUI_EDITBOX_CHANGE;
-                } 
+                        memcpy(gui.edit.buffer+start, str.data, str.length);
+
+                        if (str.length < (end-start)) {
+                            memmove(
+                                gui.edit.buffer+start+str.length, 
+                                gui.edit.buffer+end, 
+                                gui.edit.length-end);
+                        }
+
+                        gui.edit.cursor = gui.edit.selection = start+str.length;
+                        gui.edit.length = gui.edit.length - (end-start) + str.length;
+                        action |= GUI_EDITBOX_CHANGE;
+                    } break;
+                case VC_DELETE:
+                    if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor < gui.edit.length) {
+                        i32 start = MIN(gui.edit.cursor, gui.edit.selection);
+                        i32 end = MAX(gui.edit.cursor, gui.edit.selection);
+                        if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
+
+                        i32 new_length = gui.edit.length-(end-start);
+                        memmove(gui.edit.buffer+start, gui.edit.buffer+end, new_length-start);
+                        gui.edit.length = new_length;
+                        gui.edit.cursor = gui.edit.selection = start;
+
+                        i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length}, gui.edit.cursor);
+                        gui.edit.offset = MIN(gui.edit.offset, new_offset);
+                        action |= GUI_EDITBOX_CHANGE;
+                    } break;
+                case VC_BACKSPACE:
+                    if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor > 0) {
+                        i32 start = MIN(gui.edit.cursor, gui.edit.selection);
+                        i32 end = MAX(gui.edit.cursor, gui.edit.selection);
+                        if (start == end) start = utf8_decr({ gui.edit.buffer, gui.edit.length }, start);
+
+                        memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-(end-start));
+                        gui.edit.length = gui.edit.length-(end-start);
+                        gui.edit.cursor = gui.edit.selection = start;
+                        gui.edit.offset = MIN(gui.edit.offset, codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length}, gui.edit.cursor));
+                        action |= GUI_EDITBOX_CHANGE;
+                    }  break;
+                case VC_ENTER:
+                    action |= GUI_EDITBOX_FINISH;
+                    gui_hot(GUI_ID_INVALID);
+                    gui_active(GUI_ID_INVALID);
+                    break;
+                case VC_ESC:
+                    action |= GUI_EDITBOX_CANCEL;
+                    gui_hot(GUI_ID_INVALID);
+                    gui_active(GUI_ID_INVALID);
+                    break;
+                    
+                default: break;
+                }
                 break;
-            case TEXT_INPUT_CHAR: 
+            case IE_TEXT:
                 if (gui.edit.cursor != gui.edit.selection) {
                     i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                     i32 end = MAX(gui.edit.cursor, gui.edit.selection);
@@ -896,45 +926,30 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                     memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-start);
                     gui.edit.length -= end-start;
                     gui.edit.cursor = gui.edit.selection = start;
-                    
+
                     i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
                     gui.edit.offset = MIN(gui.edit.offset, new_offset);
                     action |= GUI_EDITBOX_CHANGE;
                 }
                 
-                if (gui.edit.length+in.length <= (i32)sizeof gui.edit.buffer) {
-                    for (i32 i = gui.edit.length + in.length-1; i > gui.edit.cursor; i--) {
-                        gui.edit.buffer[i] = gui.edit.buffer[i-in.length];
+                if (gui.edit.length+e.text.length <= (i32)sizeof gui.edit.buffer) {
+                    for (i32 i = gui.edit.length + e.text.length-1; i > gui.edit.cursor; i--) {
+                        gui.edit.buffer[i] = gui.edit.buffer[i-e.text.length];
                     }
                     
-                    memcpy(gui.edit.buffer+gui.edit.cursor, in.c, in.length);
-                    gui.edit.length += in.length;
-                    gui.edit.cursor += in.length;
+                    memcpy(gui.edit.buffer+gui.edit.cursor, e.text.c, e.text.length);
+                    gui.edit.length += e.text.length;
+                    gui.edit.cursor += e.text.length;
                     gui.edit.selection = gui.edit.cursor;
                     action |= GUI_EDITBOX_CHANGE;
                 }
                 break;
-            case TEXT_INPUT_ENTER:
-                action |= GUI_EDITBOX_FINISH;
-                gui_hot(GUI_ID_INVALID);
-                gui_active(GUI_ID_INVALID);
-                gui.text_input = false;
-                break;
-            case TEXT_INPUT_CANCEL:
-                action |= GUI_EDITBOX_CANCEL;
-                gui_hot(GUI_ID_INVALID);
-                gui_active(GUI_ID_INVALID);
-                gui.text_input = false;
-                break;
+                
+            default: break;
             }
             
             if (gui.edit.length == sizeof gui.edit.buffer) break;
         }
-        
-        gui.text_input_queue.count = 0;
-    } else if (gui.last_active == id) {
-        gui.text_input = false;
-        gui.text_input_queue.count = 0;
     }
 
     Rect text_clip_rect;
@@ -1024,6 +1039,16 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     
     return (GuiEditboxAction)action;
 }
+
+GuiEditboxAction gui_editbox_id(GuiId id, String in_str)
+{
+    Vector2 size{ 20.0f, 20.0f };
+    Vector2 pos = gui_layout_widget(&size);
+    
+    String str = gui.active == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
+    return gui_editbox_id(id, str, pos, size);
+}
+
 
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 size)
 {
@@ -1259,15 +1284,15 @@ bool gui_begin_window_id(
     
     if (gui.active == title_id) gui_hot(title_id, index);
     else gui_hot_rect(title_id, pos, title_size);
-    
+
+    // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
+    // should be given a chance to respond to certain key events first
+    // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
     if (gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
                 switch (e.key.virtual_code) {
-                case VC_ESC: 
-                    gui.active_window = GUI_ID_INVALID;
-                    break;
                 case VC_Q:
                     if (e.key.modifiers == MF_CTRL) {
                         gui.active_window = GUI_ID_INVALID;
@@ -1285,7 +1310,6 @@ bool gui_begin_window_id(
             default: break;
             }
         }
-
     }
     
     GuiLayout layout{
@@ -1366,6 +1390,25 @@ void gui_end_window()
         //gui_draw_rect(&wnd->command_buffer, { resize_bl.x, resize_tr.y }, { resize_tr.x - resize_bl.x, resize_bl.y - resize_tr.y }, resize_bg);
 
         gui.current_window_data.size = nullptr;
+    }
+    
+    // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
+    // should be given a chance to respond to certain key events first
+    // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
+    if (gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_ESC: 
+                    gui.active_window = GUI_ID_INVALID;
+                    break;
+                default: break;
+                }
+                break;
+            default: break;
+            }
+        }
     }
 
     gui_end_layout();
@@ -2458,6 +2501,10 @@ bool gui_input(InputEvent event)
 {
     switch (event.type) {
     case IE_TEXT:
+        if (gui.capture_text[0]) {
+            array_add(&gui.events, event);
+            return true;
+        }
         break;
     case IE_MOUSE_WHEEL:
         if (gui.capture_mouse_wheel[0]) {
