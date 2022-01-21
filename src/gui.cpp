@@ -117,6 +117,69 @@ void gui_active(GuiId id)
     gui.active = id;
 }
 
+bool apply_clip_rect(TextQuad *q, Rect clip_rect)
+{
+    if (q->x0 > clip_rect.pos.x + clip_rect.size.x) return false;
+    if (q->y0 > clip_rect.pos.y + clip_rect.size.y) return false;
+    if (q->x1 < clip_rect.pos.x) return false;
+    if (q->y1 < clip_rect.pos.y) return false;
+
+    if (q->x1 > clip_rect.pos.x + clip_rect.size.x) {
+        f32 w0 = q->x1 - q->x0;
+        q->x1 = clip_rect.pos.x + clip_rect.size.x;
+        f32 w1 = q->x1 - q->x0;
+        q->s1 = q->s0 + (q->s1 - q->s0) * (w1/w0);
+    }
+
+    if (q->x0 < clip_rect.pos.x) {
+        f32 w0 = q->x1 - q->x0;
+        q->x0 = clip_rect.pos.x;
+        f32 w1 = q->x1 - q->x0;
+        q->s0 = q->s1 - (q->s1 - q->s0) * (w1/w0);
+    }
+
+    if (q->y1 > clip_rect.pos.y + clip_rect.size.y) {
+        f32 h0 = q->y1 - q->y0;
+        q->y1 = clip_rect.pos.y + clip_rect.size.y;
+        f32 h1 = q->y1 - q->y0;
+        q->t1 = q->t0 + (q->t1 - q->t0) * (h1/h0);
+    }
+
+    if (q->y0 < clip_rect.pos.y) {
+        f32 h0 = q->y1 - q->y0;
+        q->y0 = clip_rect.pos.y;
+        f32 h1 = q->y1 - q->y0;
+        q->t0 = q->t1 - (q->t1 - q->t0) * (h1/h0);
+    }
+
+    return true;
+}
+
+bool apply_clip_rect(Vector2 *pos, Vector2 *size, Rect clip_rect)
+{
+    if (pos->x > clip_rect.pos.x + clip_rect.size.x) return false;
+    if (pos->y > clip_rect.pos.y + clip_rect.size.y) return false;
+    if (pos->x + size->x < clip_rect.pos.x) return false;
+    if (pos->y + size->y < clip_rect.pos.y) return false;
+    
+    f32 left = pos->x;
+    f32 right = pos->x + size->x;
+    f32 top = pos->y;
+    f32 bottom = pos->y + size->y;
+
+    top = MAX(top, clip_rect.pos.y);
+    left = MAX(left, clip_rect.pos.x);
+    right = MIN(right, clip_rect.pos.x + clip_rect.size.x);
+    bottom = MIN(bottom, clip_rect.pos.y + clip_rect.size.y);
+    
+    pos->x = left;
+    pos->y = top;
+    size->x = right-left;
+    size->y = bottom-top;
+    
+    return true;
+}
+
 void gui_begin_frame()
 {
     for (GuiWindow &wnd : gui.windows) {
@@ -252,22 +315,15 @@ void gui_push_command(GfxCommandBuffer *cmdbuf, GfxCommand cmd, i32 draw_index =
 void gui_draw_rect(
     Vector2 pos, 
     Vector2 size, 
-    Rect clip_rect,
     GLuint texture,
     GfxCommandBuffer *cmdbuf = nullptr)
 {
     if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
-    
+
     f32 left = pos.x;
     f32 right = pos.x + size.x;
     f32 top = pos.y;
     f32 bottom = pos.y + size.y;
-
-    if (left >= clip_rect.pos.x + clip_rect.size.x) return;
-    if (top >= clip_rect.pos.y + clip_rect.size.y) return;
-
-    right = MIN(right, clip_rect.pos.x + clip_rect.size.x);
-    bottom = MIN(bottom, clip_rect.pos.y + clip_rect.size.y);
 
     f32 vertices[] = {
         right, top, 1.0f, 0.0f,
@@ -283,52 +339,20 @@ void gui_draw_rect(
     cmd.gui_prim_texture.texture = texture;
     cmd.gui_prim_texture.vertex_count = ARRAY_COUNT(vertices);
     gui_push_command(cmdbuf, cmd);
-    
+
     array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
 }
+
 
 void gui_draw_rect(
     Vector2 pos, 
     Vector2 size, 
     Rect clip_rect,
-    Vector3 color,
+    GLuint texture,
     GfxCommandBuffer *cmdbuf = nullptr)
 {
-    if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
-
-    f32 left = pos.x;
-    f32 right = pos.x + size.x;
-    f32 top = pos.y;
-    f32 bottom = pos.y + size.y;
-
-    if (left >= clip_rect.pos.x + clip_rect.size.x) return;
-    if (top >= clip_rect.pos.y + clip_rect.size.y) return;
-
-    top = MAX(top, clip_rect.pos.y);
-    left = MAX(left, clip_rect.pos.x);
-    
-    right = MIN(right, clip_rect.pos.x + clip_rect.size.x);
-    bottom = MIN(bottom, clip_rect.pos.y + clip_rect.size.y);
-    
-    if (bottom < clip_rect.pos.y) return;
-    
-    color = linear_from_sRGB(color);
-
-    f32 vertices[] = {
-        right, top, color.r, color.g, color.b,
-        left, top, color.r, color.g, color.b,
-        left, bottom, color.r, color.g, color.b,
-
-        left, bottom, color.r, color.g, color.b,
-        right, bottom, color.r, color.g, color.b,
-        right, top, color.r, color.g, color.b,
-    };
-
-    GfxCommand cmd = gui_command(GFX_COMMAND_GUI_PRIM_COLOR);
-    cmd.gui_prim.vertex_count = ARRAY_COUNT(vertices);
-    gui_push_command(cmdbuf, cmd);
-
-    array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
+    if (!apply_clip_rect(&pos, &size, clip_rect)) return;
+    gui_draw_rect(pos, size, texture, cmdbuf);
 }
 
 void gui_draw_rect(
@@ -362,6 +386,17 @@ void gui_draw_rect(
     gui_push_command(cmdbuf, cmd, draw_index);
 
     array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
+}
+
+void gui_draw_rect(
+    Vector2 pos, 
+    Vector2 size, 
+    Rect clip_rect,
+    Vector3 color,
+    GfxCommandBuffer *cmdbuf = nullptr)
+{
+    if (!apply_clip_rect(&pos, &size, clip_rect)) return;
+    gui_draw_rect(pos, size, color, cmdbuf);
 }
 
 TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator alloc = mem_tmp)
@@ -433,44 +468,6 @@ DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc 
     }
 
     return quads;
-}
-
-bool apply_clip_rect(TextQuad *q, Rect clip_rect)
-{
-    if (q->x0 > clip_rect.pos.x + clip_rect.size.x) return false;
-    if (q->y0 > clip_rect.pos.y + clip_rect.size.y) return false;
-    if (q->x1 < clip_rect.pos.x) return false;
-    if (q->y1 < clip_rect.pos.y) return false;
-
-    if (q->x1 > clip_rect.pos.x + clip_rect.size.x) {
-        f32 w0 = q->x1 - q->x0;
-        q->x1 = clip_rect.pos.x + clip_rect.size.x;
-        f32 w1 = q->x1 - q->x0;
-        q->s1 = q->s0 + (q->s1 - q->s0) * (w1/w0);
-    }
-
-    if (q->x0 < clip_rect.pos.x) {
-        f32 w0 = q->x1 - q->x0;
-        q->x0 = clip_rect.pos.x;
-        f32 w1 = q->x1 - q->x0;
-        q->s0 = q->s1 - (q->s1 - q->s0) * (w1/w0);
-    }
-
-    if (q->y1 > clip_rect.pos.y + clip_rect.size.y) {
-        f32 h0 = q->y1 - q->y0;
-        q->y1 = clip_rect.pos.y + clip_rect.size.y;
-        f32 h1 = q->y1 - q->y0;
-        q->t1 = q->t0 + (q->t1 - q->t0) * (h1/h0);
-    }
-
-    if (q->y0 < clip_rect.pos.y) {
-        f32 h0 = q->y1 - q->y0;
-        q->y0 = clip_rect.pos.y;
-        f32 h1 = q->y1 - q->y0;
-        q->t0 = q->t1 - (q->t1 - q->t0) * (h1/h0);
-    }
-
-    return true;
 }
 
 Vector2 gui_draw_text(
@@ -639,7 +636,6 @@ bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
     return false;
 }
 
-
 void gui_drag_start(Vector2 data)
 {
     gui.drag_start_mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
@@ -652,7 +648,6 @@ void gui_drag_start(Vector2 data, Vector2 data1)
     gui.drag_start_data = data;
     gui.drag_start_data1 = data1;
 }
-
 
 bool gui_active_click(GuiId id)
 {
@@ -1149,17 +1144,21 @@ GuiWindow *gui_get_window(GuiId id)
 
 bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size, bool *visible)
 {
-    GuiWindow *wnd = gui_get_window(id);
+    GuiWindow *wnd = gui_current_window();
     ASSERT(wnd);
     
-    GuiId close_id = GUI_ID_INTERNAL(id, 3);
+    GuiId close_id = GUI_ID_INTERNAL(id, 30);
 
-    Vector2 close_size{ 20, 20 };
+    Vector2 close_size = gui.style.window.close_size + Vector2{ 4, 4 };
     Vector2 close_pos{ wnd_pos.x + wnd_size.x - close_size.x, wnd_pos.y + 1.0f };
     gui_hot_rect(close_id, close_pos, close_size);
     
-    Vector2 icon_size{ 16, 16 };
+    Vector2 icon_size = gui.style.window.close_size;
     Vector2 icon_pos = close_pos + (close_size - icon_size) * 0.5f;
+    
+    if (gui_hot_rect(close_id, close_pos, close_size)) {
+        gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot);
+    }
 
     if (gui_active_click(close_id)) {
         *visible = false;
@@ -1167,11 +1166,7 @@ bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size, bool *
         gui_active(GUI_ID_INVALID);
     }
     
-    if (gui.hot == close_id) {
-        gui_draw_rect(close_pos, close_size, wnd->clip_rect, rgb_unpack(0xFFFF0000), &wnd->command_buffer);
-    }
-    
-    gui_draw_rect(icon_pos, icon_size, wnd->clip_rect, gui.style.icons.close, &wnd->command_buffer);
+    gui_draw_rect(icon_pos, icon_size, gui.style.icons.close, &wnd->command_buffer);
     return true;
 }
 
@@ -1258,8 +1253,8 @@ bool gui_begin_window_id(
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
-    Vector2 window_border = { 1.0f, 1.0f };
-    Vector2 title_size = { size.x - 2.0f*window_border.x, 21.0f };
+    Vector2 window_border = gui.style.window.border;
+    Vector2 title_size = { size.x - 2.0f*window_border.x, gui.style.window.title_height };
 
     GuiId title_id = GUI_ID_INTERNAL(id, 1);
 
@@ -1325,16 +1320,15 @@ bool gui_begin_window_id(
 
     wnd->clip_rect = Rect{ layout.pos, layout.size };
     Vector3 title_bg = gui.active_window != id
-        ? rgb_unpack(0xFF212121)
-        : gui.hot == title_id ? rgb_unpack(0xFFFD8433) : rgb_unpack(0xFFCA5100);
+        ? gui.style.window.title_bg
+        : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_active;
     
     Vector2 title_pos = pos + window_border + Vector2{ 2.0f, 2.0f };
-    Vector3 wnd_bg = rgb_unpack(0xFF282828);
 
     gui_draw_rect(pos, size, title_bg);
-    gui_draw_rect(pos + window_border, size - 2.0f*window_border, wnd_bg);
+    gui_draw_rect(pos + window_border, size - 2.0f*window_border, gui.style.window.bg);
     gui_draw_rect(pos + window_border, title_size, title_bg);
-    gui_draw_text(title, title_pos, { title_pos, title_size }, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
     
     return true;
 }

@@ -218,6 +218,21 @@ struct GuiContext {
         
         struct {
             Vector2 margin = { 5.0f, 5.0f };
+            Vector2 border = { 1, 1 };
+
+            Vector2 close_size = { 16.0f, 16.0f };
+            
+            Vector3 bg = rgb_unpack(0xFF282828);
+            
+            f32 title_height = 21;
+            
+            Vector3 title_fg = { 1, 1, 1 };
+            
+            Vector3 title_bg = rgb_unpack(0xFF212121);
+            Vector3 title_bg_hot = rgb_unpack(0xFFFD8433);
+            Vector3 title_bg_active = rgb_unpack(0xFFCA5100);
+            
+            Vector3 close_bg_hot = rgb_unpack(0xFFFF0000);
         } window;
         
         struct {
