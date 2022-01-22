@@ -116,9 +116,15 @@ struct Caret {
     i32 wrapped_line = 0;
 };
 
+struct ViewBufferState {
+    BufferId buffer;
+    Caret caret, mark;
+};
+
 struct View {
     GuiId gui_id = GUI_ID(0);
     
+    DynamicArray<ViewBufferState> saved_buffer_state;
     DynamicArray<BufferLine> lines;
     
     f32 voffset;
@@ -354,11 +360,42 @@ void init_app()
     calculate_num_visible_lines();
 }
 
-void app_open_file(String path)
+void view_set_buffer(BufferId buffer)
 {
-    view.buffer = create_buffer(path);
+    auto find = [](BufferId buffer) -> ViewBufferState*
+    {
+        for (auto &state : view.saved_buffer_state) {
+            if (state.buffer == buffer) return &state;
+        }
+        return nullptr;
+    };
+
+    ViewBufferState state{
+        .buffer = view.buffer,
+        .caret = view.caret,
+        .mark = view.mark
+    };
+
+    ViewBufferState *it = find(view.buffer);
+    if (!it) array_add(&view.saved_buffer_state, state);
+    else *it = state;
+
+    it = find(buffer);
+    if (it) {
+        view.caret = it->caret;
+        view.mark = it->mark;
+    } else {
+        view.caret = view.mark = {};
+    }
+
+    view.buffer = buffer;
     view.caret_dirty = true;
     view.lines_dirty = true;
+}
+
+void app_open_file(String path)
+{
+    view_set_buffer(create_buffer(path));
 }
 
 bool app_change_resolution(Vector2 resolution)
@@ -1639,9 +1676,7 @@ void update_and_render(f32 dt)
             BufferId buffer = find_buffer(path);
             if (!buffer) buffer = create_buffer(path);
             
-            view.buffer = buffer;
-            view.caret_dirty = true;
-            view.lines_dirty = true;
+            view_set_buffer(buffer);
         }
     }
     
