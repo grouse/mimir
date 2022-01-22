@@ -1116,16 +1116,22 @@ GuiLister* gui_find_or_create_lister(GuiId id)
     return &gui.listers[i];
 }
 
-i32 gui_create_window(GuiId id)
+i32 gui_create_window(GuiId id, u32 flags, Vector2 pos, Vector2 size)
 {
     for (i32 i = 0; i < gui.windows.count; i++) {
         if (gui.windows[i].id == id) {
+            if (!(flags & GUI_WINDOW_MOVABLE)) gui.windows[i].pos = pos;
+            if (!(flags & GUI_WINDOW_RESIZABLE)) gui.windows[i].size = size;
+
             return i;
         }
     }
 
     GuiWindow wnd{};
     wnd.id = id;
+    wnd.flags = flags;
+    wnd.pos = pos;
+    wnd.size = size;
     wnd.command_buffer.commands.alloc = mem_frame;
     
     if (gui.active_window == GUI_ID_INVALID) gui.active_window = id;
@@ -1180,80 +1186,30 @@ bool gui_begin_window_id(
     return *visible;
 }
 
-bool gui_begin_window_id(
-    GuiId id, 
-    String title, 
-    Vector2 *pos, 
-    Vector2 *size,
-    bool *visible,
-    u32 flags)
-{
-    if (!*visible) return false;
-    ASSERT(gui.current_window == 1);
-    
-    if (!gui_begin_window_id(id, title, pos, size, flags | GUI_WINDOW_CLOSE)) {
-        *visible = false;
-        return false;
-    }
-    
-    return *visible;
-}
-
-bool gui_begin_window_id(
-    GuiId id, 
-    String title, 
-    Vector2 *pos, 
-    Vector2 *size,
-    u32 flags)
-{
-    if (!gui_begin_window_id(id, title, *pos, *size, flags)) {
-        return false;
-    }
-    
-    GuiId title_id = GUI_ID_INTERNAL(id, 1);
-
-    gui.current_window_data.pos = *pos;
-    gui.current_window_data.size = size;
-    
-    if (gui.hot == title_id) {
-        if (gui.active != title_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-            gui_active(title_id);
-            gui_drag_start(*pos);
-        } else if (gui.active == title_id && !gui.mouse.left_pressed) {
-            gui_active(GUI_ID_INVALID);
-        } else if (gui.active == title_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
-            Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-            *pos = gui.drag_start_data + mouse - gui.drag_start_mouse;
-        }
-    } 
-    
-    return true;
-}
-
 bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags)
 {
-    return gui_begin_window_id(id, title, &state->pos, &state->size, &state->active, flags | GUI_WINDOW_CLOSE);
+    return gui_begin_window_id(id, title, state->pos, state->size, &state->active, flags | GUI_WINDOW_CLOSE);
 }
 
 bool gui_begin_window_id(
     GuiId id, 
     String title, 
-    Vector2 pos, 
-    Vector2 size, 
+    Vector2 in_pos, 
+    Vector2 in_size, 
     u32 flags)
 {
     ASSERT(gui.current_window == 1);
     
-    i32 index = gui_create_window(id);
+    i32 index = gui_create_window(id, flags, in_pos, in_size);
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
     Vector2 window_border = gui.style.window.border;
-    Vector2 title_size = { size.x - 2.0f*window_border.x, gui.style.window.title_height };
+    Vector2 title_size = { wnd->size.x - 2.0f*window_border.x, gui.style.window.title_height };
 
     GuiId title_id = GUI_ID_INTERNAL(id, 1);
 
-    gui_hot_rect(id, pos, size);
+    gui_hot_rect(id, wnd->pos, wnd->size);
     
     wnd->active = true;
     if (!wnd->last_active) {
@@ -1276,7 +1232,7 @@ bool gui_begin_window_id(
     }
     
     if (gui.active == title_id) gui_hot(title_id, index);
-    else gui_hot_rect(title_id, pos, title_size);
+    else gui_hot_rect(title_id, wnd->pos, title_size);
 
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
@@ -1309,52 +1265,77 @@ bool gui_begin_window_id(
         ? gui.style.window.title_bg
         : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_active;
     
-    Vector2 title_pos = pos + window_border + Vector2{ 2.0f, 2.0f };
+    Vector2 title_pos = wnd->pos + window_border + Vector2{ 2.0f, 2.0f };
 
-    gui_draw_rect(pos, size, title_bg);
-    gui_draw_rect(pos + window_border, size - 2.0f*window_border, gui.style.window.bg);
-    gui_draw_rect(pos + window_border, title_size, title_bg);
+    gui_draw_rect(wnd->pos, wnd->size, title_bg);
+    gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.window.bg);
+    gui_draw_rect(wnd->pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
     
     if (flags & GUI_WINDOW_CLOSE) {
         GuiId close_id = GUI_ID_INTERNAL(id, 30);
-        if (gui_window_close_button(close_id, pos, size)) {
+        if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
             gui.current_window = 1;
             return false;
         }
     }
     
+    if (flags & GUI_WINDOW_MOVABLE) {
+        if (gui.hot == title_id) {
+            if (gui.active != title_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
+                gui_active(title_id);
+                gui_drag_start(wnd->pos);
+            } else if (gui.active == title_id && !gui.mouse.left_pressed) {
+                gui_active(GUI_ID_INVALID);
+            } else if (gui.active == title_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
+                Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+                wnd->pos = gui.drag_start_data + mouse - gui.drag_start_mouse;
+            }
+        } 
+    }
+    
+    Vector2 layout_pos = wnd->pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin;
+    Vector2 layout_size = wnd->size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin;
+    
+    if (flags & GUI_WINDOW_RESIZABLE) {
+        // NOTE(jesper): we're adding some internal padding to the layout to make room
+        // for the resize widget
+        layout_pos.x += 3.0f;
+        layout_pos.y += 3.0f;
+        layout_size.x -= 6.0f;
+        layout_size.y -= 6.0f;
+    }
+    
     GuiLayout layout{
         .type = GUI_LAYOUT_ROW,
-        .pos = pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin,
-        .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin,
+        .pos = layout_pos,
+        .size = layout_size,
         .row.margin = 2.0f
     };
+    
     gui_begin_layout(layout);
-
     wnd->clip_rect = Rect{ layout.pos, layout.size };
-
     return true;
 }
 
 void gui_end_window()
 {
     ASSERT(gui.current_window > 1);
-
-    if (gui.current_window_data.size) {
+    
+    GuiWindow *wnd = &gui.windows[gui.current_window];
+    if (wnd->flags & GUI_WINDOW_RESIZABLE) {
         // NOTE(jesper): we handle the window resizing at the end to ensure it's always on
         // top and has the highest input priority in the window.
-        GuiWindow *wnd = &gui.windows[gui.current_window];
 
         Vector2 window_border = { 1.0f, 1.0f };
-        Vector2 title_size = { gui.current_window_data.size->x - 2.0f*window_border.x, 20.0f };
+        Vector2 title_size = { wnd->size.x - 2.0f*window_border.x, 20.0f };
         Vector2 min_size = { 100.0f, title_size.y + 2.0f*window_border.y };
 
         GuiId resize_id = GUI_ID_INTERNAL(wnd->id, 2);
 
         Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
 
-        Vector2 br = gui.current_window_data.pos + *gui.current_window_data.size - window_border;
+        Vector2 br = wnd->pos + wnd->size - window_border;
         Vector2 resize_tr{ br.x, br.y - 10.0f };
         Vector2 resize_br{ br.x, br.y };
 
@@ -1371,15 +1352,15 @@ void gui_end_window()
         if (gui.hot == resize_id) {
             if (gui.active != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 gui_active(resize_id);
-                gui_drag_start(*gui.current_window_data.size);
+                gui_drag_start(wnd->size);
             } else if (gui.active == resize_id && !gui.mouse.left_pressed) {
                 gui_active(GUI_ID_INVALID);
             } else if (gui.active == resize_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
                 Vector2 nsize = gui.drag_start_data + mouse - gui.drag_start_mouse;
-                gui.current_window_data.size->x = MAX(min_size.x, nsize.x);
-                gui.current_window_data.size->y = MAX(min_size.y, nsize.y);
+                wnd->size.x = MAX(min_size.x, nsize.x);
+                wnd->size.y = MAX(min_size.y, nsize.y);
 
-                br = gui.current_window_data.pos + *gui.current_window_data.size - window_border;
+                br = wnd->pos + wnd->size - window_border;
                 resize_tr = { br.x, br.y - 10.0f };
                 resize_br = { br.x, br.y };
                 resize_bl = { br.x - 10.0f, br.y };
@@ -1388,7 +1369,6 @@ void gui_end_window()
 
         Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
-        gui.current_window_data.size = nullptr;
     }
     
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window

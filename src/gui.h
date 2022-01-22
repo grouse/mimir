@@ -66,6 +66,10 @@ enum GuiAnchor {
 
 enum GuiWindowFlags : u32 {
     GUI_WINDOW_CLOSE = 1 << 0,
+    GUI_WINDOW_MOVABLE = 1 << 1,
+    GUI_WINDOW_RESIZABLE = 1 << 2,
+    
+    GUI_WINDOW_DEFAULT = GUI_WINDOW_MOVABLE | GUI_WINDOW_RESIZABLE
 };
 
 struct GuiId {
@@ -98,6 +102,9 @@ struct GuiWindow {
     
     GfxCommandBuffer command_buffer;
     
+    u32 flags;
+    Vector2 pos;
+    Vector2 size;
     bool active, last_active;
 };
 
@@ -178,11 +185,6 @@ struct GuiContext {
     i32 hot_z = 0;
 
     i32 current_window;
-    struct {
-        Vector2 pos;
-        Vector2 *size;
-    } current_window_data;
-    
     DynamicArray<GuiWindow> windows;
     DynamicArray<GuiLister> listers;
     DynamicArray<GuiLayout> layout_stack;
@@ -288,11 +290,9 @@ void gui_render(Camera camera);
 void gui_begin_layout(GuiLayout layout);
 void gui_end_layout();
 
-bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, bool *visible, u32 flags = 0);
-bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, u32 flags = 0);
-bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 flags = 0);
-bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = 0);
-bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = 0);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 flags = GUI_WINDOW_DEFAULT);
+bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = GUI_WINDOW_DEFAULT);
 void gui_end_window();
 
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str);
