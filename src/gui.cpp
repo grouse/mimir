@@ -1142,32 +1142,24 @@ GuiWindow *gui_get_window(GuiId id)
     return nullptr;
 }
 
-bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size, bool *visible)
+bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size)
 {
     GuiWindow *wnd = gui_current_window();
     ASSERT(wnd);
     
-    GuiId close_id = GUI_ID_INTERNAL(id, 30);
-
     Vector2 close_size = gui.style.window.close_size + Vector2{ 4, 4 };
-    Vector2 close_pos{ wnd_pos.x + wnd_size.x - close_size.x, wnd_pos.y + 1.0f };
-    gui_hot_rect(close_id, close_pos, close_size);
+    Vector2 close_pos{ wnd_pos.x + wnd_size.x - close_size.x - gui.style.window.border.x, wnd_pos.y + gui.style.window.border.y };
     
     Vector2 icon_size = gui.style.window.close_size;
     Vector2 icon_pos = close_pos + (close_size - icon_size) * 0.5f;
     
-    if (gui_hot_rect(close_id, close_pos, close_size)) {
-        gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot);
+    if (gui_hot_rect(id, close_pos, close_size)) {
+        gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot, &wnd->command_buffer);
     }
 
-    if (gui_active_click(close_id)) {
-        *visible = false;
-        gui_hot(GUI_ID_INVALID);
-        gui_active(GUI_ID_INVALID);
-    }
-    
-    gui_draw_rect(icon_pos, icon_size, gui.style.icons.close, &wnd->command_buffer);
-    return true;
+    bool clicked = gui_active_click(id);
+    gui_draw_rect(icon_pos, icon_size, gui.style.icons.close);
+    return clicked;
 }
 
 bool gui_begin_window_id(
@@ -1175,17 +1167,17 @@ bool gui_begin_window_id(
     String title, 
     Vector2 pos, 
     Vector2 size,
-    bool *visible)
+    bool *visible,
+    u32 flags)
 {
     if (!*visible) return false;
     ASSERT(gui.current_window == 1);
     
-    if (!gui_begin_window_id(id, title, pos, size)) {
+    if (!gui_begin_window_id(id, title, pos, size, flags | GUI_WINDOW_CLOSE)) {
         *visible = false;
-        return false;
     }
     
-    return gui_window_close_button(id, pos, size, visible);
+    return *visible;
 }
 
 bool gui_begin_window_id(
@@ -1193,26 +1185,28 @@ bool gui_begin_window_id(
     String title, 
     Vector2 *pos, 
     Vector2 *size,
-    bool *visible)
+    bool *visible,
+    u32 flags)
 {
     if (!*visible) return false;
     ASSERT(gui.current_window == 1);
     
-    if (!gui_begin_window_id(id, title, pos, size)) {
+    if (!gui_begin_window_id(id, title, pos, size, flags | GUI_WINDOW_CLOSE)) {
         *visible = false;
         return false;
     }
     
-    return gui_window_close_button(id, *pos, *size, visible);
+    return *visible;
 }
 
 bool gui_begin_window_id(
     GuiId id, 
     String title, 
     Vector2 *pos, 
-    Vector2 *size)
+    Vector2 *size,
+    u32 flags)
 {
-    if (!gui_begin_window_id(id, title, *pos, *size)) {
+    if (!gui_begin_window_id(id, title, *pos, *size, flags)) {
         return false;
     }
     
@@ -1236,16 +1230,17 @@ bool gui_begin_window_id(
     return true;
 }
 
-bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state)
+bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags)
 {
-    return gui_begin_window_id(id, title, &state->pos, &state->size, &state->active);
+    return gui_begin_window_id(id, title, &state->pos, &state->size, &state->active, flags | GUI_WINDOW_CLOSE);
 }
 
 bool gui_begin_window_id(
     GuiId id, 
     String title, 
     Vector2 pos, 
-    Vector2 size)
+    Vector2 size, 
+    u32 flags)
 {
     ASSERT(gui.current_window == 1);
     
@@ -1310,15 +1305,6 @@ bool gui_begin_window_id(
         }
     }
     
-    GuiLayout layout{
-        .type = GUI_LAYOUT_ROW,
-        .pos = pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin,
-        .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin,
-        .row.margin = 2.0f
-    };
-    gui_begin_layout(layout);
-
-    wnd->clip_rect = Rect{ layout.pos, layout.size };
     Vector3 title_bg = gui.active_window != id
         ? gui.style.window.title_bg
         : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_active;
@@ -1330,6 +1316,24 @@ bool gui_begin_window_id(
     gui_draw_rect(pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
     
+    if (flags & GUI_WINDOW_CLOSE) {
+        GuiId close_id = GUI_ID_INTERNAL(id, 30);
+        if (gui_window_close_button(close_id, pos, size)) {
+            gui.current_window = 1;
+            return false;
+        }
+    }
+    
+    GuiLayout layout{
+        .type = GUI_LAYOUT_ROW,
+        .pos = pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin,
+        .size = size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin,
+        .row.margin = 2.0f
+    };
+    gui_begin_layout(layout);
+
+    wnd->clip_rect = Rect{ layout.pos, layout.size };
+
     return true;
 }
 
@@ -1384,8 +1388,6 @@ void gui_end_window()
 
         Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
-        //gui_draw_rect(&wnd->command_buffer, { resize_bl.x, resize_tr.y }, { resize_tr.x - resize_bl.x, resize_bl.y - resize_tr.y }, resize_bg);
-
         gui.current_window_data.size = nullptr;
     }
     

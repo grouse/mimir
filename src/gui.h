@@ -64,6 +64,10 @@ enum GuiAnchor {
     GUI_ANCHOR_LEFT = GUI_ANCHOR_TOP,
 };
 
+enum GuiWindowFlags : u32 {
+    GUI_WINDOW_CLOSE = 1 << 0,
+};
+
 struct GuiId {
     i32 owner;
     i32 index;
@@ -284,11 +288,11 @@ void gui_render(Camera camera);
 void gui_begin_layout(GuiLayout layout);
 void gui_end_layout();
 
-bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, bool *visible);
-bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size);
-bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size);
-bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible);
-void gui_end_window(Vector2 pos, Vector2 *size);
+bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, bool *visible, u32 flags = 0);
+bool gui_begin_window_id(GuiId id, String title, Vector2 *pos, Vector2 *size, u32 flags = 0);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 flags = 0);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = 0);
+bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = 0);
 void gui_end_window();
 
 GuiEditboxAction gui_editbox_id(GuiId id, String in_str);
