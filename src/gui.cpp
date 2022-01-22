@@ -2435,16 +2435,17 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
     defer { gui_end_layout(); };
 
+    i32 next_selected_item = *selected_item;
     if (gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
                 switch (e.key.virtual_code) {
                 case VC_DOWN:
-                    *selected_item = MIN((*selected_item)+1, items.count-1);
+                    next_selected_item = MIN((*selected_item)+1, items.count-1);
                     break;
                 case VC_UP:
-                    *selected_item = MAX((*selected_item)-1, 0);
+                    next_selected_item = MAX((*selected_item)-1, 0);
                     break;
                 case VC_ENTER:
                     result = GUI_LISTER_FINISH;
@@ -2457,13 +2458,17 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         }
     }
     
-    f32 selected_item_y0 = (*selected_item)*item_height;
-    f32 selected_item_y1 = selected_item_y0 + item_height;
-    
-    if (selected_item_y0 - lister->offset < 0) {
-        lister->offset += selected_item_y0 - lister->offset;
-    } else if (selected_item_y1 - lister->offset > r.size.y) {
-        lister->offset += selected_item_y1 - lister->offset - r.size.y + 2;
+    if (*selected_item != next_selected_item) {
+        *selected_item = next_selected_item;
+        
+        f32 selected_item_y0 = (*selected_item)*item_height;
+        f32 selected_item_y1 = selected_item_y0 + item_height;
+
+        if (selected_item_y0 - lister->offset < 0) {
+            lister->offset += selected_item_y0 - lister->offset;
+        } else if (selected_item_y1 - lister->offset > r.size.y) {
+            lister->offset += selected_item_y1 - lister->offset - r.size.y + 2;
+        }
     }
     
     gui_draw_rect(r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
