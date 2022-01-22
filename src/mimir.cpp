@@ -1158,6 +1158,23 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
     return offset;
 }
 
+void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<BufferLine> lines)
+{
+    if (new_wrapped_line == 0) {
+        *wrapped_line = 0;
+        *line = 0;
+        return;
+    } else if (new_wrapped_line == *wrapped_line) return;
+    
+    while (*wrapped_line > new_wrapped_line) {
+        if (!lines[(*wrapped_line)--].wrapped) (*line)--;
+    }
+
+    while (*wrapped_line < new_wrapped_line) {
+        if (!lines[++(*wrapped_line)].wrapped) (*line)++;
+    }
+}
+
 bool app_needs_render()
 {
     return app.next_mode != app.mode || app.animating || view.lines_dirty || view.caret_dirty;
@@ -1172,13 +1189,20 @@ Caret recalculate_caret(Caret current, BufferId buffer_id, Array<BufferLine> lin
     if (!buffer) return current;
 
     if (caret.byte_offset == 0) caret.wrapped_line = 0;
-    else if (caret.byte_offset == buffer_end(buffer_id)) caret.wrapped_line = view.lines.count-1;
-    else {
+    else if (caret.byte_offset >= buffer_end(buffer_id)) {
+        caret.byte_offset = buffer_end(buffer_id);
+        recalc_caret_line(view.lines.count-1, &view.caret.wrapped_line, &view.caret.line, view.lines);
+    } else {
         caret.wrapped_line = MIN(caret.wrapped_line, lines.count-1);
         caret.wrapped_line = MAX(0, caret.wrapped_line);
         
-        while (caret.byte_offset < lines[caret.wrapped_line].offset) caret.wrapped_line--;
-        while (caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) caret.wrapped_line++;
+        while (caret.byte_offset < lines[caret.wrapped_line].offset) {
+            if (!view.lines[caret.wrapped_line--].wrapped) caret.line--;
+        }
+        
+        while (caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) {
+            if (!view.lines[++caret.wrapped_line].wrapped) caret.line++;
+        }
     }
 
     caret.wrapped_column = calc_wrapped_column_from_byte_offset(caret.byte_offset, caret.wrapped_line, lines, buffer);
@@ -1250,6 +1274,7 @@ void view_seek_byte_offset(i64 byte_offset)
     if (byte_offset != view.caret.byte_offset) {
         view.caret.byte_offset = byte_offset;
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
 
         move_view_to_caret();
 
@@ -1267,7 +1292,8 @@ void write_string(BufferId buffer_id, String str, u32 flags = 0)
     if (flags & VIEW_SET_MARK) view.mark = view.caret;
     view.caret.byte_offset = buffer_increment_offset(buffer_id, view.caret.byte_offset, str.length);
     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-    
+    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+
     move_view_to_caret();
     
     app.animating = true;
@@ -1446,6 +1472,7 @@ void app_event(InputEvent event)
 
                         view.caret.byte_offset = start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
 
                         move_view_to_caret();
                     }
@@ -1662,6 +1689,7 @@ void update_and_render(f32 dt)
     
     if (view.caret_dirty) {
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
         view.caret_dirty = false;
     }
 
