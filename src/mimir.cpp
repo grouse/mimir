@@ -119,6 +119,9 @@ struct Caret {
 struct ViewBufferState {
     BufferId buffer;
     Caret caret, mark;
+    
+    f32 voffset;
+    i32 line_offset;
 };
 
 struct View {
@@ -351,8 +354,6 @@ void init_app()
     };
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
     
-    get_current_working_dir();
-    
     init_gui();
     
     app.mono = load_font("fonts/Cousine/Cousine-Regular.ttf");
@@ -373,7 +374,9 @@ void view_set_buffer(BufferId buffer)
     ViewBufferState state{
         .buffer = view.buffer,
         .caret = view.caret,
-        .mark = view.mark
+        .mark = view.mark,
+        .voffset = view.voffset,
+        .line_offset = view.line_offset,
     };
 
     ViewBufferState *it = find(view.buffer);
@@ -384,12 +387,19 @@ void view_set_buffer(BufferId buffer)
     if (it) {
         view.caret = it->caret;
         view.mark = it->mark;
+        view.voffset = it->voffset;
+        view.line_offset = it->line_offset;
     } else {
         view.caret = view.mark = {};
+        view.voffset = 0;
+        view.line_offset = 0;
     }
 
     view.buffer = buffer;
-    view.caret_dirty = true;
+    
+    // NOTE(jesper): not storing line wrap data (for now). Computing it is super quick, and storing
+    // it will add up pretty quick. Especially if we start serialising the views and their state
+    // to disk
     view.lines_dirty = true;
 }
 
