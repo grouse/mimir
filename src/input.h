@@ -22,37 +22,56 @@ enum VirtualCode : u8 {
     VC_PAGE_UP,
     VC_PAGE_DOWN,
     VC_ESC,
+    VC_SPACE,
     
     VC_OPEN_BRACKET,  // [{ on US/UK
     VC_CLOSE_BRACKET, // ]} on US/UK
 
+    VC_F1,
+    VC_F2,
+    VC_F3,
+    VC_F4,
+    VC_F5,
+    VC_F6,
+    VC_F7,
+    VC_F8,
+    VC_F9,
+    VC_F10,
+    VC_F11,
+    VC_F12,
+
     VC_A,
-    VC_C,
-    VC_V,
-    VC_X,
-    VC_P,
-    VC_Q,
-    VC_Z,
-    VC_R,
-    VC_E,
     VC_B,
-    VC_S,
-    VC_W,
+    VC_C,
+    VC_D,
+    VC_E,
+    VC_F,
+    VC_G,
+    VC_H,
     VC_I,
     VC_J,
     VC_K,
-    VC_D,
-    VC_U,
-    VC_Y,
-    VC_H,
     VC_L,
+    VC_M,
+    VC_N,
     VC_O,
+    VC_P,
+    VC_Q,
+    VC_R,
+    VC_S,
+    VC_T,
+    VC_U,
+    VC_V,
+    VC_W,
+    VC_X,
+    VC_Y,
+    VC_Z
 };
 
 enum ScanCode : u8 {
 };
 
-enum ModifierFlags : u32 {
+enum ModifierFlags : u8 {
     MF_NONE = 0,
     MF_ALT = 1 << 0,
     MF_CTRL = 1 << 1,
@@ -67,18 +86,20 @@ struct InputEvent {
             i32 delta;
         } mouse_wheel;
         struct {
-            i8 button;
+            u8 button;
             i16 x, y;
         } mouse;
         struct {
-            VirtualCode virtual_code;
-            ScanCode scan_code;
-            ModifierFlags modifiers;
+            u32 virtual_code : 8;
+            u32 scan_code    : 8;
+            u32 modifiers    : 8;
+            u32 prev_state   : 1;
+            u32 unused       : 7;
         } key;
         struct {
             u8 c[4];
-            i32 length;
-            ModifierFlags modifiers;
+            u8 length;
+            u8 modifiers;
         } text;
     };
 };

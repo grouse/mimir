@@ -425,7 +425,7 @@ i64 utf8_incr(Buffer *buffer, i64 i)
 i64 utf8_decr(Buffer *buffer, i64 i)
 {
     switch (buffer->type) {
-    case BUFFER_FLAT: return utf8_decr(buffer->flat.data, buffer->flat.size, i);
+    case BUFFER_FLAT: return utf8_decr(buffer->flat.data, i);
     }
 }
 

@@ -102,7 +102,11 @@ bool gui_capture(bool capture_var[2])
 
 void gui_hot(GuiId id, i32 hot_z)
 {
-    gui.hot = (gui.active == GUI_ID_INVALID || gui.active == id) && (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
+    // TODO(jesper): this shouldn't make things hot if there's a different active widget, but the menus
+    // are using active widget in weird ways right now. They need to be rewritten to be much more reliable
+    // while leaving the active/hot widgets alone
+    //gui.hot = (gui.active == GUI_ID_INVALID || gui.active == id) && (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
+    gui.hot = (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
     gui.hot_z = gui.hot_z <= hot_z ? hot_z : gui.hot_z;
 }
 
@@ -205,7 +209,6 @@ void gui_begin_frame()
     gui_begin_layout(root_layout);
     
     gui.last_active = gui.active;
-    
 }
 
 void gui_end_frame()
@@ -342,7 +345,6 @@ void gui_draw_rect(
 
     array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
 }
-
 
 void gui_draw_rect(
     Vector2 pos, 
@@ -762,11 +764,11 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector2 btn_pos = pos + btn_offset;
 
+    gui_hot_rect(id, pos, size);
     if (gui_active_click(id)) {
         *checked = !(*checked);
         toggled = true;
     }
-    gui_hot_rect(id, pos, size);
 
     Vector3 border_col = rgb_unpack(0xFFCCCCCC);
     Vector3 bg_col = gui.active == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
@@ -1947,13 +1949,15 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
+    Font *font = &gui.style.text.font;
+    
     i32 current_index = array_find_index(values, *value);
     ASSERT(current_index != -1);
     
     f32 margin = 4.0f;
     f32 border = 1.0f;
     
-    Vector2 total_size{ 100.0f + margin + border, gui.font.line_height + margin };
+    Vector2 total_size{ 100.0f + margin + border, font->line_height + margin };
 
     f32 rhs = total_size.y;
     f32 rhs_margin = 6.0f;
@@ -1980,7 +1984,7 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
     
     gui_draw_rect(pos, total_size, wnd->clip_rect, border_col);
     gui_draw_rect(inner_pos, inner_size, wnd->clip_rect, bg_col);
-    gui_draw_text(labels[current_index], text_pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f });
+    gui_draw_text(labels[current_index], text_pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, font);
     gui_draw_rect(rhs_p, { border, inner_size.y }, border_col);
     gfx_draw_triangle(rhs_p0, rhs_p1, rhs_p2, rhs_col, cmdbuf);
 
@@ -1990,7 +1994,7 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
         Vector2 text_offset{ 0.5f*margin + border, 0.5f*margin };
         Vector2 text_p = p + text_offset;
         
-        Vector2 total_s{ total_size.x, labels.count * gui.font.line_height + border + 0.5f*margin };
+        Vector2 total_s{ total_size.x, labels.count * font->line_height + border + 0.5f*margin };
         Vector2 inner_s{ total_s.x - 2*border, total_s.y - border };
         
         gui_draw_rect(p, total_s, gui.windows[0].clip_rect, border_col, &gui.windows[1].command_buffer);
@@ -2000,13 +2004,13 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             String label = labels[i];
             GuiId label_id = GUI_ID_INTERNAL(id, i);
             
-            Vector2 rect_p{ inner_p.x, inner_p.y + gui.font.line_height*i };
-            Vector2 rect_s{ inner_s.x, gui.font.line_height + border };
+            Vector2 rect_p{ inner_p.x, inner_p.y + font->line_height*i };
+            Vector2 rect_s{ inner_s.x, font->line_height + border };
             gui_hot_rect(label_id, rect_p, rect_s);
 
             if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, bg_hot, &gui.windows[1].command_buffer);
-            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, &gui.windows[1].command_buffer);
-            text_p.y += gui.font.line_height;
+            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, font, &gui.windows[1].command_buffer);
+            text_p.y += font->line_height;
             
             if ((gui.hot == label_id && gui.active_press == id && !gui.mouse.left_pressed) || 
                 gui_active_click(label_id)) 
@@ -2170,8 +2174,8 @@ bool gui_menu_button_id(GuiId id, String label)
     
     // TODO(jesper): I don't like how this behaves with how the menu closes as soon as anything inside it is clicked,
     // but not sure how I want to solve it without a lot of annoying usage code
-    bool clicked = gui_active_click(id);
     gui_hot_rect(id, pos, size);
+    bool clicked = gui_active_click(id);
 
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);

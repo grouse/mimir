@@ -188,8 +188,6 @@ void init_gfx(Vector2 resolution)
             "void main()\n"
             "{\n"
             "   gl_Position = cs_from_ws * vec4(v_pos, 0.0, 1.0);\n"
-            //"   vec2 resolution = vec2(1280, 720);\n"
-            //"   gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
             "   gl_Position.y = -gl_Position.y;\n"
             "   vs_uv = v_uv;\n"
             "}\0";

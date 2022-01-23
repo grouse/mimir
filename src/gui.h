@@ -6,6 +6,7 @@
 #include "maths.h"
 #include "array.h"
 #include "string.h"
+#include "input.h"
 #include "gfx_opengl.h"
 
 #define GUI_ID(index) GuiId{ __COUNTER__, index, -1 }
@@ -28,10 +29,10 @@
 #define gui_lister(...) gui_lister_id(GUI_ID(0), __VA_ARGS__)
 
 #define gui_begin_window(...) gui_begin_window_id(GUI_ID(0), __VA_ARGS__)
-#define gui_begin_menu(...) gui_begin_menu_id(GuiId{ __COUNTER__, 0, -1 } ARGS(__VA_ARGS__))
+#define gui_begin_menu(...) gui_begin_menu_id(GUI_ID(0) ARGS(__VA_ARGS__))
 
 // TODO(jesper): this needs to be just gui_button by making the styling powerful enough
-#define gui_menu_button(...) gui_menu_button_id(GuiId{ __COUNTER__, 0, -1 }, __VA_ARGS__)
+#define gui_menu_button(...) gui_menu_button_id(GUI_ID(0), __VA_ARGS__)
 
 
 #define gui_menu(...) for (i32 i_##__LINE__ = 0; i_##__LINE__ == 0 && gui_begin_menu(__VA_ARGS__); i_##__LINE__ = (gui_end_menu(), 1))

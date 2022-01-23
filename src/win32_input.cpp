@@ -10,6 +10,7 @@ VirtualCode virtual_code_from_wparam(WPARAM wparam)
     case VK_BACK: return VC_BACKSPACE;
     case VK_DELETE: return VC_DELETE;
     case VK_RETURN: return VC_ENTER;
+    case VK_SPACE: return VC_SPACE;
     case VK_TAB: return VC_TAB;
     case VK_PRIOR: return VC_PAGE_UP;
     case VK_NEXT: return VC_PAGE_DOWN;
@@ -17,24 +18,45 @@ VirtualCode virtual_code_from_wparam(WPARAM wparam)
     case VK_OEM_4: return VC_OPEN_BRACKET;
     case VK_OEM_6: return VC_CLOSE_BRACKET;
         
-    case 0x5a: return VC_Z;
-    case 0x52: return VC_R;
-    case 0x53: return VC_S;
-    case 0x42: return VC_B;
-    case 0x45: return VC_E;
-    case 0x57: return VC_W;
-    case 0x4A: return VC_J;
-    case 0x4B: return VC_K;
-    case 0x44: return VC_D;
-    case 0x55: return VC_U;
-    case 0x49: return VC_I;
-    case 0x51: return VC_Q;
-    case 0x58: return VC_X;
-    case 0x59: return VC_Y;
-    case 0x50: return VC_P;
-    case 0x48: return VC_H;
-    case 0x4C: return VC_L;
-    case 0x4F: return VC_O;
+    case VK_F1: return VC_F1;
+    case VK_F2: return VC_F2;
+    case VK_F3: return VC_F3;
+    case VK_F4: return VC_F4;
+    case VK_F5: return VC_F5;
+    case VK_F6: return VC_F6;
+    case VK_F7: return VC_F7;
+    case VK_F8: return VC_F8;
+    case VK_F9: return VC_F9;
+    case VK_F10: return VC_F10;
+    case VK_F11: return VC_F11;
+    case VK_F12: return VC_F12;
+
+    case 'A': return VC_A;
+    case 'B': return VC_B;
+    case 'C': return VC_C;
+    case 'D': return VC_D;
+    case 'E': return VC_E;
+    case 'F': return VC_F;
+    case 'G': return VC_G;
+    case 'H': return VC_H;
+    case 'I': return VC_I;
+    case 'J': return VC_J;
+    case 'K': return VC_K;
+    case 'L': return VC_L;
+    case 'M': return VC_M;
+    case 'N': return VC_N;
+    case 'O': return VC_O;
+    case 'P': return VC_P;
+    case 'Q': return VC_Q;
+    case 'R': return VC_R;
+    case 'S': return VC_S;
+    case 'T': return VC_T;
+    case 'U': return VC_U;
+    case 'V': return VC_V;
+    case 'W': return VC_W;
+    case 'X': return VC_X;
+    case 'Y': return VC_Y;
+    case 'Z': return VC_Z;
     }
     
     return (VirtualCode)0;
@@ -103,8 +125,9 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         event.key.virtual_code = virtual_code_from_wparam(wparam);
         event.key.scan_code = (ScanCode)((lparam >> 16) & 0xFF);
         event.key.modifiers = (ModifierFlags)modifier_state;
+        event.key.prev_state = (lparam >> 30) & 0x1;
         
-        LOG_INFO("virtual keycode: 0x%X, scancode: 0x%X", wparam, (lparam >> 16) & 0xFF);
+        LOG_INFO("virtual keycode: 0x%X (%c), scancode: 0x%X, prev_state: %d", wparam, (char)wparam, (lparam >> 16) & 0xFF, event.key.prev_state);
         break;
     case WM_KEYUP:
         if (wparam == VK_CONTROL) modifier_state &= ~MF_CTRL;

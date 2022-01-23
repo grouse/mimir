@@ -130,7 +130,6 @@ Vector3 linear_from_sRGB(Vector3 sRGB);
 Vector4 linear_from_sRGB(Vector4 sRGB);
 
 void gfx_begin_frame();
-void gfx_end_frame();
 
 void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_square(Vector2 center, Vector2 size, Vector2 uv_tl, Vector2 uv_br, GLuint texture, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);

@@ -556,7 +556,7 @@ i32 codepoint_index_from_byte_index(String str, i32 byte)
     return ci;
 }
 
-i64 utf8_decr(char *str, i64 length, i64 i)
+i64 utf8_decr(char *str, i64 i)
 {
     i--;
     while (i > 0 && (str[i] & 0b11000000) == 0b10000000) i--;
@@ -578,7 +578,7 @@ i64 utf8_incr(char *str, i64 length, i64 i)
 
 i32 utf8_decr(String str, i32 i)
 {
-    return (i32)utf8_decr(str.data, str.length, i);
+    return (i32)utf8_decr(str.data, i);
 }
 
 i32 utf8_incr(String str, i32 i)
