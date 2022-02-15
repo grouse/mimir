@@ -12,38 +12,6 @@ GuiContext gui;
 #define GIZMO_TIP_SIZE Vector2{ 10.0f, 10.0f }
 #define GIZMO_OUTLINE_COLOR Vector3{ 0.0f, 0.0f, 0.0f }
 
-Font load_font(String path)
-{
-    Font font{};
-    
-    Asset *asset = find_asset(path);
-    if (asset) {
-        stbtt_fontinfo fi;
-        stbtt_InitFont(&fi, asset->data, 0);
-
-        u8 *bitmap = (u8*)ALLOC(mem_dynamic, 1024*1024);
-        stbtt_BakeFontBitmap(asset->data, 0, 18.0f, bitmap, 1024, 1024, 0, 256, font.atlas);
-        stbtt_GetFontVMetrics(&fi, &font.ascent, &font.descent, &font.line_gap);
-        font.scale = stbtt_ScaleForPixelHeight(&fi, 18);
-        font.line_height = font.scale * (font.ascent - font.descent + font.line_gap);
-        font.baseline = (i32)(font.ascent*font.scale);
-        
-        // TODO(jesper): this is not really correct. The text layout code needs to query the codepoint
-        // advance and codepoint kerning
-        f32 x = 0, y = 0;
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font.atlas, 1024, 1024, ' ', &x, &y, &q, 1);
-        font.space_width = x;
-
-        glGenTextures(1, &font.texture);
-        glBindTexture(GL_TEXTURE_2D, font.texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 1024, 1024, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap); 
-    }
-
-    return font;
-}
 
 void init_gui()
 {
@@ -414,7 +382,7 @@ TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return r;
         
-        stbtt_aligned_quad q{};
+        TextQuad q{};
         
         if (c == ' ') {
             q.y0 = cursor.y;
@@ -425,7 +393,7 @@ TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator
             
             cursor.x = q.x1;
         } else {
-            stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+            q = get_font_glyph(font, c, &cursor);
         }
         
         array_add(&r.quads, q);
@@ -453,7 +421,7 @@ DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc 
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return quads;
         
-        stbtt_aligned_quad q;
+        TextQuad q;
         if (c == ' ') {
             q.y0 = cursor.y;
             q.y1 = q.y0;
@@ -463,7 +431,7 @@ DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc 
 
             cursor.x = q.x1;
         } else {
-            stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
+            q = get_font_glyph(font, c, &cursor);
         }
 
         array_add(&quads, q);
@@ -543,9 +511,7 @@ Vector2 gui_draw_text(
             continue;
         }
 
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(font->atlas, 1024, 1024, c, &cursor.x, &cursor.y, &q, 1);
-        
+        TextQuad q = get_font_glyph(font, c, &cursor);
         if (!apply_clip_rect(&q, clip_rect)) continue;
 
         f32 vertices[] = { 

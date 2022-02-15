@@ -1,13 +1,12 @@
 #ifndef GUI_H
 #define GUI_H
 
-#include "external/stb/stb_truetype.h"
-
 #include "maths.h"
 #include "array.h"
 #include "string.h"
 #include "input.h"
 #include "gfx_opengl.h"
+#include "font.h"
 
 #define GUI_ID(index) GuiId{ __COUNTER__, index, -1 }
 #define GUI_ID_INVALID GuiId{ -1, -1, -1 }
@@ -89,7 +88,6 @@ struct GuiId {
     }
 };
 
-typedef stbtt_aligned_quad TextQuad;
 
 struct TextQuadsAndBounds {
     DynamicArray<TextQuad> quads;
@@ -149,19 +147,6 @@ struct GuiLayout {
 struct GuiLister {
     GuiId id;
     f32 offset;
-};
-
-struct Font {
-    stbtt_bakedchar atlas[256];
-    i32 ascent;
-    i32 descent;
-    i32 line_gap;
-    i32 baseline;
-    f32 scale;
-    f32 line_height;
-    f32 space_width;
-    
-    GLuint texture;
 };
 
 struct GuiContext {

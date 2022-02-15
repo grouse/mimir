@@ -7,6 +7,7 @@
 #include "core.cpp"
 #include "gfx_opengl.cpp"
 #include "assets.cpp"
+#include "font.cpp"
 
 enum EditMode {
     MODE_EDIT,
@@ -557,9 +558,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             continue;
         }
 
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(app.mono.atlas, 1024, 1024, c, &pen.x, &pen.y, &q, 1);
-
+        TextQuad q = get_font_glyph(&app.mono, c, &pen);
         if (q.x1 >= r.pos.x + r.size.x) {
             baseline.y += app.mono.line_height;
             pen = baseline;
@@ -1826,9 +1825,8 @@ void update_and_render(f32 dt)
                     continue;
                 }
 
-                stbtt_aligned_quad q;
-                stbtt_GetBakedQuad(app.mono.atlas, 1024, 1024, c, &pen.x, &pen.y, &q, 1);
-                
+                TextQuad q = get_font_glyph(&app.mono, c, &pen);
+
                 // NOTE(jesper): if this fires then we haven't done line reflowing correctly
                 ASSERT(q.x1 < view.rect.pos.x + view.rect.size.x);
 
