@@ -357,7 +357,7 @@ void init_app()
     
     init_gui();
     
-    app.mono = load_font("fonts/Cousine/Cousine-Regular.ttf");
+    app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
     
     calculate_num_visible_lines();
 }
@@ -558,8 +558,8 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             continue;
         }
 
-        TextQuad q = get_font_glyph(&app.mono, c, &pen);
-        if (q.x1 >= r.pos.x + r.size.x) {
+        GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
+        if (g.x1 >= r.pos.x + r.size.x) {
             baseline.y += app.mono.line_height;
             pen = baseline;
 
@@ -1493,12 +1493,12 @@ void app_event(InputEvent event)
                 app.next_mode = MODE_EDIT;
                 break;
             case VC_LEFT: 
-                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
+                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
             case VC_RIGHT:
-                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
+                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
@@ -1515,12 +1515,15 @@ void app_event(InputEvent event)
                     if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
                         // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
                         view.lines_dirty = true;
-
                         view.caret.byte_offset = start;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                        view.mark = view.caret;
+                        view.caret_dirty = true; 
+                        
+                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        // TODO(jesper): what do I want here?
+                        //view.mark = view.caret;
 
-                        move_view_to_caret();
+                        //move_view_to_caret();
                     }
                 } break;
             case VC_DELETE: 
@@ -1528,8 +1531,14 @@ void app_event(InputEvent event)
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
-                        view.lines_dirty = true;
+                        
+                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        //view.mark = view.caret;
+                        view.mark = view.caret;
                         view.caret_dirty = true;
+
+                        // TODO(jesper0: recalculate only lines affected
+                        view.lines_dirty = true;
                     }
                 } break;
                 
@@ -1695,7 +1704,7 @@ void update_and_render(f32 dt)
         gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = tr });
         defer { gui_end_layout(); };
 
-        {
+        if (true) {
             Vector2 ib_s{ tr.size.x, 15.0f };
             Vector2 ib_p = gui_layout_widget(ib_s, GUI_ANCHOR_BOTTOM);
             
@@ -1778,7 +1787,7 @@ void update_and_render(f32 dt)
     }
 
     Buffer *buffer = get_buffer(view.buffer);
-    if (buffer) {
+    if (buffer && true) {
         GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
         cmd.gui_text.font_atlas = app.mono.texture;
         cmd.gui_text.color = linear_from_sRGB(app.fg);
@@ -1825,22 +1834,22 @@ void update_and_render(f32 dt)
                     continue;
                 }
 
-                TextQuad q = get_font_glyph(&app.mono, c, &pen);
+                GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
 
                 // NOTE(jesper): if this fires then we haven't done line reflowing correctly
-                ASSERT(q.x1 < view.rect.pos.x + view.rect.size.x);
+                ASSERT(g.x1 < view.rect.pos.x + view.rect.size.x);
 
                 // TODO(jesper): the way this text rendering works it'd probably be far cheaper for us to just 
                 // overdraw a background outside the view rect
-                if (apply_clip_rect(&q, view.rect)) {
+                if (apply_clip_rect(&g, view.rect)) {
                     f32 vertices[] = { 
-                        q.x0, q.y0, q.s0, q.t0,
-                        q.x0, q.y1, q.s0, q.t1,
-                        q.x1, q.y1, q.s1, q.t1,
+                        g.x0, g.y0, g.s0, g.t0,
+                        g.x0, g.y1, g.s0, g.t1,
+                        g.x1, g.y1, g.s1, g.t1,
 
-                        q.x1, q.y1, q.s1, q.t1,
-                        q.x1, q.y0, q.s1, q.t0,
-                        q.x0, q.y0, q.s0, q.t0,
+                        g.x1, g.y1, g.s1, g.t1,
+                        g.x1, g.y0, g.s1, g.t0,
+                        g.x0, g.y0, g.s0, g.t0,
                     };
 
                     array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));

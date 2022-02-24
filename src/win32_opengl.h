@@ -21,6 +21,11 @@
 #define GL_DYNAMIC_READ                   0x88E9
 #define GL_DYNAMIC_COPY                   0x88EA
 
+#define GL_PIXEL_UNPACK_BUFFER            0x88EC
+
+#define GL_UNPACK_ALIGNMENT               0x0CF5
+#define GL_PACK_ALIGNMENT                 0x0D05
+
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_BLEND                          0x0BE2
 #define GL_VERSION                        0x1F02
@@ -151,14 +156,20 @@ DECL_GL_PROC(void, glGetShaderiv, GLuint shader, GLenum pname, GLint *params);
 DECL_GL_PROC(void, glGetShaderInfoLog, GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
 DECL_GL_PROC(void, glGetProgramiv, GLuint program, GLenum pname, GLint *params);
 DECL_GL_PROC(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-DECL_GL_PROC(void, glTexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * data);
 DECL_GL_PROC(void, glGenTextures, GLsizei n, GLuint * textures);
 DECL_GL_PROC(void, glBindTexture, GLenum target, GLuint texture);
-DECL_GL_PROC(void, glTexParameteri, GLenum target, GLenum pname, GLint param);
 DECL_GL_PROC(void, glBlendFunc, GLenum sfactor, GLenum dfactor);
 DECL_GL_PROC(void, glDebugMessageCallback, GLDEBUGPROC callback, void * userParam);
 DECL_GL_PROC(void, glPolygonMode, GLenum face, GLenum mode);
 DECL_GL_PROC(void, glBindBufferRange, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
 DECL_GL_PROC(void, glScissor, GLint x, GLint y, GLsizei width, GLsizei height);
+
+DECL_GL_PROC(void, glPixelStorei, GLenum pname, GLint param);
+
+DECL_GL_PROC(void, glTexParameteri, GLenum target, GLenum pname, GLint param);
+DECL_GL_PROC(void, glTexStorage2D, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
+DECL_GL_PROC(void, glTexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * data);
+DECL_GL_PROC(void, glTexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels);
+DECL_GL_PROC(void, glTextureSubImage2D, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
 
 #endif // WIN32_OPENGL_H

@@ -13,6 +13,7 @@ struct AllocationHeader {
     u8 alignment;
 };
 
+
 void* align_ptr(void *ptr, u8 alignment, u8 header_size)
 {
     u8 offset = header_size + alignment - (((size_t)ptr + header_size) & ((size_t)alignment-1));

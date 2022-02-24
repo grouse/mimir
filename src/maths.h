@@ -5,6 +5,7 @@
 
 extern "C" double fabs( double arg );
 extern "C" double floor (double x);
+extern "C" float floorf(float x);
 extern "C" float powf( float base, float exponent );
 extern "C" double ceil (double x);
 extern "C" float fabsf( float arg );

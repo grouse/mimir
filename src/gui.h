@@ -90,7 +90,7 @@ struct GuiId {
 
 
 struct TextQuadsAndBounds {
-    DynamicArray<TextQuad> quads;
+    DynamicArray<GlyphRect> glyphs;
     Rect bounds;
 };
 

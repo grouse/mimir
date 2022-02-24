@@ -3,10 +3,26 @@
 
 #include "external/stb/stb_truetype.h"
 
-typedef stbtt_aligned_quad TextQuad;
+#include "hash_table.h"
+
+struct Glyph {
+    u32 codepoint;
+    f32 advance;
+    i32 x0, y0;
+    i32 x1, y1;
+    i32 xoff, yoff;
+};
+
+struct GlyphRect {
+    f32 x0, y0;
+    f32 x1, y1;
+    f32 s0, t0;
+    f32 s1, t1;
+};
 
 struct Font {
-    stbtt_bakedchar atlas[256];
+    GLuint texture;
+
     i32 ascent;
     i32 descent;
     i32 line_gap;
@@ -15,13 +31,18 @@ struct Font {
     f32 line_height;
     f32 space_width;
 
-    GLuint texture;
+    stbtt_fontinfo info;
+    Vector2 size;
+    Vector2 current;
+    f32 current_row_height;
+    
+    HashTable<u32, Glyph> glyphs;
+    //DynamicArray<Glyph> glyphs;
 };
 
-
-Font load_font(String path);
-
-TextQuad get_font_glyph(Font *font, u32 codepoint, Vector2 *pen);
+Font create_font(String path, f32 pixel_height);
+f32 glyph_advance(Font *font, u32 codepoint);
+GlyphRect get_glyph_rect(Font *font, u32 codepoint, Vector2 *pen);
 
 
 #endif // FONT_H

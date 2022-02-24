@@ -72,10 +72,8 @@ void load_opengl_procs(HANDLE gl_dll)
     LOAD_GL_PROC(glGetShaderInfoLog, gl_dll);
     LOAD_GL_PROC(glGetProgramiv, gl_dll);
     LOAD_GL_PROC(glGetProgramInfoLog, gl_dll);
-    LOAD_GL_PROC(glTexImage2D, gl_dll);
     LOAD_GL_PROC(glGenTextures, gl_dll);
     LOAD_GL_PROC(glBindTexture, gl_dll);
-    LOAD_GL_PROC(glTexParameteri, gl_dll);
     LOAD_GL_PROC(glBlendFunc, gl_dll);
     LOAD_GL_PROC(glDebugMessageCallback, gl_dll);
     LOAD_GL_PROC(glPolygonMode, gl_dll);
@@ -84,6 +82,14 @@ void load_opengl_procs(HANDLE gl_dll)
     LOAD_GL_PROC(glBufferSubData, gl_dll);
     LOAD_GL_PROC(glScissor, gl_dll);
     LOAD_GL_PROC(glViewport, gl_dll);
+    
+    LOAD_GL_PROC(glPixelStorei, gl_dll);
+
+    LOAD_GL_PROC(glTexParameteri, gl_dll);
+    LOAD_GL_PROC(glTexStorage2D, gl_dll);
+    LOAD_GL_PROC(glTexImage2D, gl_dll);
+    LOAD_GL_PROC(glTexSubImage2D, gl_dll);
+    LOAD_GL_PROC(glTextureSubImage2D, gl_dll);
 }
 
 Win32Window create_opengl_window(

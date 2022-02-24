@@ -35,6 +35,8 @@ extern "C" void* memmove(void *destination, const void *source, size_t num);
 #define RMOV(...) static_cast<std::remove_reference_t<decltype(__VA_ARGS__)>&&>(__VA_ARGS__)
 #define RFWD(...) static_cast<decltype(__VA_ARGS__)&&>(__VA_ARGS__)
 
+#define ALIGN(value, alignment) (value) + (alignment) - ((value) % (alignment));
+
 template <typename F>
 struct Defer {
     Defer(F f) : f(f) {}

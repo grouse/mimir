@@ -44,7 +44,7 @@ void init_gui()
     
     if (auto a = find_asset("textures/close.png"); a) gui.style.icons.close = gfx_load_texture(a->data, a->size);
     
-    gui.style.text.font = load_font("fonts/Roboto-Regular.ttf");
+    gui.style.text.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
     gui.style.button.font = gui.style.text.font;
 }
 
@@ -89,39 +89,39 @@ void gui_active(GuiId id)
     gui.active = id;
 }
 
-bool apply_clip_rect(TextQuad *q, Rect clip_rect)
+bool apply_clip_rect(GlyphRect *g, Rect clip_rect)
 {
-    if (q->x0 > clip_rect.pos.x + clip_rect.size.x) return false;
-    if (q->y0 > clip_rect.pos.y + clip_rect.size.y) return false;
-    if (q->x1 < clip_rect.pos.x) return false;
-    if (q->y1 < clip_rect.pos.y) return false;
+    if (g->x0 > clip_rect.pos.x + clip_rect.size.x) return false;
+    if (g->y0 > clip_rect.pos.y + clip_rect.size.y) return false;
+    if (g->x1 < clip_rect.pos.x) return false;
+    if (g->y1 < clip_rect.pos.y) return false;
 
-    if (q->x1 > clip_rect.pos.x + clip_rect.size.x) {
-        f32 w0 = q->x1 - q->x0;
-        q->x1 = clip_rect.pos.x + clip_rect.size.x;
-        f32 w1 = q->x1 - q->x0;
-        q->s1 = q->s0 + (q->s1 - q->s0) * (w1/w0);
+    if (g->x1 > clip_rect.pos.x + clip_rect.size.x) {
+        f32 w0 = g->x1 - g->x0;
+        g->x1 = clip_rect.pos.x + clip_rect.size.x;
+        f32 w1 = g->x1 - g->x0;
+        g->s1 = g->s0 + (g->s1 - g->s0) * (w1/w0);
     }
 
-    if (q->x0 < clip_rect.pos.x) {
-        f32 w0 = q->x1 - q->x0;
-        q->x0 = clip_rect.pos.x;
-        f32 w1 = q->x1 - q->x0;
-        q->s0 = q->s1 - (q->s1 - q->s0) * (w1/w0);
+    if (g->x0 < clip_rect.pos.x) {
+        f32 w0 = g->x1 - g->x0;
+        g->x0 = clip_rect.pos.x;
+        f32 w1 = g->x1 - g->x0;
+        g->s0 = g->s1 - (g->s1 - g->s0) * (w1/w0);
     }
 
-    if (q->y1 > clip_rect.pos.y + clip_rect.size.y) {
-        f32 h0 = q->y1 - q->y0;
-        q->y1 = clip_rect.pos.y + clip_rect.size.y;
-        f32 h1 = q->y1 - q->y0;
-        q->t1 = q->t0 + (q->t1 - q->t0) * (h1/h0);
+    if (g->y1 > clip_rect.pos.y + clip_rect.size.y) {
+        f32 h0 = g->y1 - g->y0;
+        g->y1 = clip_rect.pos.y + clip_rect.size.y;
+        f32 h1 = g->y1 - g->y0;
+        g->t1 = g->t0 + (g->t1 - g->t0) * (h1/h0);
     }
 
-    if (q->y0 < clip_rect.pos.y) {
-        f32 h0 = q->y1 - q->y0;
-        q->y0 = clip_rect.pos.y;
-        f32 h1 = q->y1 - q->y0;
-        q->t0 = q->t1 - (q->t1 - q->t0) * (h1/h0);
+    if (g->y0 < clip_rect.pos.y) {
+        f32 h0 = g->y1 - g->y0;
+        g->y0 = clip_rect.pos.y;
+        f32 h1 = g->y1 - g->y0;
+        g->t0 = g->t1 - (g->t1 - g->t0) * (h1/h0);
     }
 
     return true;
@@ -372,7 +372,7 @@ void gui_draw_rect(
 TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator alloc = mem_tmp)
 {
     TextQuadsAndBounds r{};
-    array_reset(&r.quads, alloc, text.length);
+    array_reset(&r.glyphs, alloc, text.length);
     
     Vector2 cursor{ 0.0f, (f32)font->baseline };
 
@@ -382,36 +382,23 @@ TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return r;
         
-        TextQuad q{};
+        GlyphRect g = get_glyph_rect(font, c, &cursor);
+        array_add(&r.glyphs, g);
         
-        if (c == ' ') {
-            q.y0 = cursor.y;
-            q.y1 = q.y0;
-            
-            q.x0 = cursor.x;
-            q.x1 = cursor.x + font->space_width;
-            
-            cursor.x = q.x1;
-        } else {
-            q = get_font_glyph(font, c, &cursor);
-        }
+        r.bounds.pos.x = MIN(r.bounds.pos.x, MIN(g.x0, g.x1));
+        r.bounds.pos.y = MIN(r.bounds.pos.y, MIN(g.y0, g.y1));
         
-        array_add(&r.quads, q);
-        
-        r.bounds.pos.x = MIN(r.bounds.pos.x, MIN(q.x0, q.x1));
-        r.bounds.pos.y = MIN(r.bounds.pos.y, MIN(q.y0, q.y1));
-        
-        r.bounds.size.x = MAX(r.bounds.size.x, MAX(q.x0, q.x1));
-        r.bounds.size.y = MAX(r.bounds.size.y, MAX(q.y0, q.y1));
+        r.bounds.size.x = MAX(r.bounds.size.x, MAX(g.x0, g.x1));
+        r.bounds.size.y = MAX(r.bounds.size.y, MAX(g.y0, g.y1));
     }
     
     return r;
 }
 
-DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc = mem_tmp)
+DynamicArray<GlyphRect> calc_text_quads(String text, Font *font, Allocator alloc = mem_tmp)
 {
-    DynamicArray<TextQuad> quads{};
-    array_reset(&quads, alloc, text.length);
+    DynamicArray<GlyphRect> glyphs{};
+    array_reset(&glyphs, alloc, text.length);
 
     Vector2 cursor{ 0.0f, (f32)font->baseline };
     
@@ -419,29 +406,17 @@ DynamicArray<TextQuad> calc_text_quads(String text, Font *font, Allocator alloc 
     char *end = text.data+text.length;
     while (p < end) {
         i32 c = utf32_it_next(&p, end);
-        if (c == 0) return quads;
+        if (c == 0) return glyphs;
         
-        TextQuad q;
-        if (c == ' ') {
-            q.y0 = cursor.y;
-            q.y1 = q.y0;
-
-            q.x0 = cursor.x;
-            q.x1 = cursor.x + font->space_width;
-
-            cursor.x = q.x1;
-        } else {
-            q = get_font_glyph(font, c, &cursor);
-        }
-
-        array_add(&quads, q);
+        GlyphRect g = get_glyph_rect(font, c, &cursor);
+        array_add(&glyphs, g);
     }
 
-    return quads;
+    return glyphs;
 }
 
 Vector2 gui_draw_text(
-    Array<TextQuad> quads,
+    Array<GlyphRect> glyphs,
     Vector2 pos,
     Rect clip_rect,
     Vector3 color,
@@ -457,22 +432,22 @@ Vector2 gui_draw_text(
     cmd.gui_text.font_atlas = font->texture;
     cmd.gui_text.color = color;
 
-    for (TextQuad q : quads) {
-        q.x0 += pos.x;
-        q.x1 += pos.x;
-        q.y0 += pos.y;
-        q.y1 += pos.y;
+    for (GlyphRect g : glyphs) {
+        g.x0 += pos.x;
+        g.x1 += pos.x;
+        g.y0 += pos.y;
+        g.y1 += pos.y;
         
-        if (!apply_clip_rect(&q, clip_rect)) continue;
+        if (!apply_clip_rect(&g, clip_rect)) continue;
 
         f32 verts[] = { 
-            q.x0, q.y0, q.s0, q.t0,
-            q.x0, q.y1, q.s0, q.t1,
-            q.x1, q.y1, q.s1, q.t1,
+            g.x0, g.y0, g.s0, g.t0,
+            g.x0, g.y1, g.s0, g.t1,
+            g.x1, g.y1, g.s1, g.t1,
 
-            q.x1, q.y1, q.s1, q.t1,
-            q.x1, q.y0, q.s1, q.t0,
-            q.x0, q.y0, q.s0, q.t0,
+            g.x1, g.y1, g.s1, g.t1,
+            g.x1, g.y0, g.s1, g.t0,
+            g.x0, g.y0, g.s0, g.t0,
         };
 
         array_add(&gui.vertices, verts, ARRAY_COUNT(verts));
@@ -506,22 +481,17 @@ Vector2 gui_draw_text(
         i32 c = utf32_it_next(&p, end);
         if (c == 0) return cursor;
         
-        if (c == ' ') {
-            cursor.x += font->space_width;
-            continue;
-        }
-
-        TextQuad q = get_font_glyph(font, c, &cursor);
-        if (!apply_clip_rect(&q, clip_rect)) continue;
+        GlyphRect g = get_glyph_rect(font, c, &cursor);
+        if (!apply_clip_rect(&g, clip_rect)) continue;
 
         f32 vertices[] = { 
-            q.x0, q.y0, q.s0, q.t0,
-            q.x0, q.y1, q.s0, q.t1,
-            q.x1, q.y1, q.s1, q.t1,
+            g.x0, g.y0, g.s0, g.t0,
+            g.x0, g.y1, g.s0, g.t1,
+            g.x1, g.y1, g.s1, g.t1,
 
-            q.x1, q.y1, q.s1, q.t1,
-            q.x1, q.y0, q.s1, q.t0,
-            q.x0, q.y0, q.s0, q.t0,
+            g.x1, g.y1, g.s1, g.t1,
+            g.x1, g.y0, g.s1, g.t0,
+            g.x0, g.y0, g.s0, g.t0,
         };
 
         array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
@@ -539,7 +509,7 @@ void gui_textbox(String str, Font *font = &gui.style.text.font)
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x, MAX(td.bounds.size.y, font->line_height) });
     
-    gui_draw_text(td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.glyphs, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Font *font = &gui.style.text.font)
@@ -548,14 +518,14 @@ void gui_textbox(String str, Vector2 pos, Font *font = &gui.style.text.font)
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
-    gui_draw_text(td.quads, pos, wnd->clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.glyphs, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Rect clip_rect, Font *font = &gui.style.text.font)
 {
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
     // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
-    gui_draw_text(td.quads, pos, clip_rect, gui.style.text.color, font);
+    gui_draw_text(td.glyphs, pos, clip_rect, gui.style.text.color, font);
 }
 
 
@@ -691,7 +661,7 @@ bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size)
     Vector2 btn_center = size * 0.5f;
     Vector2 text_offset = btn_center - text_center;
 
-    gui_draw_text(td.quads, pos + text_offset, clip_rect, btn_fg, font);
+    gui_draw_text(td.glyphs, pos + text_offset, clip_rect, btn_fg, font);
     return clicked;
 }
 
@@ -744,7 +714,7 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
     gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
     gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
     if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, wnd->clip_rect, checked_col);
-    gui_draw_text(td.quads, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
+    gui_draw_text(td.glyphs, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
     
     return toggled;
 }
@@ -929,7 +899,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     text_clip_rect.size.y = MIN(edit_pos.y + edit_size.y, wnd->clip_rect.pos.y + wnd->clip_rect.size.y) - text_clip_rect.pos.y;
     
     String str = gui.active == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
-    Array<TextQuad> quads = calc_text_quads(str, &gui.style.text.font);
+    Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font);
 
     gui_draw_rect(pos, size, wnd->clip_rect, edit_acc0);
     gui_draw_rect(edit_pos, edit_size, wnd->clip_rect, edit_bg);
@@ -937,19 +907,19 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     Vector2 cursor_pos = pos + Vector2{ 1.0f, 0.0f };
     Vector2 text_offset{}; 
     
-    if (quads.count > 0) {
+    if (glyphs.count > 0) {
         i32 offset = gui.active == id ? gui.edit.offset : 0;
         
         if (gui.active == id) {
-            text_offset.x = gui.edit.offset < quads.count ? 
-                -quads[gui.edit.offset].x0 : 
-                -quads[gui.edit.offset-1].x1;
+            text_offset.x = gui.edit.offset < glyphs.count ? 
+                -glyphs[gui.edit.offset].x0 : 
+                -glyphs[gui.edit.offset-1].x1;
 
             if (gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 i32 new_cursor;
-                for (new_cursor = 0; new_cursor < quads.count; new_cursor++) {
-                    TextQuad q = quads.data[new_cursor];
-                    if (rel.x >= q.x0 + text_offset.x && rel.x <= q.x1 + text_offset.x) {
+                for (new_cursor = 0; new_cursor < glyphs.count; new_cursor++) {
+                    GlyphRect g = glyphs.data[new_cursor];
+                    if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
                         break;
                     }
                 }
@@ -957,9 +927,9 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                 gui.edit.selection = gui.edit.cursor;
             } else if (gui.mouse.left_pressed) {
                 i32 new_selection;
-                for (new_selection = 0; new_selection < quads.count; new_selection++) {
-                    TextQuad q = quads.data[new_selection];
-                    if (rel.x >= q.x0 + text_offset.x && rel.x <= q.x1 + text_offset.x) {
+                for (new_selection = 0; new_selection < glyphs.count; new_selection++) {
+                    GlyphRect g = glyphs.data[new_selection];
+                    if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
                         break;
                     }
                 }
@@ -967,15 +937,15 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
             }
 
             i32 cursor_ci = codepoint_index_from_byte_index(str, gui.edit.cursor);
-            cursor_pos.x += cursor_ci < quads.count ? quads[cursor_ci].x0 : quads[cursor_ci-1].x1; 
+            cursor_pos.x += cursor_ci < glyphs.count ? glyphs[cursor_ci].x0 : glyphs[cursor_ci-1].x1; 
             while ((cursor_pos.x + text_offset.x) > (text_clip_rect.pos.x + text_clip_rect.size.x)) {
                 gui.edit.offset++;
-                text_offset = { gui.edit.offset < quads.count ? -quads[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_offset = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
             }
 
             while ((cursor_pos.x + text_offset.x < text_clip_rect.pos.x)) {
                 gui.edit.offset--;
-                text_offset = { gui.edit.offset < quads.count ? -quads[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_offset = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
             }
             
             if (gui.edit.selection != gui.edit.cursor) {
@@ -983,7 +953,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                 f32 x1 = pos.x + 1.0f;
                 
                 i32 selection_ci = codepoint_index_from_byte_index(str, gui.edit.selection);
-                x1 += selection_ci < quads.count ? quads[selection_ci].x0 : quads[selection_ci-1].x1;
+                x1 += selection_ci < glyphs.count ? glyphs[selection_ci].x0 : glyphs[selection_ci-1].x1;
                 
                 if (x0 > x1) SWAP(x0, x1);
 
@@ -995,7 +965,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
             }
         }
 
-        gui_draw_text(slice(quads, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
+        gui_draw_text(slice(glyphs, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
     }
 
     if (gui.active == id) {
@@ -1032,7 +1002,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, String in_str, Vector2 s
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
-    gui_draw_text(td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_text(td.glyphs, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     return gui_editbox_id(id, in_str, { pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
@@ -1073,7 +1043,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, Vector2 size
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
-    gui_draw_text(td.quads, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
+    gui_draw_text(td.glyphs, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     return gui_editbox_id(id, value, Vector2{ pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
@@ -2099,7 +2069,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
     gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
-    gui_draw_text(td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
+    gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
     
     if (gui.active == id || gui.active.owner == id.owner) {
         gui_push_id(id);
@@ -2146,7 +2116,7 @@ bool gui_menu_button_id(GuiId id, String label)
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
     gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
-    gui_draw_text(td.quads, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
+    gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
     return clicked;
 }
 
