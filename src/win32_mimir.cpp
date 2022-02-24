@@ -31,6 +31,8 @@
 #define STBI_ASSERT(x) ASSERT(x)
 #include "external/stb/stb_image.h"
 
+#include "external/MurmurHash/MurmurHash3.cpp"
+
 
 Allocator mem_frame;
 thread_local Allocator mem_tmp;
