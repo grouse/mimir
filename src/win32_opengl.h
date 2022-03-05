@@ -100,6 +100,12 @@ typedef unsigned int GLbitfield;
 typedef void GLvoid;
 
 extern "C" {
+    PROC wglGetProcAddress(LPCSTR);
+    
+    HGLRC wglCreateContext(HDC);
+    BOOL wglDeleteContext(HGLRC);
+    BOOL wglMakeCurrent(HDC, HGLRC);
+
     const GLubyte* glGetString(GLenum name);
     void glEnable(GLenum cap);
     void glDisable(GLenum cap);

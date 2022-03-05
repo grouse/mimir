@@ -1,4 +1,5 @@
 #include "win32_core.h"
+#include "win32_user32.h"
 
 #include "core.h"
 

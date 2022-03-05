@@ -19,10 +19,13 @@ enum FileOpenMode {
 
 enum ListFileFlags : u32 {
     FILE_LIST_RECURSIVE = 1 << 0,
+    FILE_LIST_ABSOLUTE  = 1 << 0,
 };
 
 FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
+
 Array<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
+void list_files(DynamicArray<String> *dst, String dir, u32 flags = 0, Allocator mem = mem_tmp);
 
 String absolute_path(String relative, Allocator mem = mem_tmp);
 

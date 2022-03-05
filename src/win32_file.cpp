@@ -1,4 +1,5 @@
 #include "file.h"
+#include "win32_shlwapi.h"
 
 String absolute_path(String relative, Allocator mem)
 {
@@ -146,7 +147,12 @@ bool is_directory(String path)
 Array<String> list_files(String dir, u32 flags, Allocator mem)
 {
     DynamicArray<String> files{ .alloc = mem };
+    list_files(&files, dir, flags, mem);
+    return files;
+}
     
+void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem) 
+{
     DynamicArray<char*> folders{ .alloc = mem_tmp };
     array_add(&folders, sz_string(dir));
 
@@ -163,7 +169,8 @@ Array<String> list_files(String dir, u32 flags, Allocator mem)
             if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
                 String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
                 String path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem);
-                array_add(&files, path);
+                if (flags & FILE_LIST_ABSOLUTE) path = absolute_path(path, mem);
+                array_add(dst, path);
             } else if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 if (flags & FILE_LIST_RECURSIVE) {
                     char *child = join_path(folder, ffd.cFileName);
@@ -175,9 +182,6 @@ Array<String> list_files(String dir, u32 flags, Allocator mem)
             }
         } while (FindNextFileA(ff, &ffd));
     }
-    
-    
-    return files;
 }
 
 void write_file(String path, StringBuilder *sb)

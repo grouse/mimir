@@ -1,7 +1,7 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-enum InputEventType {
+enum InputEventType : u8 {
     IE_MOUSE_WHEEL = 1,
     IE_MOUSE_PRESS,
     IE_MOUSE_RELEASE,

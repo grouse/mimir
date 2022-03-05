@@ -1,4 +1,5 @@
 #include "win32_opengl.h"
+#include "win32_gdi32.h"
 
 #include "core.h"
 #include "maths.h"

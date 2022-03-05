@@ -1054,6 +1054,19 @@ GuiLister* gui_find_or_create_lister(GuiId id)
     return &gui.listers[i];
 }
 
+GuiMenu* gui_find_or_create_menu(GuiId id) 
+{
+    for (auto &it : gui.menus) if (it.id == id) return &it;
+    i32 i = array_add(&gui.menus, GuiMenu{ .id = id, .active = false });
+    return &gui.menus[i];
+}
+
+GuiMenu* gui_find_menu(GuiId id) 
+{
+    for (auto &it : gui.menus) if (it.id == id) return &it;
+    return nullptr;
+}
+
 i32 gui_create_window(GuiId id, u32 flags, Vector2 pos, Vector2 size)
 {
     for (i32 i = 0; i < gui.windows.count; i++) {
@@ -1213,6 +1226,8 @@ bool gui_begin_window_id(
     if (flags & GUI_WINDOW_CLOSE) {
         GuiId close_id = GUI_ID_INTERNAL(id, 30);
         if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
+            gui_active(GUI_ID_INVALID);
+            gui_hot(GUI_ID_INVALID);
             gui.current_window = 1;
             return false;
         }
@@ -2006,6 +2021,7 @@ bool gui_begin_menu_id(GuiId id)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GuiLayout *cl = gui_current_layout();
+    gui_find_or_create_menu(id);
 
     Vector2 size{ cl->size.x, gui.style.text.font.line_height + 10.0f };
     Vector2 pos = gui_layout_widget(size);
@@ -2028,17 +2044,30 @@ bool gui_begin_menu_id(GuiId id)
 void gui_end_menu()
 {
     GuiLayout *layout = gui_current_layout();
+    GuiMenu *menu = gui_find_menu(gui.current_id);
+    ASSERT(menu);
     
-    if (layout->type == GUI_LAYOUT_ROW &&
-        (gui.active == gui.current_id || gui.active.owner == gui.current_id.owner)) 
-    {    
-        Vector3 bg = rgb_unpack(0xFF212121);
-        Vector2 size{ layout->size.x, layout->size.y + layout->current.y };
-        gui_draw_rect(layout->pos, size, bg, &gui.windows[1].command_buffer, 0);
+    if (menu->active && gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_ESC: menu->active = false; break;
+                }
+                break;
+            default: break;
+            }
+        }
     }
     
     gui_end_layout();
     gui_pop_id();
+
+    if (layout->type == GUI_LAYOUT_ROW && menu->active) {
+        Vector3 bg = rgb_unpack(0xFF212121);
+        Vector2 size{ layout->size.x, layout->size.y + layout->current.y };
+        gui_draw_rect(layout->pos, size, bg, &gui.windows[1].command_buffer, menu->draw_index);
+    }
 }
 
 bool gui_begin_menu_id(GuiId id, String label)
@@ -2049,6 +2078,9 @@ bool gui_begin_menu_id(GuiId id, String label)
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GuiLayout *cl = gui_current_layout();
     
+    GuiMenu *menu = gui_find_or_create_menu(id);
+    menu->draw_index = gui.windows[1].command_buffer.commands.count;
+    
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 text_offset{ 5.0f, 5.0f };
     
@@ -2056,14 +2088,19 @@ bool gui_begin_menu_id(GuiId id, String label)
     Vector2 pos = gui_layout_widget(&size);
     
     gui_hot_rect(id, pos, size);
-    gui_active_press(id);
+    if (gui_active_click(id)) {
+        menu->active = !menu->active;
+    }
     
-    // TODO(jesper): this will probably be used elsewhere and should be factored. Come up with a good name for this
-    if (gui.active == id &&
-        gui.mouse.left_pressed && !gui.mouse.left_was_pressed &&
-        gui.hot.owner != id.owner)
-    {
-        gui_active(GUI_ID_INVALID);
+    if (menu->active) {
+        // TODO(jesper): this needs to be adjusted and fixed for nested sub-menus. Probably using the id stack
+        if (gui.active_menu != id && gui.active_menu != GUI_ID_INVALID) {
+            GuiMenu *current = gui_find_menu(gui.active_menu);
+            ASSERT(current);
+            current->active = false;
+        }
+        
+        gui.active_menu = id;
     }
     
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
@@ -2071,7 +2108,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
     gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
     
-    if (gui.active == id || gui.active.owner == id.owner) {
+    if (menu->active) {
         gui_push_id(id);
         gui.current_window = 1; // overlay
         
@@ -2087,10 +2124,9 @@ bool gui_begin_menu_id(GuiId id, String label)
         };
 
         gui_begin_layout(layout);
-        return true;
     }
     
-    return false;
+    return menu->active;
 }
 
 bool gui_menu_button_id(GuiId id, String label)
@@ -2112,6 +2148,11 @@ bool gui_menu_button_id(GuiId id, String label)
     // but not sure how I want to solve it without a lot of annoying usage code
     gui_hot_rect(id, pos, size);
     bool clicked = gui_active_click(id);
+    
+    if (clicked) {
+        GuiMenu *menu = gui_find_menu(gui.active_menu);
+        menu->active = false;
+    }
 
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);

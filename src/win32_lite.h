@@ -541,11 +541,15 @@ extern "C" {
         LONG bottom;
     } RECT, *PRECT, *NPRECT, *LPRECT;
     
-    HCURSOR LoadCursorA(
-        HINSTANCE hInstance,
-        LPCSTR    lpCursorName);
     
-    BOOL GetClientRect(HWND hWnd, LPRECT lpRect);
+    // shell32.lib
+    LPWSTR* CommandLineToArgvW(
+        LPCWSTR lpCmdLine,
+        int *pNumArgs);
+
+    // kernel32.lib
+    HMODULE LoadLibraryA(LPCSTR lpLibFileName);
+    FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
     
     HANDLE CreateThread(
         LPSECURITY_ATTRIBUTES   lpThreadAttributes,
@@ -566,7 +570,10 @@ extern "C" {
     
     BOOL ReleaseMutex(HANDLE hMutex);
     
-    LRESULT DefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+    void Sleep(DWORD dwMilliseconds);
+
+    DWORD GetLastError();
+    
     DWORD FormatMessageA(
         DWORD dwFlags,
         LPCVOID lpSource,
@@ -575,17 +582,18 @@ extern "C" {
         LPSTR lpBuffer,
         DWORD nSize,
         va_list *Arguments);
-    DWORD GetLastError();
     
-    BOOL FindNextFileA(
-        HANDLE             hFindFile,
-        LPWIN32_FIND_DATAA lpFindFileData);
+    void OutputDebugStringA(LPCSTR lpOutputString);
+    void OutputDebugStringW(LPWSTR lpOutputString);
     
-    BOOL FindClose(HANDLE hFindFile);
-    void Sleep( DWORD dwMilliseconds );
-    HANDLE FindFirstFileA(
-        LPCSTR             lpFileName,
-        LPWIN32_FIND_DATAA lpFindFileData);
+    BOOL IsDebuggerPresent();
+    
+    BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+    BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
+    
+    DWORD GetCurrentDirectoryW(
+        DWORD  nBufferLength,
+        LPWSTR lpBuffer);
     
     BOOL ReadDirectoryChangesW(
         HANDLE                          hDirectory,
@@ -597,124 +605,16 @@ extern "C" {
         LPOVERLAPPED                    lpOverlapped,
         LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
     
-    HMODULE LoadLibraryA(LPCSTR lpLibFileName);
-    FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
-    ATOM RegisterClassA(const WNDCLASSA *lpWndClass);
+    HANDLE FindFirstFileA(
+        LPCSTR             lpFileName,
+        LPWIN32_FIND_DATAA lpFindFileData);
     
-    void OutputDebugStringA(LPCSTR lpOutputString);
-    void OutputDebugStringW(LPWSTR lpOutputString);
-    BOOL IsDebuggerPresent();
+    BOOL FindNextFileA(
+        HANDLE             hFindFile,
+        LPWIN32_FIND_DATAA lpFindFileData);
     
-    BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
-    BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
+    BOOL FindClose(HANDLE hFindFile);
 
-    HWND CreateWindowExA(
-        DWORD dwExStyle,
-        LPCSTR lpClassName,
-        LPCSTR lpWindowName,
-        DWORD dwStyle,
-        int X,
-        int Y,
-        int nWidth,
-        int nHeight,
-        HWND hWndParent,
-        HMENU hMenu,
-        HINSTANCE hInstance,
-        LPVOID lpParam);
-    
-    BOOL DestroyWindow(HWND hWnd);
-    BOOL SetWindowTextA(HWND hWnd, LPCSTR lpString);
-    BOOL ShowWindow(HWND hWnd, int nCmdShow);
-    
-    BOOL PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
-    BOOL GetMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax);
-    
-    BOOL TranslateMessage(const MSG *lpMsg);
-    LRESULT DispatchMessageA(const MSG *lpMsg);
-    
-    SHORT GetAsyncKeyState(int vKey);
-
-    HDC GetDC(HWND hWnd);
-    int ReleaseDC(HWND hWnd, HDC hDC);
-
-    int DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes, LPPIXELFORMATDESCRIPTOR ppfd);
-    int ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
-    BOOL SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
-
-    HGLRC wglCreateContext(HDC);
-    BOOL wglMakeCurrent(HDC, HGLRC);
-    PROC wglGetProcAddress(LPCSTR);
-    BOOL wglDeleteContext(HGLRC);
-    BOOL SwapBuffers(HDC);
-    
-    BOOL ReadFile(
-        HANDLE       hFile,
-        LPVOID       lpBuffer,
-        DWORD        nNumberOfBytesToRead,
-        LPDWORD      lpNumberOfBytesRead,
-        LPOVERLAPPED lpOverlapped);
-    
-    BOOL WriteFile(
-        HANDLE       hFile,
-        LPCVOID      lpBuffer,
-        DWORD        nNumberOfBytesToWrite,
-        LPDWORD      lpNumberOfBytesWritten,
-        LPOVERLAPPED lpOverlapped);
-    
-    DWORD GetFileAttributesA(LPCSTR lpFileName);
-    
-    void GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
-    
-    BOOL GetFileTime(
-        HANDLE     hFile,
-        LPFILETIME lpCreationTime,
-        LPFILETIME lpLastAccessTime,
-        LPFILETIME lpLastWriteTime);    
-    
-    BOOL CreateDirectoryA(
-        LPCSTR                lpPathName,
-        LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-    
-    BOOL PathFileExistsA(LPCSTR pszPath);
-    
-    HANDLE CreateFileA(
-        LPCSTR                lpFileName,
-        DWORD                 dwDesiredAccess,
-        DWORD                 dwShareMode,
-        LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-        DWORD                 dwCreationDisposition,
-        DWORD                 dwFlagsAndAttributes,
-        HANDLE                hTemplateFile);
-    
-    BOOL DeleteFileA(LPCSTR lpFileName);
-    
-    BOOL GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
-    
-    BOOL CloseHandle(HANDLE hObject);
-    
-    BOOL OpenClipboard(HWND hWndNewOwner);
-    BOOL EmptyClipboard();
-    HANDLE GetClipboardData(UINT uFormat);
-    HANDLE SetClipboardData(UINT uFormat, HANDLE hMem);
-    BOOL CloseClipboard();
-    
-    LPVOID GlobalLock(HGLOBAL hMem);
-    BOOL GlobalUnlock(HGLOBAL hMem);
-    
-    DECLSPEC_ALLOCATOR HGLOBAL GlobalAlloc(UINT uFlags, SIZE_T dwBytes);
-    
-    HWND SetCapture(HWND hWnd);
-    BOOL ReleaseCapture();
-    
-    LPVOID VirtualAlloc(
-        LPVOID lpAddress,
-        SIZE_T dwSize,
-        DWORD  flAllocationType,
-        DWORD  flProtect);    
-    
-    LPWSTR* CommandLineToArgvW(
-        LPCWSTR lpCmdLine,
-        int *pNumArgs);
     
     DWORD GetModuleFileNameA(
         HMODULE hModule,
@@ -726,9 +626,55 @@ extern "C" {
         LPWSTR  lpFilename,
         DWORD   nSize);
     
-    DWORD GetCurrentDirectoryW(
-        DWORD  nBufferLength,
-        LPWSTR lpBuffer);
+    LPVOID VirtualAlloc(
+        LPVOID lpAddress,
+        SIZE_T dwSize,
+        DWORD  flAllocationType,
+        DWORD  flProtect);    
+    
+    DECLSPEC_ALLOCATOR HGLOBAL GlobalAlloc(UINT uFlags, SIZE_T dwBytes);
+
+    LPVOID GlobalLock(HGLOBAL hMem);
+    BOOL GlobalUnlock(HGLOBAL hMem);
+
+    BOOL CloseHandle(HANDLE hObject);
+
+    HANDLE CreateFileA(
+        LPCSTR                lpFileName,
+        DWORD                 dwDesiredAccess,
+        DWORD                 dwShareMode,
+        LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+        DWORD                 dwCreationDisposition,
+        DWORD                 dwFlagsAndAttributes,
+        HANDLE                hTemplateFile);
+    
+    BOOL DeleteFileA(LPCSTR lpFileName);
+    
+    BOOL WriteFile(
+        HANDLE       hFile,
+        LPCVOID      lpBuffer,
+        DWORD        nNumberOfBytesToWrite,
+        LPDWORD      lpNumberOfBytesWritten,
+        LPOVERLAPPED lpOverlapped);
+    
+    BOOL ReadFile(
+        HANDLE       hFile,
+        LPVOID       lpBuffer,
+        DWORD        nNumberOfBytesToRead,
+        LPDWORD      lpNumberOfBytesRead,
+        LPOVERLAPPED lpOverlapped);
+    
+    DWORD GetFileAttributesA(LPCSTR lpFileName);
+    BOOL GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
+    BOOL CreateDirectoryA(LPCSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+    
+    BOOL GetFileTime(
+        HANDLE     hFile,
+        LPFILETIME lpCreationTime,
+        LPFILETIME lpLastAccessTime,
+        LPFILETIME lpLastWriteTime);    
+    
+    void GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
 }
 
 #endif // WIN32_LITE_H

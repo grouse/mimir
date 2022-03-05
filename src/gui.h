@@ -113,6 +113,12 @@ struct GuiWindowState {
     bool active;
 };
 
+struct GuiMenu {
+    GuiId id;
+    i32 draw_index = -1;
+    bool active;
+};
+
 enum GuiLayoutType {
     GUI_LAYOUT_ABSOLUTE,
     GUI_LAYOUT_ROW,
@@ -167,13 +173,16 @@ struct GuiContext {
     GuiId active_press = GUI_ID_INVALID;
     GuiId last_active = GUI_ID_INVALID;
     GuiId active_window = GUI_ID_INVALID;
+    GuiId active_menu = GUI_ID_INVALID;
     
     i32 hot_z = 0;
 
     i32 current_window;
     DynamicArray<GuiWindow> windows;
     DynamicArray<GuiLister> listers;
+    DynamicArray<GuiMenu> menus;
     DynamicArray<GuiLayout> layout_stack;
+    
     
     GuiId current_id;
     DynamicArray<GuiId> id_stack;
