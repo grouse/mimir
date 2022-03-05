@@ -128,7 +128,6 @@ enum GuiLayoutType {
 struct GuiLayout {
     GuiLayoutType type;
     
-    
     union {
         struct {
             Vector2 pos;
@@ -140,10 +139,11 @@ struct GuiLayout {
     
     Vector2 current;
     Vector2 available_space;
+    Vector2 margin;
 
     union {
         struct {
-            f32 margin;
+            f32 spacing;
         } row, column;
     };
 };

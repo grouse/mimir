@@ -152,6 +152,22 @@ bool apply_clip_rect(Vector2 *pos, Vector2 *size, Rect clip_rect)
     return true;
 }
 
+
+Rect gui_layout_rect(GuiLayout *cl)
+{
+    ASSERT(cl);
+
+    Rect r;
+    r.pos = cl->pos+cl->current;
+    r.size = cl->available_space;
+    return r;
+}
+
+Rect gui_layout_rect()
+{
+    return gui_layout_rect(gui_current_layout());
+}
+
 void gui_begin_frame()
 {
     for (GuiWindow &wnd : gui.windows) {
@@ -688,12 +704,12 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
 
-    Vector2 btn_margin{ 10.0f, 0.0f };
+    Vector2 btn_margin{ 5.0f, 0.0f };
     Vector2 btn_size{ 16.0f, 16.0f };
     Vector2 inner_size{ 8.0f, 8.0f };
     Vector2 border_size{ 1.0f, 1.0f };
     Vector2 inner_margin = 0.5f*(btn_size - inner_size);
-    Vector2 btn_offset = 0.5f*Vector2{ gui.style.text.font.line_height, gui.style.text.font.line_height } - 0.5f*btn_size;
+    Vector2 btn_offset{ 0.0f, floorf(0.5f*(gui.style.text.font.line_height - btn_size.y)) };
     
     Vector2 size{ td.bounds.size.x + btn_size.x + btn_margin.x, MAX(btn_size.y, td.bounds.size.y) };
     Vector2 pos = gui_layout_widget(&size);
@@ -1251,7 +1267,7 @@ bool gui_begin_window_id(
     Vector2 layout_size = wnd->size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin;
     
     if (flags & GUI_WINDOW_RESIZABLE) {
-        // NOTE(jesper): we're adding some internal padding to the layout to make room
+        // NOTE(jesper): we're adding some internal margin to the layout to make room
         // for the resize widget
         layout_pos.x += 3.0f;
         layout_pos.y += 3.0f;
@@ -1263,11 +1279,11 @@ bool gui_begin_window_id(
         .type = GUI_LAYOUT_ROW,
         .pos = layout_pos,
         .size = layout_size,
-        .row.margin = 2.0f
+        .row.spacing = 2.0f
     };
     
     gui_begin_layout(layout);
-    wnd->clip_rect = Rect{ layout.pos, layout.size };
+    wnd->clip_rect = gui_layout_rect();
     return true;
 }
 
@@ -1354,30 +1370,30 @@ Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
     
     switch (cl->type) {
     case GUI_LAYOUT_ROW:
+        pos += cl->current;
+        
         switch (anchor) {
         case GUI_ANCHOR_TOP:
-            pos += cl->current;
-            cl->current.y += size.y + cl->row.margin;
-            cl->available_space.y -=  size.y + cl->row.margin;
+            cl->current.y += size.y + cl->row.spacing;
+            cl->available_space.y -=  size.y + cl->row.spacing;
             break;
         case GUI_ANCHOR_BOTTOM:
-            pos.x += cl->current.x;
-            pos.y += cl->current.y + cl->available_space.y - size.y;
-            cl->available_space.y -= size.y + cl->row.margin;
+            pos.y += cl->available_space.y - size.y;
+            cl->available_space.y -= size.y + cl->row.spacing;
             break;
         }
         break;
     case GUI_LAYOUT_COLUMN:
+        pos += cl->current;
+        
         switch (anchor) {
         case GUI_ANCHOR_LEFT:
-            pos += cl->current;
-            cl->current.x += size.x + cl->column.margin;
-            cl->available_space.x -= size.x + cl->column.margin;
+            cl->current.x += size.x + cl->column.spacing;
+            cl->available_space.x -= size.x + cl->column.spacing;
             break;
         case GUI_ANCHOR_RIGHT:
-            pos.x += cl->current.x + cl->available_space.x - size.x;
-            pos.y += cl->current.y;
-            cl->available_space.x -= size.x + cl->column.margin;
+            pos.x += cl->available_space.x - size.x;
+            cl->available_space.x -= size.x + cl->column.spacing;
             break;
         }
         break;
@@ -1386,16 +1402,6 @@ Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
     }
     
     return pos;
-}
-
-Rect gui_layout_rect(GuiLayout *cl)
-{
-    ASSERT(cl);
-    
-    Rect r;
-    r.pos = cl->pos+cl->current;
-    r.size = cl->available_space;
-    return r;
 }
 
 bool gui_active_parent(GuiId id)
@@ -1410,10 +1416,10 @@ Vector2 gui_layout_widget(Vector2 *required_size)
     Vector2 pos = gui_layout_widget(*required_size);
     switch (layout->type) {
     case GUI_LAYOUT_ROW:
-        required_size->x = layout->size.x;
+        required_size->x = layout->available_space.x;
         break;
     case GUI_LAYOUT_COLUMN:
-        required_size->y = layout->size.y;
+        required_size->y = layout->available_space.y;
         break;
     case GUI_LAYOUT_ABSOLUTE:
         break;
@@ -2030,7 +2036,7 @@ bool gui_begin_menu_id(GuiId id)
         .type = GUI_LAYOUT_COLUMN,
         .pos = pos,
         .size = size,
-        .column.margin = 1.0f,
+        .column.spacing = 1.0f,
     };
     gui_begin_layout(layout);
 
@@ -2120,7 +2126,9 @@ bool gui_begin_menu_id(GuiId id, String label)
             .type = GUI_LAYOUT_ROW,
             .pos = menu_pos,
             .size = { 200.0f, 0.0f },
-            .column.margin = 1.0f,
+            .margin.x = 5,
+            .margin.y = 5,
+            .column.spacing = 2,
         };
 
         gui_begin_layout(layout);
@@ -2139,13 +2147,14 @@ bool gui_menu_button_id(GuiId id, String label)
     GuiWindow *wnd = &gui.windows[gui.current_window];
     
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
-    Vector2 text_offset{ 5.0f, 5.0f };
+    Vector2 text_offset{ 0.0f, 0.0f };
     
+    // TODO(jesper): I need something here to essentially get the entire row/column rectangle
+    // to use for mouse hitbox checking, but still play nice with proper layouting or something? I'm
+    // not sure, currently too constipated to think about it.
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
     
-    // TODO(jesper): I don't like how this behaves with how the menu closes as soon as anything inside it is clicked,
-    // but not sure how I want to solve it without a lot of annoying usage code
     gui_hot_rect(id, pos, size);
     bool clicked = gui_active_click(id);
     
@@ -2372,7 +2381,8 @@ Rect gui_layout_widget_fill()
 
 void gui_begin_layout(GuiLayout layout)
 {
-    layout.available_space = layout.size;
+    layout.available_space = layout.size - 2*layout.margin;
+    layout.current += layout.margin;
     array_add(&gui.layout_stack, layout);
 }
 
