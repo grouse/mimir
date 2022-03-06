@@ -72,6 +72,14 @@ enum GuiWindowFlags : u32 {
     GUI_WINDOW_DEFAULT = GUI_WINDOW_MOVABLE | GUI_WINDOW_RESIZABLE
 };
 
+enum GuiLayoutFlags : u32 {
+    GUI_LAYOUT_EXPAND_X = 1 << 0,
+    GUI_LAYOUT_EXPAND_Y = 1 << 1,
+    
+    
+    GUI_LAYOUT_EXPAND_SIZE = GUI_LAYOUT_EXPAND_X | GUI_LAYOUT_EXPAND_Y,
+};
+
 struct GuiId {
     i32 owner;
     i32 index;
@@ -115,6 +123,7 @@ struct GuiWindowState {
 
 struct GuiMenu {
     GuiId id;
+    Vector2 size;
     i32 draw_index = -1;
     bool active;
 };
@@ -127,6 +136,7 @@ enum GuiLayoutType {
 
 struct GuiLayout {
     GuiLayoutType type;
+    u32 flags;
     
     union {
         struct {
@@ -148,7 +158,7 @@ struct GuiLayout {
     };
 };
 
-// TODO(jesper0): this is really more like scrollarea state, I just need to do a couple
+// TODO(jesper): this is really more like scrollarea state, I just need to do a couple
 // passes on the API before it gets there
 struct GuiLister {
     GuiId id;

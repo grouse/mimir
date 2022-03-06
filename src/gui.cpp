@@ -639,6 +639,88 @@ bool gui_active_drag(GuiId id, Vector2 data)
     return gui.active == id;
 }
 
+bool gui_active_parent(GuiId id)
+{
+    return gui.active == id || gui.current_id.owner == id.owner;
+}
+
+Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
+{
+    GuiLayout *cl = gui_current_layout();
+    Vector2 pos = cl->pos;
+
+    switch (cl->type) {
+    case GUI_LAYOUT_ROW:
+        pos += cl->current;
+
+        switch (anchor) {
+        case GUI_ANCHOR_TOP:
+            cl->current.y += size.y + cl->row.spacing;
+            cl->available_space.y -=  size.y + cl->row.spacing;
+            break;
+        case GUI_ANCHOR_BOTTOM:
+            pos.y += cl->available_space.y - size.y;
+            cl->available_space.y -= size.y + cl->row.spacing;
+            break;
+        }
+        break;
+    case GUI_LAYOUT_COLUMN:
+        pos += cl->current;
+
+        switch (anchor) {
+        case GUI_ANCHOR_LEFT:
+            cl->current.x += size.x + cl->column.spacing;
+            cl->available_space.x -= size.x + cl->column.spacing;
+            break;
+        case GUI_ANCHOR_RIGHT:
+            pos.x += cl->available_space.x - size.x;
+            cl->available_space.x -= size.x + cl->column.spacing;
+            break;
+        }
+        break;
+    case GUI_LAYOUT_ABSOLUTE:
+        break;
+    }
+
+    if (cl->flags & GUI_LAYOUT_EXPAND_X) {
+        f32 diff = (pos.x + size.x) - (cl->pos.x + cl->size.x - cl->margin.x);
+        if (diff > 0) {
+            cl->size.x += diff;
+            cl->available_space.x += diff;
+        }
+    }
+    
+    if (cl->flags & GUI_LAYOUT_EXPAND_Y) {
+        f32 diff = (pos.y + size.y) - (cl->pos.y + cl->size.y - cl->margin.y);
+        if (diff > 0) {
+            cl->size.y += diff;
+            cl->available_space.y += diff;
+        }
+    }
+
+    return pos;
+}
+
+Vector2 gui_layout_widget(Vector2 *required_size)
+{
+    GuiLayout *layout = gui_current_layout();
+
+    Vector2 pos = gui_layout_widget(*required_size);
+    switch (layout->type) {
+    case GUI_LAYOUT_ROW:
+        required_size->x = layout->available_space.x;
+        break;
+    case GUI_LAYOUT_COLUMN:
+        required_size->y = layout->available_space.y;
+        break;
+    case GUI_LAYOUT_ABSOLUTE:
+        break;
+    }
+
+    return pos;
+}
+
+
 bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
@@ -1071,10 +1153,10 @@ GuiLister* gui_find_or_create_lister(GuiId id)
     return &gui.listers[i];
 }
 
-GuiMenu* gui_find_or_create_menu(GuiId id) 
+GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size) 
 {
     for (auto &it : gui.menus) if (it.id == id) return &it;
-    i32 i = array_add(&gui.menus, GuiMenu{ .id = id, .active = false });
+    i32 i = array_add(&gui.menus, GuiMenu{ .id = id, .size = initial_size, .active = false });
     return &gui.menus[i];
 }
 
@@ -1363,72 +1445,6 @@ void gui_end_window()
     gui_end_layout();
     gui.current_window = 1;
 }
-
-Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
-{
-    GuiLayout *cl = gui_current_layout();
-    Vector2 pos = cl->pos;
-    
-    switch (cl->type) {
-    case GUI_LAYOUT_ROW:
-        pos += cl->current;
-        
-        switch (anchor) {
-        case GUI_ANCHOR_TOP:
-            cl->current.y += size.y + cl->row.spacing;
-            cl->available_space.y -=  size.y + cl->row.spacing;
-            break;
-        case GUI_ANCHOR_BOTTOM:
-            pos.y += cl->available_space.y - size.y;
-            cl->available_space.y -= size.y + cl->row.spacing;
-            break;
-        }
-        break;
-    case GUI_LAYOUT_COLUMN:
-        pos += cl->current;
-        
-        switch (anchor) {
-        case GUI_ANCHOR_LEFT:
-            cl->current.x += size.x + cl->column.spacing;
-            cl->available_space.x -= size.x + cl->column.spacing;
-            break;
-        case GUI_ANCHOR_RIGHT:
-            pos.x += cl->available_space.x - size.x;
-            cl->available_space.x -= size.x + cl->column.spacing;
-            break;
-        }
-        break;
-    case GUI_LAYOUT_ABSOLUTE:
-        break;
-    }
-    
-    return pos;
-}
-
-bool gui_active_parent(GuiId id)
-{
-    return gui.active == id || gui.current_id.owner == id.owner;
-}
-
-Vector2 gui_layout_widget(Vector2 *required_size)
-{
-    GuiLayout *layout = gui_current_layout();
-
-    Vector2 pos = gui_layout_widget(*required_size);
-    switch (layout->type) {
-    case GUI_LAYOUT_ROW:
-        required_size->x = layout->available_space.x;
-        break;
-    case GUI_LAYOUT_COLUMN:
-        required_size->y = layout->available_space.y;
-        break;
-    case GUI_LAYOUT_ABSOLUTE:
-        break;
-    }
-
-    return pos;
-}
-
 
 GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *position, Vector2 axis)
 {
@@ -2028,11 +2044,12 @@ bool gui_begin_menu_id(GuiId id)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GuiLayout *cl = gui_current_layout();
-    gui_find_or_create_menu(id);
 
     Vector2 size{ cl->size.x, gui.style.text.font.line_height + 10.0f };
     Vector2 pos = gui_layout_widget(size);
     
+    gui_find_or_create_menu(id, size);
+
     GuiLayout layout{
         .type = GUI_LAYOUT_COLUMN,
         .pos = pos,
@@ -2048,35 +2065,6 @@ bool gui_begin_menu_id(GuiId id)
     return true;
 }
 
-void gui_end_menu()
-{
-    GuiLayout *layout = gui_current_layout();
-    GuiMenu *menu = gui_find_menu(gui.current_id);
-    ASSERT(menu);
-    
-    if (menu->active && gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
-            switch (e.type) {
-            case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_ESC: menu->active = false; break;
-                }
-                break;
-            default: break;
-            }
-        }
-    }
-    
-    gui_end_layout();
-    gui_pop_id();
-
-    if (layout->type == GUI_LAYOUT_ROW && menu->active) {
-        Vector3 bg = rgb_unpack(0xFF212121);
-        Vector2 size{ layout->size.x, layout->size.y + layout->current.y };
-        gui_draw_rect(layout->pos, size, bg, &gui.windows[1].command_buffer, menu->draw_index);
-    }
-}
-
 bool gui_begin_menu_id(GuiId id, String label)
 {
     // TODO(jesper): need to figure out how to do nested menus with id_stack and whatever else
@@ -2085,7 +2073,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GuiLayout *cl = gui_current_layout();
     
-    GuiMenu *menu = gui_find_or_create_menu(id);
+    GuiMenu *menu = gui_find_or_create_menu(id, { 100.0f, 0.0f });
     menu->draw_index = gui.windows[1].command_buffer.commands.count;
     
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
@@ -2125,8 +2113,9 @@ bool gui_begin_menu_id(GuiId id, String label)
 
         GuiLayout layout{
             .type = GUI_LAYOUT_ROW,
+            .flags = GUI_LAYOUT_EXPAND_SIZE,
             .pos = menu_pos,
-            .size = { 200.0f, 0.0f },
+            .size = menu->size,
             .margin.x = 5,
             .margin.y = 5,
             .column.spacing = 2,
@@ -2136,6 +2125,35 @@ bool gui_begin_menu_id(GuiId id, String label)
     }
     
     return menu->active;
+}
+
+void gui_end_menu()
+{
+    GuiLayout *layout = gui_current_layout();
+    GuiMenu *menu = gui_find_menu(gui.current_id);
+    ASSERT(menu);
+
+    if (menu->active && gui_capture(gui.capture_keyboard)) {
+        for (InputEvent e : gui.events) {
+            switch (e.type) {
+            case IE_KEY_PRESS:
+                switch (e.key.virtual_code) {
+                case VC_ESC: menu->active = false; break;
+                }
+                break;
+            default: break;
+            }
+        }
+    }
+
+    menu->size = layout->size;
+    if (layout->type == GUI_LAYOUT_ROW && menu->active) {
+        Vector3 bg = rgb_unpack(0xFF212121);
+        gui_draw_rect(layout->pos, menu->size, bg, &gui.windows[1].command_buffer, menu->draw_index);
+    }
+    
+    gui_end_layout();
+    gui_pop_id();
 }
 
 bool gui_menu_button_id(GuiId id, String label)
@@ -2165,8 +2183,7 @@ bool gui_menu_button_id(GuiId id, String label)
     }
 
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
-    Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
-    gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
+    if (gui.hot == id) gui_draw_rect(pos, size, wnd->clip_rect, rgb_unpack(0xFF282828) );
     gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
     return clicked;
 }
