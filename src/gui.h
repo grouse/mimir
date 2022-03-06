@@ -8,8 +8,10 @@
 #include "gfx_opengl.h"
 #include "font.h"
 
-#define GUI_ID(index) GuiId{ __COUNTER__, index, -1 }
-#define GUI_ID_INVALID GuiId{ -1, -1, -1 }
+#include <initializer_list>
+
+#define GUI_ID(index) GuiId{ __COUNTER__+1, index, -1}
+#define GUI_ID_INVALID GuiId{ 0, 0, 0 }
 #define GUI_ID_INTERNAL(id, internal) GuiId{ id.owner, id.index, internal }
 #define GUI_ID_INDEX(id, index) GuiId{ id.owner, index, id.internal }
 
@@ -36,6 +38,9 @@
 
 #define gui_menu(...) for (i32 i_##__LINE__ = 0; i_##__LINE__ == 0 && gui_begin_menu(__VA_ARGS__); i_##__LINE__ = (gui_end_menu(), 1))
 #define gui_window(...) for (i32 i_##__LINE__ = 0; i_##__LINE__ == 0 && gui_begin_window(__VA_ARGS__); i_##__LINE__ = (gui_end_window(), 1))
+
+#define GUI_BACKGROUND 0
+#define GUI_OVERLAY 1
 
 enum GuiEditboxAction {
     GUI_EDITBOX_NONE = 0,
@@ -179,10 +184,12 @@ struct GuiContext {
     } edit;
     
     GuiId hot = GUI_ID_INVALID;
-    GuiId active = GUI_ID_INVALID;
-    GuiId active_press = GUI_ID_INVALID;
-    GuiId last_active = GUI_ID_INVALID;
-    GuiId active_window = GUI_ID_INVALID;
+    GuiId focused = GUI_ID_INVALID;
+    GuiId pressed = GUI_ID_INVALID;
+    
+    GuiId last_focused = GUI_ID_INVALID;
+
+    GuiId focused_window = GUI_ID_INVALID;
     GuiId active_menu = GUI_ID_INVALID;
     
     i32 hot_z = 0;
@@ -241,7 +248,7 @@ struct GuiContext {
             
             Vector3 title_bg = rgb_unpack(0xFF212121);
             Vector3 title_bg_hot = rgb_unpack(0xFFFD8433);
-            Vector3 title_bg_active = rgb_unpack(0xFFCA5100);
+            Vector3 title_bg_focus = rgb_unpack(0xFFCA5100);
             
             Vector3 close_bg_hot = rgb_unpack(0xFFFF0000);
         } window;
@@ -250,13 +257,13 @@ struct GuiContext {
             Font font;
             
             Vector3 bg = rgb_unpack(0xFF333333);
-            Vector3 bg_active = rgb_unpack(0xFF2C2C2C);
+            Vector3 bg_focus = rgb_unpack(0xFF2C2C2C);
             Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
             
             Vector3 accent0 = rgb_unpack(0xFF404040);
-            Vector3 accent0_active = rgb_unpack(0xFF000000);
+            Vector3 accent0_focus = rgb_unpack(0xFF000000);
             Vector3 accent1 = rgb_unpack(0xFF000000);
-            Vector3 accent1_active = rgb_unpack(0xFF404040);
+            Vector3 accent1_focus = rgb_unpack(0xFF404040);
             Vector3 accent2 = rgb_unpack(0xFF1D2021);
         } button;
         
@@ -270,7 +277,7 @@ struct GuiContext {
             
             Vector3 scroll_btn = rgb_unpack(0xFF333333);
             Vector3 scroll_btn_hot = rgb_unpack(0xFF3A3A3A);
-            Vector3 scroll_btn_active = rgb_unpack(0xFF2C2C2C);
+            Vector3 scroll_btn_focus = rgb_unpack(0xFF2C2C2C);
             
             f32 thickness = 15.0f;
         } scrollbar;
@@ -319,6 +326,8 @@ template<typename T> void gui_dropdown_id(GuiId id, Array<String> labels, Array<
 template<typename T> void gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value);
 template<typename T> T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value);
 template<typename T> T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value);
+
+template<typename T> T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value);
 
 void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor = GUI_ANCHOR_RIGHT);
 void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, GuiAnchor anchor = GUI_ANCHOR_RIGHT);

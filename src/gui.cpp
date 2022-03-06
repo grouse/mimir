@@ -46,7 +46,7 @@ void init_gui()
     if (auto a = find_asset("textures/check.png"); a) gui.style.icons.check = gfx_load_texture(a->data, a->size);
 
     gui.style.text.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
-    gui.style.button.font = gui.style.text.font;
+    gui.style.button.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
 }
 
 GuiLayout *gui_current_layout()
@@ -66,28 +66,96 @@ bool gui_capture(bool capture_var[2])
     capture_var[1] = true;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    return capture_var[0] && gui.active_window == wnd->id;
+    return capture_var[0] && gui.focused_window == wnd->id;
 }
 
-void gui_hot(GuiId id, i32 hot_z)
+void gui_drag_start(Vector2 data)
 {
-    // TODO(jesper): this shouldn't make things hot if there's a different active widget, but the menus
-    // are using active widget in weird ways right now. They need to be rewritten to be much more reliable
-    // while leaving the active/hot widgets alone
-    //gui.hot = (gui.active == GUI_ID_INVALID || gui.active == id) && (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
-    gui.hot = (gui.hot == GUI_ID_INVALID || gui.hot_z <= hot_z) ? id : gui.hot;
-    gui.hot_z = gui.hot_z <= hot_z ? hot_z : gui.hot_z;
+    gui.drag_start_mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+    gui.drag_start_data = data;
 }
 
-void gui_hot(GuiId id)
+void gui_drag_start(Vector2 data, Vector2 data1)
 {
-    gui.hot = id;
+    gui.drag_start_mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+    gui.drag_start_data = data;
+    gui.drag_start_data1 = data1;
+}
+
+void gui_hot(GuiId id, i32 z)
+{
+    if ((gui.pressed == GUI_ID_INVALID || gui.pressed == id) &&
+        (gui.hot == GUI_ID_INVALID || z == GUI_OVERLAY || (gui.hot_z < z && gui.hot_z != GUI_OVERLAY)))
+    {
+        gui.hot = id;
+        gui.hot_z = z;
+    }
+}
+
+void gui_clear_hot()
+{
+    gui.hot = GUI_ID_INVALID;
     gui.hot_z = -1;
 }
 
-void gui_active(GuiId id)
+bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_window)
 {
-    gui.active = id;
+    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+    Vector2 rel = mouse - pos;
+
+    if ((rel.x >= 0.0f && rel.x < size.x &&
+         rel.y >= 0.0f && rel.y < size.y))
+    {
+        gui_hot(id, z);
+    } else if (gui.hot == id) {
+        gui_clear_hot();
+    }
+
+    return gui.hot == id;
+}
+
+bool gui_clicked(GuiId id)
+{
+    if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
+        gui.pressed = id;
+    } else if (gui.pressed == id && !gui.mouse.left_pressed) {
+        gui.pressed = GUI_ID_INVALID;
+        return true;
+    }
+
+    return false;
+}
+
+bool gui_pressed(GuiId id)
+{
+    if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
+        gui.pressed = id;
+        return true;
+    } 
+    return false;
+}
+
+bool gui_drag(GuiId id, Vector2 data)
+{
+    if (gui.hot == id || gui.pressed == id) {
+        if (gui.pressed != id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed)  {
+            gui.pressed = id;
+            gui_drag_start(data);
+        } else if (gui.pressed == id && !gui.mouse.left_pressed) {
+            gui.pressed = GUI_ID_INVALID;
+        }
+    }
+    
+    if (gui.pressed == id) {
+        gui_hot(id, gui.current_window);
+        gui.focused_window = gui_current_window()->id;
+    }
+    return gui.pressed == id;
+}
+
+bool gui_focused_parent(GuiId id)
+{
+    return gui.focused == id || gui.current_id.owner == id.owner;
 }
 
 bool apply_clip_rect(GlyphRect *g, Rect clip_rect)
@@ -183,8 +251,8 @@ void gui_begin_frame()
     
     // NOTE(jesper): when resolution changes the root and overlay "windows" have to adjust their
     // clip rects as well
-    gui.windows[0].clip_rect.size = gfx.resolution;
-    gui.windows[1].clip_rect.size = gfx.resolution;
+    gui.windows[GUI_BACKGROUND].clip_rect.size = gfx.resolution;
+    gui.windows[GUI_OVERLAY].clip_rect.size = gfx.resolution;
 
     GuiLayout root_layout{
         .type = GUI_LAYOUT_ABSOLUTE,
@@ -193,7 +261,7 @@ void gui_begin_frame()
     };
     gui_begin_layout(root_layout);
     
-    gui.last_active = gui.active;
+    gui.last_focused = gui.focused;
 }
 
 void gui_end_frame()
@@ -204,7 +272,7 @@ void gui_end_frame()
     glBindBuffer(GL_ARRAY_BUFFER, gui.vbo);
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
-    if (!gui.mouse.left_pressed) gui.active_press = GUI_ID_INVALID;
+    if (!gui.mouse.left_pressed) gui.pressed = GUI_ID_INVALID;
     
     gui.events.count = 0;
     gui.capture_text[0] = gui.capture_text[1];
@@ -217,19 +285,19 @@ void gui_end_frame()
     gui.capture_mouse_wheel[1] = false;
 
     for (GuiWindow &wnd : gui.windows) {
-        if (!wnd.active && gui.active_window == wnd.id) {
-            gui.active_window = GUI_ID_INVALID;
+        if (!wnd.active && gui.focused_window == wnd.id) {
+            gui.focused_window = GUI_ID_INVALID;
         }
     }
 }
 
 void gui_render()
 {
-    gfx_submit_commands(gui.windows[0].command_buffer);
+    gfx_submit_commands(gui.windows[GUI_BACKGROUND].command_buffer);
     for (i32 i = 2; i < gui.windows.count; i++) {
         gfx_submit_commands(gui.windows[i].command_buffer);
     }
-    gfx_submit_commands(gui.windows[1].command_buffer);
+    gfx_submit_commands(gui.windows[GUI_OVERLAY].command_buffer);
 }
 
 GfxCommand gui_command(GfxCommandType type)
@@ -557,26 +625,6 @@ GuiWindow* push_window_to_top(i32 index)
     return &gui.windows[gui.windows.count-1];
 }
 
-bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_window)
-{
-    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 rel = mouse - pos;
-    
-    // TODO(jesper): investigate whether this should short circuit if gui.active == id
-    // - Does not work in menu and submenus. Sub-menus are essentially open if they are active
-    // it should probably be re-worked
-    if (//gui.active == id ||
-        (rel.x >= 0.0f && rel.x < size.x &&
-         rel.y >= 0.0f && rel.y < size.y))
-    {
-        gui_hot(id, z);
-    } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
-    }
-    
-    return gui.hot == id;
-}
-
 bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
 {
     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
@@ -589,59 +637,6 @@ bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
     }
 
     return false;
-}
-
-void gui_drag_start(Vector2 data)
-{
-    gui.drag_start_mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    gui.drag_start_data = data;
-}
-
-void gui_drag_start(Vector2 data, Vector2 data1)
-{
-    gui.drag_start_mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    gui.drag_start_data = data;
-    gui.drag_start_data1 = data1;
-}
-
-bool gui_active_click(GuiId id)
-{
-    bool clicked = false;
-    if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-        gui_active(id);
-    } else if (gui.active == id && !gui.mouse.left_pressed) {
-        clicked = gui.hot == id && gui.mouse.left_was_pressed;
-        gui_active(GUI_ID_INVALID);
-    }
-    
-    return clicked;
-}
-
-void gui_active_press(GuiId id)
-{
-    if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-        gui.active == id ? gui_active(GUI_ID_INVALID) : gui_active(id);
-        gui.active_press = gui.active;
-    } 
-}
-
-bool gui_active_drag(GuiId id, Vector2 data)
-{
-    if (gui.hot == id || gui.active == id) {
-        if (gui.active != id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed)  {
-            gui_active(id);
-            gui_drag_start(data);
-        } else if (gui.active == id && !gui.mouse.left_pressed) {
-            gui_active(GUI_ID_INVALID);
-        }
-    }
-    
-    return gui.active == id;
-}
-
-bool gui_active_parent(GuiId id)
-{
-    return gui.active == id || gui.current_id.owner == id.owner;
 }
 
 Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
@@ -725,12 +720,12 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
+    bool clicked = gui_clicked(id);
     gui_hot_rect(id, pos, size);
-    bool clicked = gui_active_click(id);
 
-    Vector3 btn_bg = gui.active == id ? gui.style.button.bg_active : gui.hot == id ? gui.style.button.bg_hot : gui.style.button.bg;
-    Vector3 btn_bg_acc0 = gui.active == id ? gui.style.button.accent0_active : gui.style.button.accent0;
-    Vector3 btn_bg_acc1 = gui.active == id ? gui.style.button.accent1_active : gui.style.button.accent1;
+    Vector3 btn_bg = gui.pressed == id ? gui.style.button.bg_focus : gui.hot == id ? gui.style.button.bg_hot : gui.style.button.bg;
+    Vector3 btn_bg_acc0 = gui.pressed == id ? gui.style.button.accent0_focus : gui.style.button.accent0;
+    Vector3 btn_bg_acc1 = gui.pressed == id ? gui.style.button.accent1_focus : gui.style.button.accent1;
     Vector3 btn_bg_acc2 = gui.style.button.accent2;
 
     Rect clip_rect{ wnd->clip_rect };
@@ -799,14 +794,14 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector2 btn_pos = pos + btn_offset;
 
-    gui_hot_rect(id, pos, size);
-    if (gui_active_click(id)) {
+    if (gui_clicked(id)) {
         *checked = !(*checked);
         toggled = true;
     }
+    gui_hot_rect(id, pos, size);
 
     Vector3 border_col = rgb_unpack(0xFFCCCCCC);
-    Vector3 bg_col = gui.active == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
+    Vector3 bg_col = gui.pressed == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
     Vector3 checked_col = rgb_unpack(0xFFCCCCCC); (void)checked_col;
     Vector3 label_col = rgb_unpack(0xFFFFFFFF);
 
@@ -823,31 +818,24 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     u32 action = GUI_EDITBOX_NONE;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    
-    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 rel = mouse - pos;
-    if ((rel.x >= 0.0f && rel.x < size.x &&
-         rel.y >= 0.0f && rel.y < size.y))
-    {
-        gui_hot(id, gui.current_window);
-    } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
-    }
-    
+
     if (gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
         if (gui.hot == id) {
-            gui_active(id);
+            gui.focused = id;
+            gui.pressed = id;
             gui.edit.selection = 0;
             gui.edit.cursor = 0;
             gui.edit.offset = 0;
             memcpy(gui.edit.buffer, in_str.data, in_str.length);
             gui.edit.length = in_str.length;
-        } else if (gui.active == id) {
-            gui_active(GUI_ID_INVALID);
+        } else if (gui.focused == id) {
+            gui.focused = GUI_ID_INVALID;
+            gui.pressed = GUI_ID_INVALID;
             action |= GUI_EDITBOX_CANCEL;
         }
     }
-
+    gui_hot_rect(id, pos, size);
+    
     Vector3 selection_bg = rgb_unpack(0xFFCCCCCC);
     Vector3 edit_bg = rgb_unpack(0xFF1D2021);
     Vector3 edit_acc0 = rgb_unpack(0xFF404040);
@@ -856,7 +844,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     Vector2 edit_pos = pos + Vector2{ 1.0f, 1.0f };
     Vector2 edit_size = size - Vector2{ 2.0f, 2.0f };
     
-    if (gui.active == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
+    if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
@@ -944,13 +932,13 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                     }  break;
                 case VC_ENTER:
                     action |= GUI_EDITBOX_FINISH;
-                    gui_hot(GUI_ID_INVALID);
-                    gui_active(GUI_ID_INVALID);
+                    gui_clear_hot();
+                    gui.focused = GUI_ID_INVALID;
                     break;
                 case VC_ESC:
                     action |= GUI_EDITBOX_CANCEL;
-                    gui_hot(GUI_ID_INVALID);
-                    gui_active(GUI_ID_INVALID);
+                    gui_clear_hot();
+                    gui.focused = GUI_ID_INVALID;
                     break;
                     
                 default: break;
@@ -997,7 +985,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     text_clip_rect.size.x = MIN(edit_pos.x + edit_size.x, wnd->clip_rect.pos.x + wnd->clip_rect.size.x) - text_clip_rect.pos.x;
     text_clip_rect.size.y = MIN(edit_pos.y + edit_size.y, wnd->clip_rect.pos.y + wnd->clip_rect.size.y) - text_clip_rect.pos.y;
     
-    String str = gui.active == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
+    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
     Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font);
 
     gui_draw_rect(pos, size, wnd->clip_rect, edit_acc0);
@@ -1007,9 +995,9 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     Vector2 text_offset{}; 
     
     if (glyphs.count > 0) {
-        i32 offset = gui.active == id ? gui.edit.offset : 0;
+        i32 offset = gui.focused == id ? gui.edit.offset : 0;
         
-        if (gui.active == id) {
+        if (gui.focused == id) {
             text_offset.x = gui.edit.offset < glyphs.count ? 
                 -glyphs[gui.edit.offset].x0 : 
                 -glyphs[gui.edit.offset-1].x1;
@@ -1018,6 +1006,8 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                 i32 new_cursor;
                 for (new_cursor = 0; new_cursor < glyphs.count; new_cursor++) {
                     GlyphRect g = glyphs.data[new_cursor];
+                    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+                    Vector2 rel = mouse - pos;
                     if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
                         break;
                     }
@@ -1028,6 +1018,8 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
                 i32 new_selection;
                 for (new_selection = 0; new_selection < glyphs.count; new_selection++) {
                     GlyphRect g = glyphs.data[new_selection];
+                    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+                    Vector2 rel = mouse - pos;
                     if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
                         break;
                     }
@@ -1067,7 +1059,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
         gui_draw_text(slice(glyphs, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
     }
 
-    if (gui.active == id) {
+    if (gui.focused == id) {
         gui_draw_rect(
             cursor_pos + text_offset, 
             Vector2{ 1.0f, gui.style.text.font.line_height }, 
@@ -1082,7 +1074,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str)
     Vector2 size{ 20.0f, 20.0f };
     Vector2 pos = gui_layout_widget(&size);
     
-    String str = gui.active == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
+    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
     return gui_editbox_id(id, str, pos, size);
 }
 
@@ -1109,7 +1101,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size)
 {
     char buffer[100];
 
-    String str = gui.active == id ? 
+    String str = gui.focused == id ? 
         String{ gui.edit.buffer, gui.edit.length } : 
         stringf(buffer, sizeof buffer, "%f", *value);
     
@@ -1123,7 +1115,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 pos, Vector2 size)
 {
     char buffer[100];
 
-    String str = gui.active == id ? 
+    String str = gui.focused == id ? 
         String{ gui.edit.buffer, gui.edit.length } : 
         stringf(buffer, sizeof buffer, "%f", *value);
 
@@ -1184,7 +1176,7 @@ i32 gui_create_window(GuiId id, u32 flags, Vector2 pos, Vector2 size)
     wnd.size = size;
     wnd.command_buffer.commands.alloc = mem_frame;
     
-    if (gui.active_window == GUI_ID_INVALID) gui.active_window = id;
+    if (gui.focused_window == GUI_ID_INVALID) gui.focused_window = id;
     
     return array_add(&gui.windows, wnd);
 }
@@ -1209,11 +1201,11 @@ bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size)
     Vector2 icon_size = gui.style.window.close_size;
     Vector2 icon_pos = close_pos + (close_size - icon_size) * 0.5f;
     
+    bool clicked = gui_clicked(id);
     if (gui_hot_rect(id, close_pos, close_size)) {
         gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot, &wnd->command_buffer);
     }
 
-    bool clicked = gui_active_click(id);
     gui_draw_rect(icon_pos, icon_size, gui.style.icons.close);
     return clicked;
 }
@@ -1254,35 +1246,51 @@ bool gui_begin_window_id(
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
+    if (gui.hot == id) gui_clear_hot();
+    
     Vector2 window_border = gui.style.window.border;
     Vector2 title_size = { wnd->size.x - 2.0f*window_border.x, gui.style.window.title_height };
-
-    GuiId title_id = GUI_ID_INTERNAL(id, 1);
-
-    gui_hot_rect(id, wnd->pos, wnd->size);
     
+    GuiId title_id = GUI_ID_INTERNAL(id, 1);
+    GuiId close_id = GUI_ID_INTERNAL(id, 30);
+
+    if (flags & GUI_WINDOW_CLOSE) {
+        if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
+            gui.focused = GUI_ID_INVALID;
+            gui_clear_hot();
+            gui.current_window = 1;
+            return false;
+        }
+    }
+
+    if (flags & GUI_WINDOW_MOVABLE) {
+        if (gui_drag(title_id, wnd->pos) && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
+            Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+            wnd->pos = gui.drag_start_data + mouse - gui.drag_start_mouse;
+        }
+        gui_hot_rect(title_id, wnd->pos, title_size);
+    }
+
+
     wnd->active = true;
     if (!wnd->last_active) {
         wnd = push_window_to_top(index);
-        gui.active_window = id;
-    } else if (gui.hot == id) {
+        gui.focused_window = id;
+    } else if (gui_mouse_over_rect(wnd->pos, wnd->size)) {
         if (gui.mouse.left_pressed && 
             !gui.mouse.left_was_pressed) 
         {
             wnd = push_window_to_top(index);
-            gui.active_window = id;
+            gui.focused_window = id;
         }
     } else {
-        if (gui.active_window == id && 
+        if (gui.focused_window == id && 
             gui.mouse.left_pressed && 
             !gui.mouse.left_was_pressed) 
         {
-            gui.active_window = GUI_ID_INVALID;
+            gui.focused_window = GUI_ID_INVALID;
         }
     }
-    
-    if (gui.active == title_id) gui_hot(title_id, index);
-    else gui_hot_rect(title_id, wnd->pos, title_size);
 
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
@@ -1294,10 +1302,10 @@ bool gui_begin_window_id(
                 switch (e.key.virtual_code) {
                 case VC_Q:
                     if (e.key.modifiers == MF_CTRL) {
-                        gui.active_window = GUI_ID_INVALID;
+                        gui.focused_window = GUI_ID_INVALID;
                         
                         if (gui.hot == id) gui.hot = GUI_ID_INVALID;
-                        if (gui.active == id) gui.active = GUI_ID_INVALID;
+                        if (gui.focused == id) gui.focused = GUI_ID_INVALID;
                         
                         if (gui.current_window == index) gui.current_window = 1;
                         return false;
@@ -1311,9 +1319,9 @@ bool gui_begin_window_id(
         }
     }
     
-    Vector3 title_bg = gui.active_window != id
+    Vector3 title_bg = gui.focused_window != id
         ? gui.style.window.title_bg
-        : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_active;
+        : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_focus;
     
     Vector2 title_pos = wnd->pos + window_border + Vector2{ 2.0f, 2.0f };
 
@@ -1321,30 +1329,6 @@ bool gui_begin_window_id(
     gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.window.bg);
     gui_draw_rect(wnd->pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
-    
-    if (flags & GUI_WINDOW_CLOSE) {
-        GuiId close_id = GUI_ID_INTERNAL(id, 30);
-        if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
-            gui_active(GUI_ID_INVALID);
-            gui_hot(GUI_ID_INVALID);
-            gui.current_window = 1;
-            return false;
-        }
-    }
-    
-    if (flags & GUI_WINDOW_MOVABLE) {
-        if (gui.hot == title_id) {
-            if (gui.active != title_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-                gui_active(title_id);
-                gui_drag_start(wnd->pos);
-            } else if (gui.active == title_id && !gui.mouse.left_pressed) {
-                gui_active(GUI_ID_INVALID);
-            } else if (gui.active == title_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
-                Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-                wnd->pos = gui.drag_start_data + mouse - gui.drag_start_mouse;
-            }
-        } 
-    }
     
     Vector2 layout_pos = wnd->pos + window_border + Vector2{ 2.0f, title_size.y + 2.0f } + gui.style.window.margin;
     Vector2 layout_size = wnd->size - 2.0f*window_border - Vector2{ 2.0f, title_size.y + 2.0f } - 2*gui.style.window.margin;
@@ -1393,21 +1377,13 @@ void gui_end_window()
 
         Vector2 resize_bl{ br.x - 10.0f, br.y };
 
-        if (gui.active == resize_id ||
-            point_in_triangle(mouse, resize_tr, resize_br, resize_bl))
-        {
-            gui_hot(resize_id, gui.current_window);
-        } else if (gui.hot == resize_id) {
-            gui_hot(GUI_ID_INVALID);
-        }
-
         if (gui.hot == resize_id) {
-            if (gui.active != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-                gui_active(resize_id);
+            if (gui.pressed != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
+                gui.pressed = resize_id;
                 gui_drag_start(wnd->size);
-            } else if (gui.active == resize_id && !gui.mouse.left_pressed) {
-                gui_active(GUI_ID_INVALID);
-            } else if (gui.active == resize_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
+            } else if (gui.pressed == resize_id && !gui.mouse.left_pressed) {
+                gui.pressed = GUI_ID_INVALID;
+            } else if (gui.pressed == resize_id && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
                 Vector2 nsize = gui.drag_start_data + mouse - gui.drag_start_mouse;
                 wnd->size.x = MAX(min_size.x, nsize.x);
                 wnd->size.y = MAX(min_size.y, nsize.y);
@@ -1418,10 +1394,22 @@ void gui_end_window()
                 resize_bl = { br.x - 10.0f, br.y };
             }
         }
+        if (gui.pressed == resize_id || 
+            point_in_triangle(mouse, resize_tr, resize_br, resize_bl))
+        {
+            if (gui.hot == GUI_ID_INVALID) {
+                gui.hot = resize_id;
+                gui.hot_z = gui.current_window;
+            }
+        } else if (gui.hot == resize_id) {
+            gui_clear_hot();
+        }
+
 
         Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
     }
+    gui_hot_rect(wnd->id, wnd->pos, wnd->size);
     
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
@@ -1432,7 +1420,7 @@ void gui_end_window()
             case IE_KEY_PRESS:
                 switch (e.key.virtual_code) {
                 case VC_ESC: 
-                    gui.active_window = GUI_ID_INVALID;
+                    gui.focused_window = GUI_ID_INVALID;
                     break;
                 default: break;
                 }
@@ -1451,7 +1439,7 @@ GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *
     GuiGizmoAction action = GUI_GIZMO_NONE;
     
     // TODO(jesper): these wigets need to support a rotated and translated camera
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
     
     Vector2 n{ axis.y, -axis.x };
     
@@ -1470,32 +1458,30 @@ GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *
 
     Vector2 mouse = ws_from_ss(Vector2{ (f32)gui.mouse.x, (f32)gui.mouse.y } + camera.position.xy);
 
-    if (gui.active == id && !gui.mouse.left_pressed) {
-        gui_active(GUI_ID_INVALID);
+    if (gui.pressed == id && !gui.mouse.left_pressed) {
+        gui.pressed = GUI_ID_INVALID;
         action = GUI_GIZMO_END;
     }
     
-    if (gui.active == id ||
+    if (gui.pressed != id &&
+        gui.hot == id && 
+        gui.mouse.left_pressed && 
+        !gui.mouse.left_was_pressed) 
+    {
+        gui.pressed = id;
+        action = GUI_GIZMO_BEGIN;
+        gui_drag_start(*position);
+    }
+    if (gui.pressed == id ||
         point_in_rect(mouse, tl, tr, br, tl) ||
         point_in_triangle(mouse, t0, t1, t2))
     {
         gui_hot(id, -1);
     } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
+        gui_clear_hot();
     }
-    
-    if (gui.active != id &&
-        gui.hot == id && 
-        gui.mouse.left_pressed && 
-        !gui.mouse.left_was_pressed) 
-    {
-        gui_active(id);
-        action = GUI_GIZMO_BEGIN;
 
-        gui_drag_start(*position);
-    }
-    
-    if (gui.active == id) {
+    if (gui.pressed == id) {
         Vector2 d = mouse - gui.drag_start_mouse;
         *position = gui.drag_start_data + dot(axis, d) * axis;
     }
@@ -1516,7 +1502,7 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
     GuiGizmoAction action = GUI_GIZMO_NONE;
     
     // TODO(jesper): these wigets need to support a rotated and translated camera
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
 
     Vector2 n{ axis.y, -axis.x };
 
@@ -1540,31 +1526,30 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
 
     Vector2 mouse = ws_from_ss(Vector2{ (f32)gui.mouse.x, (f32)gui.mouse.y } + camera.position.xy);
 
-    if (gui.active == id && !gui.mouse.left_pressed) {
-        gui_active(GUI_ID_INVALID);
+    if (gui.pressed == id && !gui.mouse.left_pressed) {
+        gui.pressed = GUI_ID_INVALID;
         action = GUI_GIZMO_END;
     }
 
-    if (gui.active == id ||
+    if (gui.pressed != id &&
+        gui.hot == id && 
+        gui.mouse.left_pressed && 
+        !gui.mouse.left_was_pressed) 
+    {
+        gui.pressed = id;
+        action = GUI_GIZMO_BEGIN;
+        gui_drag_start(*size);
+    }
+    if (gui.pressed == id ||
         point_in_rect(mouse, tl, tr, br, bl) ||
         point_in_rect(mouse, t0, t1, t2, t3))
     {
         gui_hot(id, -1);
     } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
+        gui_clear_hot();
     }
 
-    if (gui.active != id &&
-        gui.hot == id && 
-        gui.mouse.left_pressed && 
-        !gui.mouse.left_was_pressed) 
-    {
-        gui_active(id);
-        action = GUI_GIZMO_BEGIN;
-        gui_drag_start(*size);
-    }
-
-    if (gui.active == id) {
+    if (gui.pressed == id) {
         Vector2 delta = axis*dot(mouse, axis) - axis*dot(gui.drag_start_mouse, axis);
         delta.y = -delta.y;
         *size = gui.drag_start_data + delta;
@@ -1587,7 +1572,7 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
     GuiGizmoAction action = GUI_GIZMO_NONE;
 
     // TODO(jesper): these wigets need to support a rotated camera
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
 
     Vector2 n{ axis.y, -axis.x };
 
@@ -1611,31 +1596,30 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
 
     Vector2 mouse = ws_from_ss(Vector2{ (f32)gui.mouse.x, (f32)gui.mouse.y } + camera.position.xy);
 
-    if (gui.active == id && !gui.mouse.left_pressed) {
-        gui_active(GUI_ID_INVALID);
+    if (gui.pressed == id && !gui.mouse.left_pressed) {
+        gui.pressed = GUI_ID_INVALID;
         action = GUI_GIZMO_END;
     }
 
-    if (gui.active == id ||
+    if (gui.pressed != id &&
+        gui.hot == id && 
+        gui.mouse.left_pressed && 
+        !gui.mouse.left_was_pressed) 
+    {
+        gui.pressed = id;
+        action = GUI_GIZMO_BEGIN;
+        gui_drag_start(*size);
+    }
+    if (gui.pressed == id ||
         point_in_rect(mouse, tl, tr, br, bl) ||
         point_in_rect(mouse, t0, t1, t2, t3))
     {
         gui_hot(id, -1);
     } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
+        gui_clear_hot();
     }
 
-    if (gui.active != id &&
-        gui.hot == id && 
-        gui.mouse.left_pressed && 
-        !gui.mouse.left_was_pressed) 
-    {
-        gui_active(id);
-        action = GUI_GIZMO_BEGIN;
-        gui_drag_start(*size);
-    }
-
-    if (gui.active == id) {
+    if (gui.pressed == id) {
         Vector2 delta = axis*dot(mouse, axis) - axis*dot(gui.drag_start_mouse, axis);
         delta.x = round_to(delta.x, multiple);
         delta.y = round_to(delta.y, multiple);
@@ -1660,7 +1644,7 @@ GuiGizmoAction gui_2d_gizmo_translate_plane_id(GuiId id, Camera camera, Vector2 
     GuiGizmoAction action = GUI_GIZMO_NONE;
     
     // TODO(jesper): these wigets need to support a rotated camera
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
 
     Vector2 size{ 20.0f, 20.0f };
     
@@ -1672,28 +1656,27 @@ GuiGizmoAction gui_2d_gizmo_translate_plane_id(GuiId id, Camera camera, Vector2 
 
     Vector2 mouse = ws_from_ss(Vector2{ (f32)gui.mouse.x, (f32)gui.mouse.y } + camera.position.xy);
 
-    if (gui.active == id && !gui.mouse.left_pressed) {
-        gui_active(GUI_ID_INVALID);
+    if (gui.focused == id && !gui.mouse.left_pressed) {
+        gui.focused = GUI_ID_INVALID;
         action = GUI_GIZMO_END;
     }
 
-    if (gui.active == id || point_in_rect(mouse, tl, tr, br, bl)) {
-        gui_hot(id, -1);
-    } else if (gui.hot == id) {
-        gui_hot(GUI_ID_INVALID);
-    }
-
-    if (gui.active != id &&
+    if (gui.focused != id &&
         gui.hot == id && 
         gui.mouse.left_pressed && 
         !gui.mouse.left_was_pressed) 
     {
-        gui_active(id);
+        gui.focused = id;
         action = GUI_GIZMO_BEGIN;
         gui_drag_start(*position);
     } 
+    if (gui.focused == id || point_in_rect(mouse, tl, tr, br, bl)) {
+        gui_hot(id, -1);
+    } else if (gui.hot == id) {
+        gui_clear_hot();
+    }
 
-    if (gui.active == id) {
+    if (gui.focused == id) {
         Vector2 d = mouse - gui.drag_start_mouse;
         *position = gui.drag_start_data + d;
     }
@@ -1746,7 +1729,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
 {
     GuiGizmoAction action = GUI_GIZMO_NONE;
     
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
     
     Vector2 half_size = 0.5f * *size;
     Vector2 tl = *center - half_size;
@@ -1770,37 +1753,36 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
     for (i32 i = 0; i < ARRAY_COUNT(corners); i++) {
         GuiId id = corner_ids[i];
         
-        if (gui.active == id && !gui.mouse.left_pressed) {
-            gui_active(GUI_ID_INVALID);
+        if (gui.focused == id && !gui.mouse.left_pressed) {
+            gui.focused = GUI_ID_INVALID;
             action = GUI_GIZMO_END;
         }
         
-        if (gui.active == id || point_in_rect(mouse, corners[i], gizmo_size)) {
-            gui_hot(id, -1);
-        } else if (gui.hot == id) {
-            gui_hot(GUI_ID_INVALID);
-        }
-        
-        if (gui.active != id &&
+        if (gui.focused != id &&
             gui.hot == id && 
             gui.mouse.left_pressed && 
             !gui.mouse.left_was_pressed) 
         {
-            gui_active(id);
+            gui.focused = id;
             action = GUI_GIZMO_BEGIN;
             gui_drag_start(*size, *center);
         }
-        
+        if (gui.focused == id || point_in_rect(mouse, corners[i], gizmo_size)) {
+            gui_hot(id, -1);
+        } else if (gui.hot == id) {
+            gui_clear_hot();
+        }
+
         Vector3 color{ 0.5f, 0.5f, 0.5f };
         if (gui.hot == id) color = { 1.0f, 1.0f, 1.0f };
         
         gfx_draw_square(corners[i], gizmo_size, Vector4{ .rgb = color, ._a = 1.0f }, cmdbuf);
     }
     
-    if (gui.active.owner == parent.owner && gui.active.index == parent.index) {
+    if (gui.focused.owner == parent.owner && gui.focused.index == parent.index) {
         Vector2 delta = mouse - gui.drag_start_mouse;
         
-        if (gui.active == corner_ids[1] || gui.active == corner_ids[2]) {
+        if (gui.focused == corner_ids[1] || gui.focused == corner_ids[2]) {
             size->x = gui.drag_start_data.x + delta.x;
             center->x = gui.drag_start_data1.x - 0.5f*gui.drag_start_data.x + 0.5f*size->x; 
         } else {
@@ -1808,7 +1790,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
             center->x = gui.drag_start_data1.x + 0.5f*gui.drag_start_data.x - 0.5f*size->x;
         }
         
-        if (gui.active == corner_ids[0] || gui.active == corner_ids[2]) {
+        if (gui.focused == corner_ids[0] || gui.focused == corner_ids[2]) {
             size->y = gui.drag_start_data.y - delta.y;
             center->y = gui.drag_start_data1.y + 0.5f*gui.drag_start_data.y - 0.5f*size->y;
         } else {
@@ -1824,7 +1806,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
 {
     GuiGizmoAction action = GUI_GIZMO_NONE;
 
-    GfxCommandBuffer *cmdbuf = &gui.windows[0].command_buffer;
+    GfxCommandBuffer *cmdbuf = &gui.windows[GUI_BACKGROUND].command_buffer;
 
     Vector2 half_size = 0.5f * *size;
     Vector2 tl = *center - half_size;
@@ -1849,23 +1831,17 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
     for (i32 i = 0; i < ARRAY_COUNT(corners); i++) {
         GuiId id = corner_ids[i];
 
-        if (gui.active == id && !gui.mouse.left_pressed) {
-            gui_active(GUI_ID_INVALID);
+        if (gui.focused == id && !gui.mouse.left_pressed) {
+            gui.focused = GUI_ID_INVALID;
             action = gui.drag_start_data != *size || gui.drag_start_data1 != *center ? GUI_GIZMO_END : GUI_GIZMO_CANCEL;
         }
 
-        if (gui.active == id || point_in_rect(mouse, corners[i], gizmo_size)) {
-            gui_hot(id, -1);
-        } else if (gui.hot == id) {
-            gui_hot(GUI_ID_INVALID);
-        }
-
-        if (gui.active != id &&
+        if (gui.focused != id &&
             gui.hot == id && 
             gui.mouse.left_pressed && 
             !gui.mouse.left_was_pressed) 
         {
-            gui_active(id);
+            gui.focused = id;
             action = GUI_GIZMO_BEGIN;
             
             center->x = round_to(center->x, 0.5f*multiple);
@@ -1875,8 +1851,13 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
             size->y = round_to(size->y, multiple);
             gui_drag_start(*size, *center);
         }
-        
-        if (gui.active == id) corner_gizmo_active = true;
+        if (gui.focused == id || point_in_rect(mouse, corners[i], gizmo_size)) {
+            gui_hot(id, -1);
+        } else if (gui.hot == id) {
+            gui_clear_hot();
+        }
+
+        if (gui.focused == id) corner_gizmo_active = true;
 
         Vector3 color{ 0.5f, 0.5f, 0.0f };
         if (gui.hot == id) color = { 1.0f, 1.0f, 0.0f };
@@ -1890,7 +1871,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
         delta.x = round_to(delta.x, multiple);
         delta.y = round_to(delta.y, multiple);
 
-        if (gui.active == corner_ids[1] || gui.active == corner_ids[2]) {
+        if (gui.focused == corner_ids[1] || gui.focused == corner_ids[2]) {
             size->x = gui.drag_start_data.x + delta.x;
             center->x = gui.drag_start_data1.x - 0.5f*gui.drag_start_data.x + 0.5f*size->x; 
         } else {
@@ -1898,7 +1879,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
             center->x = gui.drag_start_data1.x + 0.5f*gui.drag_start_data.x - 0.5f*size->x;
         }
 
-        if (gui.active == corner_ids[0] || gui.active == corner_ids[2]) {
+        if (gui.focused == corner_ids[0] || gui.focused == corner_ids[2]) {
             size->y = gui.drag_start_data.y - delta.y;
             center->y = gui.drag_start_data1.y + 0.5f*gui.drag_start_data.y - 0.5f*size->y;
         } else {
@@ -1917,6 +1898,9 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
 template<typename T>
 void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
 {
+    // TODO(jesper): maybe this should be essentially a gui_menu. At the very least, a lot
+    // of functionality should be the same in regards to arrow up/down navigation, and press
+    // then dragging mouse to an option with release to trigger it
     ASSERT(labels.count > 0);
     ASSERT(labels.count == values.count);
     
@@ -1942,9 +1926,16 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
     Vector2 inner_pos{ pos.x + border, pos.y + border };
     Vector2 text_pos{ inner_pos.x + 0.5f*margin, inner_pos.y + 0.5f*margin };
     
+    if (gui_pressed(id)) {
+        if (gui.focused == id) {
+            gui_clear_hot();
+            gui.focused = GUI_ID_INVALID;
+        } else {
+            gui.focused = id;
+        }
+    }
     gui_hot_rect(id, pos, total_size);
-    gui_active_press(id);
-    
+
     Vector2 rhs_p{ inner_pos.x + inner_size.x - rhs, inner_pos.y };
     Vector2 rhs_p0{ rhs_p.x + border + rhs_margin, inner_pos.y + rhs_margin };
     Vector2 rhs_p1{ rhs_p0.x + (rhs-2.0f*rhs_margin), rhs_p0.y };
@@ -1962,7 +1953,10 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
     gui_draw_rect(rhs_p, { border, inner_size.y }, border_col);
     gfx_draw_triangle(rhs_p0, rhs_p1, rhs_p2, rhs_col, cmdbuf);
 
-    if (gui.active.owner == id.owner && gui.active.index == id.index) {
+    // TODO(jesper): I think this needs to use something other than focused to keep track of whether
+    // the menu is opened, as I want to use the focused id for tabbing and filtering certain input
+    // events
+    if (gui.focused == id) {
         Vector2 p{ pos.x, pos.y + total_size.y };
         Vector2 inner_p{ p.x + border, p.y };
         Vector2 text_offset{ 0.5f*margin + border, 0.5f*margin };
@@ -1971,8 +1965,8 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
         Vector2 total_s{ total_size.x, labels.count * font->line_height + border + 0.5f*margin };
         Vector2 inner_s{ total_s.x - 2*border, total_s.y - border };
         
-        gui_draw_rect(p, total_s, gui.windows[0].clip_rect, border_col, &gui.windows[1].command_buffer);
-        gui_draw_rect(inner_p, inner_s, gui.windows[0].clip_rect, bg_def, &gui.windows[1].command_buffer);
+        gui_draw_rect(p, total_s, gui.windows[GUI_OVERLAY].clip_rect, border_col, &gui.windows[GUI_OVERLAY].command_buffer);
+        gui_draw_rect(inner_p, inner_s, gui.windows[GUI_OVERLAY].clip_rect, bg_def, &gui.windows[GUI_OVERLAY].command_buffer);
         
         for (i32 i = 0; i < labels.count; i++) {
             String label = labels[i];
@@ -1980,31 +1974,32 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             
             Vector2 rect_p{ inner_p.x, inner_p.y + font->line_height*i };
             Vector2 rect_s{ inner_s.x, font->line_height + border };
-            gui_hot_rect(label_id, rect_p, rect_s);
 
-            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, bg_hot, &gui.windows[1].command_buffer);
-            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, font, &gui.windows[1].command_buffer);
+            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, bg_hot, &gui.windows[GUI_OVERLAY].command_buffer);
+            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, font, &gui.windows[GUI_OVERLAY].command_buffer);
             text_p.y += font->line_height;
             
-            if ((gui.hot == label_id && gui.active_press == id && !gui.mouse.left_pressed) || 
-                gui_active_click(label_id)) 
+            if ((gui.hot == label_id && gui.pressed == id && !gui.mouse.left_pressed) || 
+                gui_clicked(label_id)) 
             {
                 *value = values[i];
-                gui_active(GUI_ID_INVALID);
-                gui_hot(GUI_ID_INVALID);
+                gui.focused = GUI_ID_INVALID;
+                gui_clear_hot();
+            } else {
+                gui_hot_rect(label_id, rect_p, rect_s);
             }
         }
-    }
-    
-    // TODO(jesper): this will probably be used elsewhere and should be factored. Come up with a good name for this
-    if (gui.active == id &&
-        gui.mouse.left_pressed && !gui.mouse.left_was_pressed &&
-        gui.hot != id)
-    {
-        gui_active(GUI_ID_INVALID);
+        
+        if (gui.hot.owner != id.owner && 
+            gui.mouse.left_pressed && !gui.mouse.left_was_pressed)
+        {
+            gui_clear_hot();
+            gui.focused = GUI_ID_INVALID;
+        }
+
     }
 }
-
+    
 template<typename T>
 void gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value)
 {
@@ -2024,6 +2019,17 @@ template<typename T>
 T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value)
 {
     gui_dropdown_id(id, labels, values, count, &value);
+    return value;
+}
+    
+template<typename T> 
+T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value)
+{
+    gui_dropdown_id(
+        id,
+        Array<String>{ .data = (String*)labels.begin(), .count = (i32)labels.size() },
+        Array<T>{ .data = (T*)values.begin(), .count = (i32)values.size() },
+        &value);
     return value;
 }
 
@@ -2074,7 +2080,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     GuiLayout *cl = gui_current_layout();
     
     GuiMenu *menu = gui_find_or_create_menu(id, { 100.0f, 0.0f });
-    menu->draw_index = gui.windows[1].command_buffer.commands.count;
+    menu->draw_index = gui.windows[GUI_OVERLAY].command_buffer.commands.count;
     
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 text_offset{ 5.0f, 5.0f };
@@ -2082,11 +2088,9 @@ bool gui_begin_menu_id(GuiId id, String label)
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
     
+    if (gui_clicked(id)) menu->active = !menu->active;
     gui_hot_rect(id, pos, size);
-    if (gui_active_click(id)) {
-        menu->active = !menu->active;
-    }
-    
+
     if (menu->active) {
         // TODO(jesper): this needs to be adjusted and fixed for nested sub-menus. Probably using the id stack
         if (gui.active_menu != id && gui.active_menu != GUI_ID_INVALID) {
@@ -2149,7 +2153,7 @@ void gui_end_menu()
     menu->size = layout->size;
     if (layout->type == GUI_LAYOUT_ROW && menu->active) {
         Vector3 bg = rgb_unpack(0xFF212121);
-        gui_draw_rect(layout->pos, menu->size, bg, &gui.windows[1].command_buffer, menu->draw_index);
+        gui_draw_rect(layout->pos, menu->size, bg, &gui.windows[GUI_OVERLAY].command_buffer, menu->draw_index);
     }
     
     gui_end_layout();
@@ -2165,18 +2169,19 @@ bool gui_menu_button_id(GuiId id, String label)
     // TODO(jesper): can we just make this a regular button? only difference is styling
     GuiWindow *wnd = &gui.windows[gui.current_window];
     
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
+    Font *font = &gui.style.text.font;
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font);
     Vector2 text_offset{ 0.0f, 0.0f };
     
     // TODO(jesper): I need something here to essentially get the entire row/column rectangle
     // to use for mouse hitbox checking, but still play nice with proper layouting or something? I'm
     // not sure, currently too constipated to think about it.
-    Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
+    Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, font->line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
     
+    bool clicked = gui_clicked(id);
     gui_hot_rect(id, pos, size);
-    bool clicked = gui_active_click(id);
-    
+
     if (clicked) {
         GuiMenu *menu = gui_find_menu(gui.active_menu);
         menu->active = false;
@@ -2184,7 +2189,7 @@ bool gui_menu_button_id(GuiId id, String label)
 
     Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
     if (gui.hot == id) gui_draw_rect(pos, size, wnd->clip_rect, rgb_unpack(0xFF282828) );
-    gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.button.font);
+    gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, font);
     return clicked;
 }
 
@@ -2240,7 +2245,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     f32 scroll_to_total = row_height/pixels_per_i;
     f32 total_to_scroll = pixels_per_i/row_height;
     
-    if (gui_active_drag(handle_id, { *offset, (f32)*current }) && gui.mouse.dy != 0) {
+    if (gui_drag(handle_id, { *offset, (f32)*current }) && gui.mouse.dy != 0) {
         f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
         
         f32 o = gui.drag_start_data.x*total_to_scroll + dy;
@@ -2281,8 +2286,8 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
     gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
 
-    Vector3 scroll_handle_bg = gui.active == handle_id ? 
-        gui.style.scrollbar.scroll_btn_active : 
+    Vector3 scroll_handle_bg = gui.pressed == handle_id ? 
+        gui.style.scrollbar.scroll_btn_focus: 
         gui.hot == handle_id ? 
         gui.style.scrollbar.scroll_btn_hot : 
         gui.style.scrollbar.scroll_btn;
@@ -2343,9 +2348,8 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
 
         Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
         Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
-        gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
 
-        if (gui_active_drag(handle_id, { 0, *current }) && gui.mouse.dy != 0) {
+        if (gui_drag(handle_id, { 0, *current }) && gui.mouse.dy != 0) {
             f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
 
             f32 c = gui.drag_start_data.y + scroll_to_total*dy;
@@ -2361,9 +2365,10 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
                 scroll_handle_s = { gui.style.scrollbar.thickness, y1 - y0 };
             }
         }
+        gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
 
-        Vector3 scroll_handle_bg = gui.active == handle_id ? 
-            gui.style.scrollbar.scroll_btn_active : 
+        Vector3 scroll_handle_bg = gui.pressed == handle_id ? 
+            gui.style.scrollbar.scroll_btn_focus : 
             gui.hot == handle_id ? 
             gui.style.scrollbar.scroll_btn_hot : 
             gui.style.scrollbar.scroll_btn;
@@ -2481,11 +2486,11 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         
         GuiId item_id = GUI_ID_INTERNAL(id, i+10);
         
-        gui_hot_rect(item_id, pos, size);
-        if (gui_active_click(item_id)) {
+        if (gui_clicked(item_id)) {
             *selected_item = i;
             result = GUI_LISTER_SELECT;
         }
+        gui_hot_rect(item_id, pos, size);
 
         if (gui.hot == item_id) gui_draw_rect(pos, size, r2, gui.style.lister.hot_bg);
         else if (i == *selected_item) gui_draw_rect(pos, size, r2, gui.style.lister.selected_bg);
