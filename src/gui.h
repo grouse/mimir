@@ -252,6 +252,7 @@ struct GuiContext {
         
         struct {
             GLuint close;
+            GLuint check;
         } icons;
         
         struct {

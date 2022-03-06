@@ -43,7 +43,8 @@ void init_gui()
     gui.camera.projection[3][0] = -1.0f;
     
     if (auto a = find_asset("textures/close.png"); a) gui.style.icons.close = gfx_load_texture(a->data, a->size);
-    
+    if (auto a = find_asset("textures/check.png"); a) gui.style.icons.check = gfx_load_texture(a->data, a->size);
+
     gui.style.text.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
     gui.style.button.font = gui.style.text.font;
 }
@@ -706,7 +707,7 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector2 btn_margin{ 5.0f, 0.0f };
     Vector2 btn_size{ 16.0f, 16.0f };
-    Vector2 inner_size{ 8.0f, 8.0f };
+    Vector2 inner_size{ 16.0f, 16.0f };
     Vector2 border_size{ 1.0f, 1.0f };
     Vector2 inner_margin = 0.5f*(btn_size - inner_size);
     Vector2 btn_offset{ 0.0f, floorf(0.5f*(gui.style.text.font.line_height - btn_size.y)) };
@@ -724,12 +725,12 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector3 border_col = rgb_unpack(0xFFCCCCCC);
     Vector3 bg_col = gui.active == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
-    Vector3 checked_col = rgb_unpack(0xFFCCCCCC);
+    Vector3 checked_col = rgb_unpack(0xFFCCCCCC); (void)checked_col;
     Vector3 label_col = rgb_unpack(0xFFFFFFFF);
 
     gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
     gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
-    if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, wnd->clip_rect, checked_col);
+    if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, gui.style.icons.check);
     gui_draw_text(td.glyphs, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
     
     return toggled;
