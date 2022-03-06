@@ -103,7 +103,8 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             
             i32 width = lparam & 0xFFFF;
             i32 height = (lparam >> 16) & 0xFFFF;
-            
+
+#if 0
             const char *resize_type = nullptr;
             switch (wparam) {
             case SIZE_MAXHIDE: resize_type = "MAXHIDE"; break;
@@ -113,6 +114,7 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
             case SIZE_RESTORED: resize_type = "RESTORED"; break;
             default: resize_type = "unknown";
             }
+#endif
             
             if (app_change_resolution({ (f32)width, (f32)height })) {
                 glViewport(0, 0, width, height);
@@ -138,7 +140,6 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     
     return 0;
 }
-
 
 int WINAPI wWinMain(
     HINSTANCE hInstance, 
@@ -251,3 +252,4 @@ int WINAPI wWinMain(
 
     return 0;
 }
+

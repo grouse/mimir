@@ -1,6 +1,11 @@
 #ifndef FONT_H
 #define FONT_H
 
+// TODO(jesper): make a FontHandle situation that the user can use
+// instead of direct font structures, so that font instances can be
+// copied and reused safely without worry about stomping over underlying
+// texture atlas handles etc
+
 #include "external/stb/stb_truetype.h"
 
 #include "hash_table.h"

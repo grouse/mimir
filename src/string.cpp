@@ -12,7 +12,7 @@ bool operator==(String lhs, String rhs)
     return lhs.length == rhs.length && memcmp(lhs.data, rhs.data, lhs.length) == 0;
 }
 
-String create_string(char *str, i32 length, Allocator mem = mem_tmp)
+String create_string(char *str, i32 length, Allocator mem)
 {
     String s;
     s.data = (char*)ALLOC(mem, length);
@@ -21,7 +21,7 @@ String create_string(char *str, i32 length, Allocator mem = mem_tmp)
     return s;
 }
 
-String duplicate_string(String other, Allocator mem = mem_tmp)
+String duplicate_string(String other, Allocator mem)
 {
     String str;
     str.data = (char*)ALLOC(mem, other.length);

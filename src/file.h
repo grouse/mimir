@@ -7,6 +7,9 @@ using FileHandle = HANDLE;
 #error "unsupported platform"
 #endif
 
+#include "array.h"
+#include "string.h"
+
 struct FileInfo {
     u8 *data;
     i32 size;

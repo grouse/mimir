@@ -45,6 +45,12 @@ struct StringBuilder {
     Block *current = &head;
 };
 
+bool operator!=(String lhs, String rhs);
+bool operator==(String lhs, String rhs);
+
+String create_string(char *str, i32 length, Allocator mem = mem_tmp);
+String duplicate_string(String other, Allocator mem = mem_tmp);
+
 bool is_whitespace(i32 c);
 
 String stringf(char *buffer, i32 size, const char *fmt, ...);
