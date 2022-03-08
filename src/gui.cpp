@@ -63,6 +63,11 @@ GuiWindow* gui_current_window()
 
 bool gui_capture(bool capture_var[2]) 
 {
+    // TODO(jesper): this GUI capture strategy is rather coarse. I'm thinking the widgets
+    // need an API to signal exactly which events they want to grab, which can then be
+    // used to funnel the right events to the right widgets appropriately according
+    // to hierarchy, and pass any unhandled events back to the application for
+    // a fall-through type thing
     capture_var[1] = true;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
@@ -156,6 +161,14 @@ bool gui_drag(GuiId id, Vector2 data)
 bool gui_focused_parent(GuiId id)
 {
     return gui.focused == id || gui.current_id.owner == id.owner;
+}
+
+void gui_handle_focus_grabbing(GuiId id)
+{
+    // TODO(jesper): intercept tabs if currently held focus and set
+    // to invalid id to make the next widget grab focus. Keep track of
+    // previous widget which wanted to grab focus for prev-tab
+    if (gui.focused == GUI_ID_INVALID) gui.focused = id;
 }
 
 bool apply_clip_rect(GlyphRect *g, Rect clip_rect)
@@ -844,6 +857,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 si
     Vector2 edit_pos = pos + Vector2{ 1.0f, 1.0f };
     Vector2 edit_size = size - Vector2{ 2.0f, 2.0f };
     
+    gui_handle_focus_grabbing(id);
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
