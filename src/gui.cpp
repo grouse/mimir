@@ -274,7 +274,6 @@ void gui_begin_frame()
     };
     gui_begin_layout(root_layout);
     
-    gui.last_focused = gui.focused;
 }
 
 void gui_end_frame()
@@ -286,7 +285,8 @@ void gui_end_frame()
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
     if (!gui.mouse.left_pressed) gui.pressed = GUI_ID_INVALID;
-    
+    gui.last_focused = gui.focused;
+
     gui.events.count = 0;
     gui.capture_text[0] = gui.capture_text[1];
     gui.capture_text[1] = false;
@@ -856,7 +856,6 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
     Vector2 edit_pos = pos + Vector2{ 1.0f, 1.0f };
     Vector2 edit_size = size - Vector2{ 2.0f, 2.0f };
     
-    gui_handle_focus_grabbing(id);
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
@@ -998,7 +997,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
     text_clip_rect.size.x = MIN(edit_pos.x + edit_size.x, wnd->clip_rect.pos.x + wnd->clip_rect.size.x) - text_clip_rect.pos.x;
     text_clip_rect.size.y = MIN(edit_pos.y + edit_size.y, wnd->clip_rect.pos.y + wnd->clip_rect.size.y) - text_clip_rect.pos.y;
     
-    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
+    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : initial_string;
     Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font);
 
     gui_draw_rect(pos, size, wnd->clip_rect, edit_acc0);
@@ -1082,23 +1081,21 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
     return (GuiEditboxAction)action;
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, String in_str)
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_string)
 {
     Vector2 size{ 20.0f, 20.0f };
     Vector2 pos = gui_layout_widget(&size);
-    
-    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : in_str;
-    return gui_editbox_id(id, str, pos, size);
+    return gui_editbox_id(id, initial_string, pos, size);
 }
 
 
-GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 size)
 {
     Vector2 pos = gui_layout_widget(size);
-    return gui_editbox_id(id, in_str, pos, size);
+    return gui_editbox_id(id, initial_string, pos, size);
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, String label, String in_str, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, String label, String initial_string, Vector2 size)
 {
     f32 margin = 5.0f;
     
@@ -1107,7 +1104,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, String in_str, Vector2 s
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
     gui_draw_text(td.glyphs, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
-    return gui_editbox_id(id, in_str, { pos.x + td.bounds.size.x + margin, pos.y }, size);
+    return gui_editbox_id(id, initial_string, { pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size)
