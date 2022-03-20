@@ -13,6 +13,8 @@ extern "C" size_t strlen(const char * str);
 extern "C" size_t wcslen(const wchar_t* wcs);
 extern "C" int strcmp(const char * str1, const char * str2);
 extern "C" int strncmp(const char * str1, const char * str2, size_t num);
+extern "C" int tolower(int ch);
+
 
 extern "C" void* memcpy(void *destination, const void *source, size_t num);
 extern "C" void* memset(void *ptr, int value, size_t num);

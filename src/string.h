@@ -51,6 +51,9 @@ bool operator==(String lhs, String rhs);
 String create_string(char *str, i32 length, Allocator mem = mem_tmp);
 String duplicate_string(String other, Allocator mem = mem_tmp);
 
+String to_lower(String s, Allocator mem = mem_tmp);
+char to_lower(char c);
+
 bool is_whitespace(i32 c);
 
 String stringf(char *buffer, i32 size, const char *fmt, ...);

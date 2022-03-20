@@ -884,3 +884,17 @@ bool is_newline(i32 c)
 {
     return c == '\n' || c == '\r';
 }
+
+
+String to_lower(String s, Allocator mem)
+{
+    String l = duplicate_string(s, mem);
+    for (i32 i = 0; i < l.length; i++) l[i] = to_lower(l[i]);
+    return l;
+}
+
+char to_lower(char c)
+{
+    return tolower(c);
+}
+
