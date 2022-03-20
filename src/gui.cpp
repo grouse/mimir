@@ -2545,3 +2545,14 @@ bool gui_input(InputEvent event)
     return false;
 }
         
+bool gui_begin_window_id(
+    GuiId id, 
+    String title, 
+    Vector2 pos, 
+    Vector2 size, 
+    Vector2 anchor, 
+    bool *visible, 
+    u32 flags)
+{
+    return gui_begin_window_id(id, title, pos - hadamard(size, anchor), size, visible, flags);
+}

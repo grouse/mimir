@@ -304,6 +304,7 @@ void gui_begin_layout(GuiLayout layout);
 void gui_end_layout();
 
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, Vector2 anchor, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = GUI_WINDOW_DEFAULT);
 void gui_end_window();
