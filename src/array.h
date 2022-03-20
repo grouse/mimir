@@ -72,6 +72,26 @@ void array_reserve_add(DynamicArray<T> *arr, i32 extra_capacity)
 }
 
 template<typename T>
+void array_resize(DynamicArray<T> *arr, i32 count)
+{
+    if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
+    
+    if (arr->capacity < count) {
+        arr->data = REALLOC_ARR(arr->alloc, T, arr->data, arr->capacity, count);
+        arr->capacity = count;
+    }
+    
+    arr->count = count;
+}
+
+template<typename T>
+void array_copy(DynamicArray<T> *dst, Array<T> src)
+{
+    array_resize(dst, src.count);
+    for (i32 i = 0; i < src.count; i++) dst->data[i] = src.data[i];
+}
+
+template<typename T>
 void array_reset(DynamicArray<T> *arr, Allocator alloc)
 {
     arr->alloc = alloc;

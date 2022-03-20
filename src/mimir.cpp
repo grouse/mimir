@@ -8,6 +8,7 @@
 #include "gfx_opengl.cpp"
 #include "assets.cpp"
 #include "font.cpp"
+#include "fzy.cpp"
 
 enum EditMode {
     MODE_EDIT,
@@ -38,7 +39,13 @@ struct Application {
     i32 tab_width = 4;
     bool animating = true;
     
-    GuiWindowState fuzzy_lister;
+    struct {
+        bool active;
+        DynamicArray<String> values;
+        DynamicArray<String> filtered;
+        
+        i32 selected_item;
+    } lister;
 
     EditMode mode, next_mode;
     
@@ -360,6 +367,8 @@ void init_app()
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
     
     calculate_num_visible_lines();
+    
+    fzy_init_table();
 }
 
 void view_set_buffer(BufferId buffer)
@@ -1266,8 +1275,8 @@ void move_view_to_caret()
     // TODO(jesper): do something sensible with the decimal vertical offset
     if (view.caret.wrapped_line-line_padding < view.line_offset) {
         view.line_offset = MAX(0, view.caret.wrapped_line-line_padding);
-    } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-2) {
-        view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+2);
+    } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-4) {
+        view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+4);
     }
 }
 
@@ -1398,7 +1407,12 @@ void app_event(InputEvent event)
                 app.animating = true;
                 break;
             case VC_O:
-                app.fuzzy_lister.active = true;
+                app.lister.active = true;
+                app.lister.selected_item = 0;
+                app.lister.values.count = 0;
+                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
+                array_copy(&app.lister.filtered, app.lister.values);
+                
                 app.mode = MODE_DIALOG;
                 break;
             case VC_D: {
@@ -1630,6 +1644,7 @@ struct {
     } buffer_history;
 } debug{};
 
+
 void update_and_render(f32 dt)
 {
     gfx_begin_frame();
@@ -1647,10 +1662,21 @@ void update_and_render(f32 dt)
 
         gui_menu("debug") {
             gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
+            gui_menu_button("foobar");
+            gui_menu_button("foobar");
+            gui_menu_button("foobar");
+            gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
         }
     }
     
     gui_window("buffer history", &debug.buffer_history.wnd) {
+        
+        static i32 val = 1;
+        val = gui_dropdown({ "A", "B", "C" }, { 1, 2, 3 }, val);
+        if (gui_button("foobar")) LOG_INFO("CLICK");
+        
+        gui_editbox("foobar");
+        
         char str[256];
 
         Buffer *buffer = &buffers[view.buffer.index];
@@ -1675,26 +1701,97 @@ void update_and_render(f32 dt)
         }
     }
     
-    gui_window("fuzzy lister", &app.fuzzy_lister) {
-        gui_textbox("files");
-        
-        Array<String> files = list_files("./", FILE_LIST_RECURSIVE);
-        
-        String prompt = "";
-        GuiEditboxAction action = gui_editbox(prompt);
-        if (action == GUI_EDITBOX_CHANGE) {
-            
+    gui_window("fuzzy lister", gfx.resolution * 0.5f, { gfx.resolution.x * 0.7f, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
+        GuiEditboxAction action = gui_editbox("");
+        if (action & (GUI_EDITBOX_CHANGE | GUI_EDITBOX_FINISH)) {
+            String needle{ gui.edit.buffer, gui.edit.length };
+            if (needle.length == 0) {
+                array_copy(&app.lister.filtered, app.lister.values);
+            } else {
+                String lneedle = to_lower(needle);
+
+                DynamicArray<fzy_score_t> scores{};
+                array_create(&scores, app.lister.values.count, mem_tmp);
+
+                app.lister.filtered.count = 0;
+
+                DynamicArray<fzy_score_t> D{ .alloc = mem_tmp };
+                DynamicArray<fzy_score_t> M{ .alloc = mem_tmp };
+                DynamicArray<fzy_score_t> match_bonus{ .alloc = mem_tmp };
+
+                for (String s : app.lister.values) {
+                    fzy_score_t match_score;
+                    
+                    array_resize(&D, needle.length*s.length);
+                    array_resize(&M, needle.length*s.length);
+
+                    memset(D.data, 0, D.count*sizeof *D.data);
+                    memset(M.data, 0, M.count*sizeof *M.data);
+
+                    array_resize(&match_bonus, s.length);
+                    
+                    String ls = to_lower(s);
+                    char prev = '/';
+                    for (i32 i = 0; i < ls.length; i++) {
+                        if (ls[i] == '\\') ls[i] = '/';
+                        match_bonus[i] = fzy_compute_bonus(prev, ls[i]);
+                        
+                    }
+
+
+                    for (i32 i = 0; i < needle.length; i++) {
+                        fzy_score_t prev_score = FZY_SCORE_MIN;
+                        fzy_score_t gap_score = i == needle.length-1 ? FZY_SCORE_GAP_TRAILING : FZY_SCORE_GAP_INNER;
+
+                        char ln = lneedle[i];
+                        for (i32 j = 0; j < s.length; j++) {
+                            if (ln == ls[j]) {
+                                fzy_score_t score = FZY_SCORE_MIN;
+                                if (!i) {
+                                    score = (j*FZY_SCORE_GAP_LEADING) + match_bonus[j];
+                                } else if (j) {
+                                    fzy_score_t d_val = D[(i-1) * s.length + j-1];
+                                    fzy_score_t m_val = M[(i-1) * s.length + j-1];
+                                    score = MAX(m_val+match_bonus[j], d_val+FZY_SCORE_MATCH_CONSECUTIVE);
+                                }
+
+                                D[i*s.length + j] = score;
+                                M[i*s.length + j] = prev_score = MAX(score, prev_score + gap_score);
+                            } else {
+                                D[i*s.length + j] = FZY_SCORE_MIN;
+                                M[i*s.length + j] = prev_score = prev_score + gap_score;
+                            }
+                        }
+
+                        if (prev_score == FZY_SCORE_MIN) goto next_node;
+                    }
+
+                    match_score = M[(needle.length-1) * s.length + s.length-1];
+                    if (match_score != FZY_SCORE_MIN) {
+                        array_add(&app.lister.filtered, s);
+                        array_add(&scores, match_score);
+                    }
+next_node:;
+                }
+
+                quicksort(scores, app.lister.filtered, 0, app.lister.filtered.count-1);
+            }
         }
         
-        static i32 selected_item = 0;
-        if (gui_lister(files, &selected_item) == GUI_LISTER_FINISH) {
-            String file = files[selected_item];
+        if (gui_lister(app.lister.filtered, &app.lister.selected_item) == GUI_LISTER_FINISH ||
+            action == GUI_EDITBOX_FINISH) 
+        {
+            String file = app.lister.filtered[app.lister.selected_item];
             String path = absolute_path(file);
             
             BufferId buffer = find_buffer(path);
             if (!buffer) buffer = create_buffer(path);
             
             view_set_buffer(buffer);
+            
+            app.lister.active = false;
+            gui_clear_hot();
+            gui.focused = GUI_ID_INVALID;
         }
     }
     
