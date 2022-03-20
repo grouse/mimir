@@ -309,8 +309,8 @@ bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 
 bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = GUI_WINDOW_DEFAULT);
 void gui_end_window();
 
-GuiEditboxAction gui_editbox_id(GuiId id, String in_str);
-GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 size);
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_str);
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_str, Vector2 size);
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size);
 
 Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);

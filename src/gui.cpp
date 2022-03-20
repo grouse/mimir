@@ -826,28 +826,27 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
     return toggled;
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, String in_str, Vector2 pos, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Vector2 size)
 {
     u32 action = GUI_EDITBOX_NONE;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
+    
+    bool was_focused = gui.focused == id;
+    gui_handle_focus_grabbing(id);
 
-    if (gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
-        if (gui.hot == id) {
-            gui.focused = id;
-            gui.pressed = id;
-            gui.edit.selection = 0;
-            gui.edit.cursor = 0;
-            gui.edit.offset = 0;
-            memcpy(gui.edit.buffer, in_str.data, in_str.length);
-            gui.edit.length = in_str.length;
-        } else if (gui.focused == id) {
-            gui.focused = GUI_ID_INVALID;
-            gui.pressed = GUI_ID_INVALID;
-            action |= GUI_EDITBOX_CANCEL;
-        }
-    }
+    if (gui_pressed(id)) gui.focused = id;
+        
     gui_hot_rect(id, pos, size);
+    
+    if (gui.focused == id && !was_focused) {
+        ASSERT(initial_string.length < (i32)sizeof gui.edit.buffer);
+        memcpy(gui.edit.buffer, initial_string.data, initial_string.length);
+        gui.edit.length = initial_string.length;
+        
+        gui.edit.offset = gui.edit.cursor = gui.edit.selection = 0;
+    }
+
     
     Vector3 selection_bg = rgb_unpack(0xFFCCCCCC);
     Vector3 edit_bg = rgb_unpack(0xFF1D2021);
