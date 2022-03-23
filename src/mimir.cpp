@@ -135,6 +135,7 @@ struct ViewBufferState {
 struct View {
     GuiId gui_id = GUI_ID(0);
     
+    DynamicArray<BufferId> buffers;
     DynamicArray<ViewBufferState> saved_buffer_state;
     DynamicArray<BufferLine> lines;
     
@@ -145,6 +146,7 @@ struct View {
     Rect rect;
     BufferId buffer;
     Caret caret, mark;
+    
     
     struct {
         u64 lines_dirty : 1;
@@ -352,27 +354,10 @@ BufferId find_buffer(String file)
     return BUFFER_INVALID;
 }
 
-void init_app()
-{
-    String asset_folders[] = {
-        "./",
-        "../assets",
-        get_exe_folder(),
-        join_path(get_exe_folder(), "../assets"),
-    };
-    init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
-    
-    init_gui();
-    
-    app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
-    
-    calculate_num_visible_lines();
-    
-    fzy_init_table();
-}
-
 void view_set_buffer(BufferId buffer)
 {
+    if (view.buffer == buffer) return;
+
     auto find = [](BufferId buffer) -> ViewBufferState*
     {
         for (auto &state : view.saved_buffer_state) {
@@ -406,12 +391,42 @@ void view_set_buffer(BufferId buffer)
     }
 
     view.buffer = buffer;
-    
+
+    i32 idx = array_find_index(view.buffers, view.buffer);
+    if (idx >= 0) array_remove_sorted(&view.buffers, idx);
+    array_insert(&view.buffers, 0, view.buffer);
+
     // NOTE(jesper): not storing line wrap data (for now). Computing it is super quick, and storing
     // it will add up pretty quick. Especially if we start serialising the views and their state
     // to disk
     view.lines_dirty = true;
 }
+
+void init_app()
+{
+    String asset_folders[] = {
+        "./",
+        "../assets",
+        get_exe_folder(),
+        join_path(get_exe_folder(), "../assets"),
+    };
+    init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
+    
+    init_gui();
+    
+    app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
+    
+    calculate_num_visible_lines();
+    
+    view_set_buffer(create_buffer("src/gui.cpp"));
+    view_set_buffer(create_buffer("src/gui.h"));
+    view_set_buffer(create_buffer("src/maths.cpp"));
+    view_set_buffer(create_buffer("src/maths.h"));
+    view_set_buffer(create_buffer("src/mimir.cpp"));
+
+    fzy_init_table();
+}
+
 
 void app_open_file(String path)
 {
@@ -1800,11 +1815,151 @@ next_node:;
         Rect tr = gui_layout_widget_fill();
         gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = tr });
         defer { gui_end_layout(); };
+        
+        if (true) {
+            GuiWindow *wnd = gui_current_window();
+            
+            Vector2 size{ 0, gui.style.button.font.line_height + 2 };
+            Vector2 pos = gui_layout_widget(&size);
+            gui_draw_rect(pos, size, wnd->clip_rect, gui.style.bg);
+            
+            gui_divider();
+            
+            gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = pos, .size = size, .column.spacing = 2 });
+            defer { gui_end_layout(); };
+            
+            Font *font = &gui.style.button.font;
+            Vector2 msize{ gui.style.button.font.line_height, gui.style.button.font.line_height };
+            Vector2 mpos = gui_layout_widget(msize, GUI_ANCHOR_RIGHT);
+            
+            i32 current_tab = 0;
+            GuiId parent = GUI_ID(0);
+            
+            BufferId active_buffer = view.buffer;
+            
+            i32 cutoff = -1;
+            for (i32 i = 0; i < view.buffers.count; i++) {
+                Buffer *b = get_buffer(view.buffers[i]);
+                
+                GuiId id = GUI_ID_INDEX(parent, i);
+                
+                TextQuadsAndBounds td = calc_text_quads_and_bounds(b->name, font);
+                
+                Vector2 size = td.bounds.size + Vector2{ 14.0f, 2.0f };
+                if (gui_current_layout()->available_space.x < size.x) {
+                    cutoff = i;
+                    break;
+                }
+                
+                Vector2 pos = gui_layout_widget(size);
+                Vector2 text_offset = size*0.5f - Vector2{ td.bounds.size.x*0.5f, font->line_height*0.5f };
+                
+                if (gui_clicked(id)) active_buffer = b->id;
+                gui_hot_rect(id, pos, size);
+                
+                Vector3 bg, fg;
+                if (i == current_tab) {
+                    bg = gui.hot == id ? gui.style.accent_bg_hot : gui.style.accent_bg;
+                    fg = rgb_unpack(0xFFFFFFFF);
+                } else {
+                    bg = gui.pressed == id ? gui.style.bg_press : gui.hot == id ? gui.style.bg_hot : gui.style.bg;
+                    fg = rgb_unpack(0xFFFFFFFF);
+                }
+                
+                gui_draw_rect(pos, size, wnd->clip_rect, bg);
+                gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, fg, font);
+                
+                if (b->saved_at != b->history_index) {
+                    gui_draw_rect(
+                        pos + Vector2{ size.x-4-1, 1 }, 
+                        { 4, 4 }, 
+                        wnd->clip_rect, 
+                        rgb_unpack(0xFF990000));
+                }
+            }
+            
+            if (cutoff >= 0) {
+                // TODO(jesper): this is essentially a dropdown with an icon button as the trigger button
+                // instead of a label button
+
+                GuiId mid = GUI_ID(0);
+                if (gui_pressed(mid)) {
+                    if (gui.focused == mid) {
+                        gui_clear_hot();
+                        gui.focused = GUI_ID_INVALID;
+                    } else {
+                        gui.focused = mid;
+                    }
+                }
+                gui_hot_rect(mid, mpos, msize);
+
+                Vector3 mbg = gui.hot == mid ? gui.style.accent_bg_hot : gui.style.accent_bg;
+                gui_draw_rect(mpos, msize, wnd->clip_rect, mbg);
+                
+                Vector2 icon_s{ 16, 16 };
+                Vector2 icon_p = mpos + 0.5f*(msize - icon_s);
+                gui_draw_rect(icon_p, icon_s, gui.icons.down);
+
+                if (gui.focused == mid) {
+                    i32 old_window = gui.current_window;
+                    gui.current_window = GUI_OVERLAY;
+                    defer { gui.current_window = old_window; };
+                    
+                    GuiWindow *overlay = &gui.windows[GUI_OVERLAY];
+                    
+                    Vector3 border_col = rgb_unpack(0xFFCCCCCC);
+                    Vector3 bg = rgb_unpack(0xFF1d2021);
+                    Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
+
+                    i32 bg_index = overlay->command_buffer.commands.count;
+                    
+                    // TODO(jesper): figure out a reasonable way to make this layout anchored to the right and expand to the
+                    // left with the subsequent labels. Right now I'm just hoping that the width is wide enough
+                    Vector2 s{ 200.0f, 0 };
+                    Vector2 p{ mpos.x-s.x+msize.x, mpos.y + msize.y };
+                    Vector2 border{ 1, 1 };
+
+                    gui_begin_layout({ .type = GUI_LAYOUT_ROW, .flags = GUI_LAYOUT_EXPAND_Y, .pos = p, .size = s, .margin = { 1, 1 } });
+                    defer { gui_end_layout(); };
+
+                    for (i32 i = cutoff; i < view.buffers.count; i++) {
+                        Buffer *b = get_buffer(view.buffers[i]);
+
+                        Vector2 rect_s{ 0, font->line_height };
+                        Vector2 rect_p = gui_layout_widget(&rect_s);
+
+                        GuiId lid = GUI_ID_INDEX(parent, i);
+                        if (gui.hot == lid) gui_draw_rect(rect_p, rect_s, bg_hot);
+                        gui_textbox(b->name, rect_p);
+
+                        if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) || 
+                            gui_clicked(lid)) 
+                        {
+                            active_buffer = b->id;
+                            gui.focused = GUI_ID_INVALID;
+                            gui_clear_hot();
+                        } else {
+                            // TODO(jesper): due to changes in gui_hot to not allow a new hot widget
+                            // if one is pressed, this doesn't behave the way I want for dropdowns where
+                            // I can press the trigger button, drag to an item, then release to select it
+                            gui_hot_rect(lid, rect_p, rect_s);
+                        }
+                    }
+
+                    GuiLayout *cl = gui_current_layout();
+                    gui_draw_rect(cl->pos, cl->size, overlay->clip_rect, border_col, &overlay->command_buffer, bg_index);
+                    gui_draw_rect(cl->pos + border, cl->size - 2*border, overlay->clip_rect, bg, &overlay->command_buffer, bg_index+1);
+
+                }
+            }
+
+            view_set_buffer(active_buffer);
+        }
 
         if (true) {
             Vector2 ib_s{ tr.size.x, 15.0f };
             Vector2 ib_p = gui_layout_widget(ib_s, GUI_ANCHOR_BOTTOM);
-            
+
             gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = ib_p, .size = ib_s });
             defer { gui_end_layout(); };
 
@@ -1826,17 +1981,17 @@ next_node:;
 
             if (view.lines_dirty || text_rect != view.rect) {
                 view.rect = text_rect;
-                
+
                 view.lines.count = 0;
                 recalculate_line_wrap(0, &view.lines, view.buffer);
-                
+
                 view.lines_dirty = false;
             }
-            
+
             gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size, -1);
         }
     }
-    
+
     if (view.caret_dirty) {
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
         view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
@@ -1849,13 +2004,13 @@ next_node:;
         i32 y = view.caret.wrapped_line - view.line_offset;
         f32 w = app.mono.space_width;
         f32 h = app.mono.line_height - 2.0f;
-        
+
         Vector2 p0{ 
             view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
             view.rect.pos.y + y*app.mono.line_height - view.voffset,
         };
         Vector2 p1{ p0.x, p0.y + h };
-        
+
         gui_draw_rect({ view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg, &gfx.frame_cmdbuf);
 
         gui_draw_rect(p0, { w, h }, app.caret_bg, &gfx.frame_cmdbuf);
@@ -1863,7 +2018,7 @@ next_node:;
         gui_draw_rect(p0, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
         gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
     }
-    
+
     view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
     if (view.mark.wrapped_line >= view.line_offset && 
         view.mark.wrapped_line < view.line_offset + view.lines_visible)
@@ -1888,19 +2043,19 @@ next_node:;
         GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
         cmd.gui_text.font_atlas = app.mono.texture;
         cmd.gui_text.color = linear_from_sRGB(app.fg);
-        
+
         f32 voffset = view.voffset;
         i32 line_offset = view.line_offset;
 
         for (i32 i = 0; i < MIN(view.lines.count - line_offset, view.lines_visible); i++) {
             i32 line_index = i + line_offset;
-            
+
             Vector2 baseline{ view.rect.pos.x, view.rect.pos.y + i*app.mono.line_height + (f32)app.mono.baseline - voffset };
             Vector2 pen = baseline;
 
             i64 p = view.lines[line_index].offset;
             i64 end = line_end_offset(line_index, view.lines, buffer);
-            
+
             i64 vcolumn = 0;
             while (p < end) {
                 i32 c = utf32_it_next(buffer, &p);
@@ -1923,7 +2078,7 @@ next_node:;
                     vcolumn++;
                     continue;
                 }
-                
+
                 if (c == '\t') {
                     i32 w = app.tab_width - vcolumn % app.tab_width;
                     pen.x += app.mono.space_width*w;
@@ -1955,7 +2110,7 @@ next_node:;
                 vcolumn++;
             }
         }
-        
+
         // TODO(jesper): I'm lazy and re-using the GUI's vertex buffer here, which is why this is using
         // gui draw procedures and being kind of weird as hell about it. This also makes some causes
         // some error-prone weirdness because we need to end the gui frame, submit the standard command buffers
@@ -1963,7 +2118,7 @@ next_node:;
         // gui_render, and this interaction is just weird.
         gui_push_command(&gfx.frame_cmdbuf, cmd);
     }
-    
+
     Vector3 clear_color = linear_from_sRGB(app.bg);
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -1976,9 +2131,9 @@ next_node:;
     gfx_submit_commands(debug_gfx);
 
     gui_render();
-    
+
     app.animating = false;
-    
+
     // NOTE(jesper): this is something of a hack because WM_CHAR messages come after the WM_KEYDOWN, and
     // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
     // be deferred.
