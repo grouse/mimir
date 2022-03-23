@@ -204,6 +204,7 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T *es, i32 count)
 template<typename T>
 i32 array_insert(DynamicArray<T> *arr, i32 insert_at, Array<T> es)
 {
+    ASSERT(insert_at >= 0);
     ASSERT(insert_at <= arr->count);
 
     if (arr->count+es.count > arr->capacity) {
@@ -258,7 +259,9 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
 template<typename T>
 void array_remove_unsorted(Array<T> *arr, i32 index)
 {
+    ASSERT(index >= 0);
     ASSERT(index < arr->count);
+    
     arr->data[index] = arr->data[arr->count-1];
     arr->count--;
 }
@@ -266,7 +269,9 @@ void array_remove_unsorted(Array<T> *arr, i32 index)
 template<typename T>
 void array_remove_sorted(Array<T> *arr, i32 index)
 {
+    ASSERT(index >= 0);
     ASSERT(index < arr->count);
+    
     memmove(&arr->data[index], &arr->data[index+1], (arr->count-index-1)*sizeof(T));
     arr->count--;
 }
