@@ -34,7 +34,7 @@ void init_gui()
     GuiWindow overlay = root;
     array_add(&gui.windows, overlay);
 
-    gui.current_window = 1;
+    gui.current_window = GUI_BACKGROUND;
 
     gui.camera.projection = matrix4_identity();
     gui.camera.projection[0][0] = 2.0f / gfx.resolution.x;
@@ -42,8 +42,10 @@ void init_gui()
     gui.camera.projection[3][1] = -1.0f;
     gui.camera.projection[3][0] = -1.0f;
     
-    if (auto a = find_asset("textures/close.png"); a) gui.style.icons.close = gfx_load_texture(a->data, a->size);
-    if (auto a = find_asset("textures/check.png"); a) gui.style.icons.check = gfx_load_texture(a->data, a->size);
+    if (auto a = find_asset("textures/close.png"); a) gui.icons.close = gfx_load_texture(a->data, a->size);
+    if (auto a = find_asset("textures/check.png"); a) gui.icons.check = gfx_load_texture(a->data, a->size);
+    if (auto a = find_asset("textures/down.png"); a) gui.icons.down = gfx_load_texture(a->data, a->size);
+    if (auto a = find_asset("textures/up.png"); a) gui.icons.up = gfx_load_texture(a->data, a->size);
 
     gui.style.text.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
     gui.style.button.font = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
@@ -385,7 +387,8 @@ void gui_draw_rect(
     Vector2 pos, 
     Vector2 size, 
     GLuint texture,
-    GfxCommandBuffer *cmdbuf = nullptr)
+    GfxCommandBuffer *cmdbuf = nullptr,
+    i32 draw_index = -1)
 {
     if (!cmdbuf) cmdbuf = &gui_current_window()->command_buffer;
 
@@ -407,7 +410,7 @@ void gui_draw_rect(
     GfxCommand cmd = gui_command(GFX_COMMAND_GUI_PRIM_TEXTURE);
     cmd.gui_prim_texture.texture = texture;
     cmd.gui_prim_texture.vertex_count = ARRAY_COUNT(vertices);
-    gui_push_command(cmdbuf, cmd);
+    gui_push_command(cmdbuf, cmd, draw_index);
 
     array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
 }
@@ -417,10 +420,11 @@ void gui_draw_rect(
     Vector2 size, 
     Rect clip_rect,
     GLuint texture,
-    GfxCommandBuffer *cmdbuf = nullptr)
+    GfxCommandBuffer *cmdbuf = nullptr,
+    i32 draw_index = -1)
 {
     if (!apply_clip_rect(&pos, &size, clip_rect)) return;
-    gui_draw_rect(pos, size, texture, cmdbuf);
+    gui_draw_rect(pos, size, texture, cmdbuf, draw_index);
 }
 
 void gui_draw_rect(
@@ -461,15 +465,18 @@ void gui_draw_rect(
     Vector2 size, 
     Rect clip_rect,
     Vector3 color,
-    GfxCommandBuffer *cmdbuf = nullptr)
+    GfxCommandBuffer *cmdbuf = nullptr,
+    i32 draw_index = -1)
 {
     if (!apply_clip_rect(&pos, &size, clip_rect)) return;
-    gui_draw_rect(pos, size, color, cmdbuf);
+    gui_draw_rect(pos, size, color, cmdbuf, draw_index);
 }
 
 TextQuadsAndBounds calc_text_quads_and_bounds(String text, Font *font, Allocator alloc = mem_tmp)
 {
     TextQuadsAndBounds r{};
+    r.bounds.size.y = font->line_height;
+    
     array_reset(&r.glyphs, alloc, text.length);
     
     Vector2 cursor{ 0.0f, (f32)font->baseline };
@@ -615,14 +622,12 @@ void gui_textbox(String str, Vector2 pos, Font *font = &gui.style.text.font)
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
-    // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
     gui_draw_text(td.glyphs, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Rect clip_rect, Font *font = &gui.style.text.font)
 {
     TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
-    // TODO(jesper): should this be pushing a widget onto the layout to take up space in some way?
     gui_draw_text(td.glyphs, pos, clip_rect, gui.style.text.color, font);
 }
 
@@ -709,11 +714,11 @@ Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
     return pos;
 }
 
-Vector2 gui_layout_widget(Vector2 *required_size)
+Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor)
 {
     GuiLayout *layout = gui_current_layout();
-
-    Vector2 pos = gui_layout_widget(*required_size);
+    Vector2 pos = gui_layout_widget(*required_size, anchor);
+    
     switch (layout->type) {
     case GUI_LAYOUT_ROW:
         required_size->x = layout->available_space.x;
@@ -731,7 +736,7 @@ Vector2 gui_layout_widget(Vector2 *required_size)
 
 bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
-    GuiWindow *wnd = &gui.windows[gui.current_window];
+    GuiWindow *wnd = gui_current_window();
 
     bool clicked = gui_clicked(id);
     gui_hot_rect(id, pos, size);
@@ -741,23 +746,32 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
     Vector3 btn_bg_acc1 = gui.pressed == id ? gui.style.button.accent1_focus : gui.style.button.accent1;
     Vector3 btn_bg_acc2 = gui.style.button.accent2;
 
-    Rect clip_rect{ wnd->clip_rect };
-    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, clip_rect, btn_bg_acc0);
-    gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, clip_rect, btn_bg_acc0);
-    gui_draw_rect(pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, clip_rect, btn_bg_acc1);
-    gui_draw_rect(pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, clip_rect, btn_bg_acc1);
-    gui_draw_rect(pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, clip_rect, btn_bg_acc2);
-    gui_draw_rect(pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, clip_rect, btn_bg_acc2);
-    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, clip_rect, btn_bg);
+    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0);
+    gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, wnd->clip_rect, btn_bg_acc0);
+    gui_draw_rect(pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, wnd->clip_rect, btn_bg_acc1);
+    gui_draw_rect(pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, wnd->clip_rect, btn_bg_acc1);
+    gui_draw_rect(pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, wnd->clip_rect, btn_bg_acc2);
+    gui_draw_rect(pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, wnd->clip_rect, btn_bg_acc2);
+    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, wnd->clip_rect, btn_bg);
     return clicked;
 }
 
+bool gui_button_id(GuiId id, Vector2 pos, Vector2 size, GLuint icon)
+{
+    bool clicked = gui_button_id(id, pos, size);
+    
+    Vector2 margin{ 4, 4 };
+    Vector2 icon_s = size - margin;
+    Vector2 icon_p = pos + 0.5f*(size-icon_s);
+    gui_draw_rect(icon_p, icon_s, icon);
+    return clicked;
+}
+
+
 bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size)
 {
-    GuiWindow *wnd = &gui.windows[gui.current_window];
-    
+    GuiWindow *wnd = gui_current_window();
     Vector2 pos = gui_layout_widget(size);
-    
     
     bool clicked = gui_button_id(id, pos, size);
     
@@ -820,7 +834,7 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
     gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
-    if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, gui.style.icons.check);
+    if (*checked) gui_draw_rect(btn_pos + inner_margin, inner_size, gui.icons.check);
     gui_draw_text(td.glyphs, pos + Vector2{ btn_size.x + btn_margin.x, 0.0 }, wnd->clip_rect, label_col, &gui.style.text.font);
     
     return toggled;
@@ -1216,7 +1230,7 @@ bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size)
         gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot, &wnd->command_buffer);
     }
 
-    gui_draw_rect(icon_pos, icon_size, gui.style.icons.close);
+    gui_draw_rect(icon_pos, icon_size, gui.icons.close);
     return clicked;
 }
 
@@ -1229,7 +1243,7 @@ bool gui_begin_window_id(
     u32 flags)
 {
     if (!*visible) return false;
-    ASSERT(gui.current_window == 1);
+    ASSERT(gui.current_window == GUI_BACKGROUND);
     
     if (!gui_begin_window_id(id, title, pos, size, flags | GUI_WINDOW_CLOSE)) {
         *visible = false;
@@ -1250,7 +1264,7 @@ bool gui_begin_window_id(
     Vector2 in_size, 
     u32 flags)
 {
-    ASSERT(gui.current_window == 1);
+    ASSERT(gui.current_window == GUI_BACKGROUND);
     
     i32 index = gui_create_window(id, flags, in_pos, in_size);
     GuiWindow *wnd = &gui.windows[index];
@@ -1268,7 +1282,7 @@ bool gui_begin_window_id(
         if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
             gui.focused = GUI_ID_INVALID;
             gui_clear_hot();
-            gui.current_window = 1;
+            gui.current_window = GUI_BACKGROUND;
             return false;
         }
     }
@@ -1317,7 +1331,7 @@ bool gui_begin_window_id(
                         if (gui.hot == id) gui.hot = GUI_ID_INVALID;
                         if (gui.focused == id) gui.focused = GUI_ID_INVALID;
                         
-                        if (gui.current_window == index) gui.current_window = 1;
+                        if (gui.current_window == index) gui.current_window = GUI_BACKGROUND;
                         return false;
                     }
                     break;
@@ -1366,7 +1380,7 @@ bool gui_begin_window_id(
 
 void gui_end_window()
 {
-    ASSERT(gui.current_window > 1);
+    ASSERT(gui.current_window > GUI_OVERLAY);
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
     if (wnd->flags & GUI_WINDOW_RESIZABLE) {
@@ -1441,7 +1455,7 @@ void gui_end_window()
     }
 
     gui_end_layout();
-    gui.current_window = 1;
+    gui.current_window = GUI_BACKGROUND;
 }
 
 GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *position, Vector2 axis)
@@ -2119,7 +2133,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     
     if (menu->active) {
         gui_push_id(id);
-        gui.current_window = 1; // overlay
+        gui.current_window = GUI_OVERLAY;
         
         Vector2 menu_pos = cl->type == GUI_LAYOUT_COLUMN ? 
             Vector2{ pos.x, pos.y + size.y } : 
@@ -2127,7 +2141,7 @@ bool gui_begin_menu_id(GuiId id, String label)
 
         GuiLayout layout{
             .type = GUI_LAYOUT_ROW,
-            .flags = GUI_LAYOUT_EXPAND_SIZE,
+            .flags = GUI_LAYOUT_EXPAND,
             .pos = menu_pos,
             .size = menu->size,
             .margin.x = 5,
@@ -2234,12 +2248,12 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
     
     i32 step_size = 3;
-    if (gui_button_id(up_id, btn_up_p, btn_size)) {
+    if (gui_button_id(up_id, btn_up_p, btn_size, gui.icons.up)) {
         *current -= step_size;
         *current = MAX(*current, 0);
     }
 
-    if (gui_button_id(dwn_id, btn_dwn_p, btn_size)) {
+    if (gui_button_id(dwn_id, btn_dwn_p, btn_size, gui.icons.down)) {
         *current += step_size;
         *current = MIN(*current, max-3);
     }
@@ -2551,4 +2565,15 @@ bool gui_begin_window_id(
     u32 flags)
 {
     return gui_begin_window_id(id, title, pos - hadamard(size, anchor), size, visible, flags);
+}
+
+
+void gui_divider(f32 thickness = 1, Vector3 color = gui.style.accent_bg)
+{
+    GuiWindow *wnd = gui_current_window();
+    
+    Vector2 size{ 1, 1 };
+    Vector2 pos = gui_layout_widget(&size);
+    
+    gui_draw_rect(pos, size, wnd->clip_rect, color);
 }

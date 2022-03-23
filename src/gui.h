@@ -82,7 +82,7 @@ enum GuiLayoutFlags : u32 {
     GUI_LAYOUT_EXPAND_Y = 1 << 1,
     
     
-    GUI_LAYOUT_EXPAND_SIZE = GUI_LAYOUT_EXPAND_X | GUI_LAYOUT_EXPAND_Y,
+    GUI_LAYOUT_EXPAND = GUI_LAYOUT_EXPAND_X | GUI_LAYOUT_EXPAND_Y,
 };
 
 struct GuiId {
@@ -228,6 +228,14 @@ struct GuiContext {
     } mouse;
     
     struct {
+        Vector3 accent_bg = rgb_unpack(0xFFCA5100);
+        Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
+        
+        Vector3 bg = rgb_unpack(0xFF333333);
+        Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
+        Vector3 bg_press = rgb_unpack(0xFF2C2C2C);
+
+        
         struct {
             Font font;
             
@@ -268,11 +276,6 @@ struct GuiContext {
         } button;
         
         struct {
-            GLuint close;
-            GLuint check;
-        } icons;
-        
-        struct {
             Vector3 bg = rgb_unpack(0xFFCCCCCC);
             
             Vector3 scroll_btn = rgb_unpack(0xFF333333);
@@ -290,7 +293,13 @@ struct GuiContext {
             Vector3 hot_bg = rgb_unpack(0xFF2F2F2F);
         } lister;
     } style;
-
+    
+    struct {
+        GLuint close;
+        GLuint check;
+        GLuint down;
+        GLuint up;
+    } icons;
 };
 
 extern GuiContext gui;
@@ -314,7 +323,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_str, Vector2 size);
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size);
 
 Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
-Vector2 gui_layout_widget(Vector2 *required_size);
+Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
 Rect gui_layout_widget_fill();
 
 bool gui_button_id(GuiId id, String text);
