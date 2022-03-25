@@ -499,15 +499,18 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
     }
 }
 
+i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_id)
+{
+    return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
+}
+
 void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_lines, BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
     
     Rect r = view.rect;
-
-    Vector2 baseline{ r.pos.x, r.pos.y + (f32)app.mono.baseline };
-    Vector2 pen = baseline;
+    f32 base_x = r.pos.x;
 
     i64 last_line = wrapped_line;
     while (last_line+1 < existing_lines->count && existing_lines->at(last_line+1).wrapped) last_line++;
@@ -560,8 +563,6 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
         }
 
         if (c == '\r') {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
             if (p < end && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
             line_start = word_start = p;
             array_add(new_lines, { (i64)line_start, 0 });
@@ -570,26 +571,18 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
         }
 
         if (c == ' ') {
-            pen.x += app.mono.space_width;
             vcolumn++;
             continue;
         }
 
         if (c == '\t') {
             i32 w = app.tab_width - vcolumn % app.tab_width;
-            pen.x += app.mono.space_width*w;
             vcolumn += w;
             continue;
         }
 
-        GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
-        if (g.x1 >= r.pos.x + r.size.x) {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
-
-            // TODO(jesper): go back 1 more glyph and replace it with some kind of word-break glyph
-            // if the line has to be broken mid-word because of super long single word lines
-            // Maybe the word-break glyph should be on the start of the artificial line start?
+        f32 x1 = base_x + (vcolumn+1) * app.mono.space_width;
+        if (x1 >= r.pos.x + r.size.x) {
             if (!is_word_boundary(c) && line_start != word_start) { 
                 p = line_start = word_start;
                 array_add(new_lines, { (i64)line_start, 1 });
@@ -2057,7 +2050,6 @@ next_node:;
             i32 line_index = i + line_offset;
 
             Vector2 baseline{ view.rect.pos.x, view.rect.pos.y + i*app.mono.line_height + (f32)app.mono.baseline - voffset };
-            Vector2 pen = baseline;
 
             i64 p = view.lines[line_index].offset;
             i64 end = line_end_offset(line_index, view.lines, buffer);
@@ -2080,18 +2072,17 @@ next_node:;
                 }
 
                 if (c == ' ') {
-                    pen.x += app.mono.space_width;
                     vcolumn++;
                     continue;
                 }
 
                 if (c == '\t') {
                     i32 w = app.tab_width - vcolumn % app.tab_width;
-                    pen.x += app.mono.space_width*w;
                     vcolumn += w;
                     continue;
                 }
-
+                
+                Vector2 pen{ baseline.x + vcolumn*app.mono.space_width, baseline.y };
                 GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
 
                 // NOTE(jesper): if this fires then we haven't done line reflowing correctly
