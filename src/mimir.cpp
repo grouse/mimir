@@ -1236,6 +1236,16 @@ void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array
         return;
     } else if (new_wrapped_line == *wrapped_line) return;
     
+    if (*wrapped_line >= lines.count) {
+        *wrapped_line = MIN(new_wrapped_line, lines.count-1);
+        *line = 0;
+        for (i32 i = 0; i < *wrapped_line; i++) {
+            if (!lines[i].wrapped) *line = *line + 1;
+        }
+        
+        return;
+    }
+    
     while (*wrapped_line > new_wrapped_line) {
         if (!lines[(*wrapped_line)--].wrapped) (*line)--;
     }
@@ -1251,27 +1261,25 @@ bool app_needs_render()
 }
 
 
-Caret recalculate_caret(Caret current, BufferId buffer_id, Array<BufferLine> lines)
+Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines)
 {
-    Caret caret = current;
-
     Buffer *buffer = get_buffer(buffer_id);
-    if (!buffer) return current;
+    if (!buffer) return caret;
 
     if (caret.byte_offset == 0) caret.wrapped_line = 0;
     else if (caret.byte_offset >= buffer_end(buffer_id)) {
         caret.byte_offset = buffer_end(buffer_id);
-        recalc_caret_line(view.lines.count-1, &view.caret.wrapped_line, &view.caret.line, view.lines);
+        recalc_caret_line(lines.count-1, &caret.wrapped_line, &caret.line, lines);
     } else {
         caret.wrapped_line = MIN(caret.wrapped_line, lines.count-1);
         caret.wrapped_line = MAX(0, caret.wrapped_line);
         
         while (caret.byte_offset < lines[caret.wrapped_line].offset) {
-            if (!view.lines[caret.wrapped_line--].wrapped) caret.line--;
+            if (!lines[caret.wrapped_line--].wrapped) caret.line--;
         }
         
         while (caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) {
-            if (!view.lines[++caret.wrapped_line].wrapped) caret.line++;
+            if (!lines[++caret.wrapped_line].wrapped) caret.line++;
         }
     }
 
@@ -1956,17 +1964,6 @@ next_node:;
             view_set_buffer(active_buffer);
         }
 
-        if (true) {
-            Vector2 ib_s{ tr.size.x, 15.0f };
-            Vector2 ib_p = gui_layout_widget(ib_s, GUI_ANCHOR_BOTTOM);
-
-            gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = ib_p, .size = ib_s });
-            defer { gui_end_layout(); };
-
-            char buffer[256];
-            gui_textbox(stringf(buffer, sizeof buffer, "line: %d, col: %lld", view.caret.line+1, view.caret.column+1));
-        }
-
         {
             Rect r = gui_layout_widget_fill();
             gui_begin_layout( { .type = GUI_LAYOUT_COLUMN, .rect = r });
@@ -1996,6 +1993,15 @@ next_node:;
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
         view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
         view.caret_dirty = false;
+    }
+    
+    if (true) {
+        Vector2 ib_s{ 0, 15.0f };
+        gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { view.rect.pos.x, view.rect.pos.y+view.rect.size.y-ib_s.y }, .size = ib_s });
+        defer { gui_end_layout(); };
+
+        char buffer[256];
+        gui_textbox(stringf(buffer, sizeof buffer, "line: %d, col: %lld", view.caret.line+1, view.caret.column+1));
     }
 
     if (view.caret.wrapped_line >= view.line_offset && 
