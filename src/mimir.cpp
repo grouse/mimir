@@ -158,6 +158,9 @@ Application app{};
 View view{};
 DynamicArray<Buffer> buffers{};
 
+void move_view_to_caret();
+
+
 Buffer* get_buffer(BufferId buffer_id)
 {
     if (buffer_id.index < 0) return nullptr;
@@ -418,11 +421,11 @@ void init_app()
     
     calculate_num_visible_lines();
     
-    view_set_buffer(create_buffer("src/gui.cpp"));
-    view_set_buffer(create_buffer("src/gui.h"));
-    view_set_buffer(create_buffer("src/maths.cpp"));
-    view_set_buffer(create_buffer("src/maths.h"));
-    view_set_buffer(create_buffer("src/mimir.cpp"));
+    //view_set_buffer(create_buffer("src/gui.cpp"));
+    //view_set_buffer(create_buffer("src/gui.h"));
+    //view_set_buffer(create_buffer("src/maths.cpp"));
+    //view_set_buffer(create_buffer("src/maths.h"));
+    //view_set_buffer(create_buffer("src/mimir.cpp"));
 
     fzy_init_table();
 }
@@ -755,6 +758,9 @@ void buffer_undo(BufferId buffer_id)
             break;
         }
     } while (group_level < 0);
+    
+    // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
+    move_view_to_caret();
 }
 
 void buffer_redo(BufferId buffer_id)
@@ -787,6 +793,9 @@ void buffer_redo(BufferId buffer_id)
             break;
         }
     } while (group_level > 0);
+    
+    // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
+    move_view_to_caret();
 }
 
 
