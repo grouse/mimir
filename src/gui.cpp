@@ -2468,8 +2468,8 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
                     next_selected_item = MAX((*selected_item)-1, 0);
                     break;
                 case VC_ENTER:
-                    result = GUI_LISTER_FINISH;
-                    break;
+                    *selected_item = next_selected_item;
+                    return GUI_LISTER_FINISH;
                 default: break;
                 }
                 break;

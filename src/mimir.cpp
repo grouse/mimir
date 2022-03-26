@@ -492,6 +492,11 @@ i64 buffer_start(Buffer *buffer)
     }
 }
 
+i64 line_start_offset(i32 wrapped_line, Array<BufferLine> lines)
+{
+    return lines[wrapped_line].offset;
+}
+
 i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 {
     switch (buffer->type) {
@@ -553,8 +558,6 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
         prev_c = c;
 
         if (c == '\n') {
-            baseline.y += app.mono.line_height;
-            pen = baseline;
             if (p < end && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
             line_start = word_start = p;
             array_add(new_lines, { (i64)line_start, 0 });
@@ -1080,11 +1083,6 @@ i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
     return offset;
 }
 
-i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_id)
-{
-    return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
-}
-
 i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
@@ -1392,6 +1390,7 @@ void app_event(InputEvent event)
         } 
         break;
     case IE_KEY_PRESS: 
+        app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.virtual_code) {
             case VC_Q:
@@ -1414,13 +1413,15 @@ void app_event(InputEvent event)
                 buffer_undo(view.buffer);
                 view.lines_dirty = true;
                 view.caret_dirty = true;
-                app.animating = true;
                 break;
             case VC_R:
                 buffer_redo(view.buffer);
                 view.lines_dirty = true;
                 view.caret_dirty = true;
-                app.animating = true;
+                break;
+            case VC_M:
+                if (event.key.modifiers == MF_CTRL) SWAP(view.mark, view.caret);
+                else view.mark = view.caret;
                 break;
             case VC_O:
                 app.lister.active = true;
@@ -1436,8 +1437,16 @@ void app_event(InputEvent event)
                     
                     i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
                     i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
-                    if (start == end) end += 1;
+                    if (event.key.modifiers == MF_CTRL) {
+                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
+                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
+                        
+                        start = line_start_offset(start_line, view.lines);
+                        end = line_end_offset(end_line, view.lines, view.buffer);
+                        
+                    }
                     
+                    if (start == end) end += 1;
                     if (buffer_remove(view.buffer, start, end)) {
                         // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
                         view.lines_dirty = true;
@@ -1454,6 +1463,15 @@ void app_event(InputEvent event)
                     
                     i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
                     i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
+                    
+                    if (event.key.modifiers == MF_CTRL) {
+                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
+                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
+
+                        start = line_start_offset(start_line, view.lines);
+                        end = line_end_offset(end_line, view.lines, view.buffer);
+                    }
+
                     if (start == end) end += 1;
                     
                     String str = buffer_read(view.buffer, start, end);
@@ -1472,8 +1490,19 @@ void app_event(InputEvent event)
             case VC_Y: {
                     i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
                     i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
+                    
+                    if (event.key.modifiers == MF_CTRL) {
+                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
+                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
+
+                        start = line_start_offset(start_line, view.lines);
+                        end = line_end_offset(end_line, view.lines, view.buffer);
+                    }
+                    
+
                     if (start == end) end += 1;
 
+                    LOG_INFO("yank range: [%lld,%lld]", start, end);
                     set_clipboard_data(buffer_read(view.buffer, start, end));
                 } break;
             case VC_P:
@@ -1513,7 +1542,6 @@ void app_event(InputEvent event)
                 break;
             case VC_S:
                 if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
-                app.animating = true;
                 break;
             default: break;
             }
@@ -1716,10 +1744,13 @@ void update_and_render(f32 dt)
             }
         }
     }
-    
-    gui_window("fuzzy lister", gfx.resolution * 0.5f, { gfx.resolution.x * 0.7f, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
+
+    // TODO(jesper): something smarter to use more of the space in small windows without taking up _all_ the space in
+    // large windows
+    f32 lister_w = gfx.resolution.x*0.7f;
+    gui_window("fuzzy lister", gfx.resolution * 0.5f, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
         GuiEditboxAction action = gui_editbox("");
-        if (action & (GUI_EDITBOX_CHANGE | GUI_EDITBOX_FINISH)) {
+        if (action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
                 array_copy(&app.lister.filtered, app.lister.values);
@@ -1753,8 +1784,7 @@ void update_and_render(f32 dt)
                         match_bonus[i] = fzy_compute_bonus(prev, ls[i]);
                         
                     }
-
-
+                    
                     for (i32 i = 0; i < needle.length; i++) {
                         fzy_score_t prev_score = FZY_SCORE_MIN;
                         fzy_score_t gap_score = i == needle.length-1 ? FZY_SCORE_GAP_TRAILING : FZY_SCORE_GAP_INNER;
@@ -1790,6 +1820,7 @@ void update_and_render(f32 dt)
 next_node:;
                 }
 
+                // TODO(jesper): this has to be a stable sort!
                 quicksort(scores, app.lister.filtered, 0, app.lister.filtered.count-1);
             }
         }
@@ -1982,11 +2013,16 @@ next_node:;
         }
     }
 
+    // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
+    // make sense for this path to go away completely when they are, but I won't completely discount that
+    // we might still need a path to re-calculate it from scratch from a byte offset. But probably we
+    // need to do that immediately instead of deferring, which first relies on all the line wrapping
+    // recalculation to be done immediately as well
     if (view.caret_dirty) {
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
         view.caret_dirty = false;
     }
+    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
     
     if (true) {
         Vector2 ib_s{ 0, 15.0f };
@@ -2018,7 +2054,6 @@ next_node:;
         gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
     }
 
-    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
     if (view.mark.wrapped_line >= view.line_offset && 
         view.mark.wrapped_line < view.line_offset + view.lines_visible)
     {
