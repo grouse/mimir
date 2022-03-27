@@ -10,6 +10,8 @@
 #include "font.cpp"
 #include "fzy.cpp"
 
+#define DEBUG_LINE_WRAP_RECALC 0
+
 enum EditMode {
     MODE_EDIT,
     MODE_INSERT,
@@ -609,8 +611,28 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     if (end != buffer_end(buffer)) lines = slice(*new_lines, 0, new_lines->count-1);
     
     if (new_lines != existing_lines) {
-        if (wrapped_line == end_line) array_insert(existing_lines, wrapped_line, lines);
-        else array_replace_range(existing_lines, wrapped_line, end_line, lines);
+        if (wrapped_line == end_line) {
+#if DEBUG_LINE_WRAP_RECALC
+            LOG_INFO("inserting %d new lines at %d", lines.count, wrapped_line);
+            for (i32 i = 0; i < lines.count; i++) LOG_RAW("\tnew line[%d]: %lld\n", i, lines[i].offset);
+            for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\texisting line[%d]: %lld\n", i, existing_lines->at(i).offset);
+#endif
+            array_insert(existing_lines, wrapped_line, lines);
+#if DEBUG_LINE_WRAP_RECALC
+            for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\tresulting line[%d]: %lld\n", i, existing_lines->at(i).offset);
+#endif
+        } else {
+#if DEBUG_LINE_WRAP_RECALC
+            LOG_INFO("replacing [%d, %d] old lines with %d new lines at %d", wrapped_line, end_line, lines.count, wrapped_line);
+            for (i32 i = 0; i < lines.count; i++) LOG_RAW("\tnew line[%d]: %lld\n", i, lines[i].offset);
+            for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\texisting line[%d]: %lld\n", i, existing_lines->at(i).offset);
+#endif
+            array_replace_range(existing_lines, wrapped_line, end_line, lines);
+            
+#if DEBUG_LINE_WRAP_RECALC
+            for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\tresulting line[%d]: %lld\n", i, existing_lines->at(i).offset);
+#endif
+        }
     }
 }
 
@@ -693,6 +715,14 @@ bool buffer_unsaved_changes(BufferId buffer_id)
     return buffer && buffer->saved_at != buffer->history_index;
 }
 
+i32 wrapped_line_from_offset(i64 offset, i32 guessed_line, Array<BufferLine> lines)
+{
+    i32 line = guessed_line;
+    while (line > 0 && offset < lines[line].offset) line--;
+    while (line < (lines.count-2) && offset > lines[line+1].offset) line++;
+    return line;
+}
+
 void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_history = true)
 {
     Buffer *buffer = get_buffer(buffer_id);
@@ -714,13 +744,14 @@ void buffer_insert(BufferId buffer_id, i64 offset, String text, bool record_hist
         buffer->flat.size += text.length;
         break;
     }
-
+    
+    // TODO(jesper): multi-view support
     if (view.buffer == buffer_id) {
-        for (i32 i = view.caret.wrapped_line+1; i < view.lines.count; i++) {
+        i32 line = wrapped_line_from_offset(offset, view.caret.wrapped_line, view.lines);
+        for (i32 i = line+1; i < view.lines.count; i++) {
             view.lines[i].offset += text.length;
         }
-
-        recalculate_line_wrap(view.caret.wrapped_line, &view.lines, view.buffer);
+        recalculate_line_wrap(line, &view.lines, view.buffer);
     }
 
     if (record_history) {

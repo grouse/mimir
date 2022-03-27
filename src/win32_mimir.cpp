@@ -150,7 +150,7 @@ int WINAPI wWinMain(
     init_default_allocators();
     mem_frame = linear_allocator(100*1024*1024);
     
-    Vector2 resolution{ 1280, 720 };
+    Vector2 resolution{ 400, 720 };
     
     Win32Window wnd = create_opengl_window(
         "mimir",
