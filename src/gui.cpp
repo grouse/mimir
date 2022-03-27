@@ -1171,8 +1171,10 @@ GuiLister* gui_find_or_create_lister(GuiId id)
 
 GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size) 
 {
-    for (auto &it : gui.menus) if (it.id == id) return &it;
-    i32 i = array_add(&gui.menus, GuiMenu{ .id = id, .size = initial_size, .active = false });
+    for (auto &it : gui.menus) {
+        if (it.id == id) return &it;
+    }
+    i32 i = array_add(&gui.menus, GuiMenu{ .id = id, .parent_wnd = gui.current_window, .size = initial_size, .active = false });
     return &gui.menus[i];
 }
 
@@ -2119,7 +2121,6 @@ bool gui_begin_menu_id(GuiId id, String label)
         // TODO(jesper): this needs to be adjusted and fixed for nested sub-menus. Probably using the id stack
         if (gui.active_menu != id && gui.active_menu != GUI_ID_INVALID) {
             GuiMenu *current = gui_find_menu(gui.active_menu);
-            ASSERT(current);
             current->active = false;
         }
         
@@ -2173,7 +2174,9 @@ void gui_end_menu()
             }
         }
     }
-
+    
+    gui.current_window = menu->parent_wnd;
+    
     menu->size = layout->size;
     if (layout->type == GUI_LAYOUT_ROW && menu->active) {
         Vector3 bg = rgb_unpack(0xFF212121);

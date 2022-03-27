@@ -128,6 +128,7 @@ struct GuiWindowState {
 
 struct GuiMenu {
     GuiId id;
+    i32 parent_wnd;
     Vector2 size;
     i32 draw_index = -1;
     bool active;
