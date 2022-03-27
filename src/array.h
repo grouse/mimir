@@ -230,6 +230,8 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
     ASSERT(start < end);
     
     i32 remove_count = end-start;
+
+    i32 old_count = arr->count;
     i32 new_count = arr->count - remove_count + values.count;
     
     if (new_count > arr->capacity) {
@@ -241,7 +243,10 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
     }
     
     if (values.count > remove_count) {
-        for (i32 i = new_count-1; i > end; i--) arr->data[i] = arr->data[i-1];
+        i32 move_count = new_count-1-end;
+        for (i32 i = 0; i < move_count; i++) {
+            arr->data[new_count-i-1] = arr->data[old_count-1-i];
+        }
     }
     
     for (i32 i = 0; i < values.count; i++) arr->data[start+i] = values.data[i];
