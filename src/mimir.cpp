@@ -31,6 +31,10 @@ enum ViewFlags : u32 {
     VIEW_SET_MARK = 1 << 0,
 };
 
+struct Range_i64 {
+    i64 start, end;
+};
+
 struct BufferLine {
     i64 offset : 63;
     i64 wrapped : 1;
@@ -512,6 +516,25 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_id)
 {
     return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
+}
+
+Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buffer, bool lines_block)
+{
+    Range_i64 r;
+    
+    if (lines_block) {
+        i32 start_line = MIN(c0.wrapped_line, c1.wrapped_line);
+        i32 end_line = MAX(c0.wrapped_line, c1.wrapped_line);
+        
+        r.start = line_start_offset(start_line, lines);
+        r.end = line_end_offset(end_line, lines, buffer);
+    } else {
+        r.start = MIN(c0.byte_offset, c1.byte_offset);
+        r.end = MAX(c0.byte_offset, c1.byte_offset);
+    }
+    
+    if (r.start == r.end) r.end += 1;
+    return r;
 }
 
 void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_lines, BufferId buffer_id)
@@ -1474,24 +1497,12 @@ void app_event(InputEvent event)
                 break;
             case VC_D: {
                     BufferHistoryScope h(view.buffer);
-                    
-                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
-                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
-                    if (event.key.modifiers == MF_CTRL) {
-                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
-                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
-                        
-                        start = line_start_offset(start_line, view.lines);
-                        end = line_end_offset(end_line, view.lines, view.buffer);
-                        
-                    }
-                    
-                    if (start == end) end += 1;
-                    if (buffer_remove(view.buffer, start, end)) {
+                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
+                    if (buffer_remove(view.buffer, r.start, r.end)) {
                         // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
                         view.lines_dirty = true;
 
-                        view.caret.byte_offset = start;
+                        view.caret.byte_offset = r.start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
 
@@ -1501,26 +1512,14 @@ void app_event(InputEvent event)
             case VC_X: {
                     BufferHistoryScope h(view.buffer);
                     
-                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
-                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
-                    
-                    if (event.key.modifiers == MF_CTRL) {
-                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
-                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
-
-                        start = line_start_offset(start_line, view.lines);
-                        end = line_end_offset(end_line, view.lines, view.buffer);
-                    }
-
-                    if (start == end) end += 1;
-                    
-                    String str = buffer_read(view.buffer, start, end);
+                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
+                    String str = buffer_read(view.buffer, r.start, r.end);
                     set_clipboard_data(str);
                     
-                    if (buffer_remove(view.buffer, start, end)) {
+                    if (buffer_remove(view.buffer, r.start, r.end)) {
                         view.lines_dirty = true;
 
-                        view.caret.byte_offset = start;
+                        view.caret.byte_offset = r.start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
 
@@ -1528,22 +1527,8 @@ void app_event(InputEvent event)
                     }
                 } break;
             case VC_Y: {
-                    i64 start = MIN(view.mark.byte_offset, view.caret.byte_offset);
-                    i64 end = MAX(view.mark.byte_offset, view.caret.byte_offset);
-                    
-                    if (event.key.modifiers == MF_CTRL) {
-                        i32 start_line = MIN(view.mark.wrapped_line, view.caret.wrapped_line);
-                        i32 end_line = MAX(view.mark.wrapped_line, view.caret.wrapped_line);
-
-                        start = line_start_offset(start_line, view.lines);
-                        end = line_end_offset(end_line, view.lines, view.buffer);
-                    }
-                    
-
-                    if (start == end) end += 1;
-
-                    LOG_INFO("yank range: [%lld,%lld]", start, end);
-                    set_clipboard_data(buffer_read(view.buffer, start, end));
+                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
+                    set_clipboard_data(buffer_read(view.buffer, r.start, r.end));
                 } break;
             case VC_P:
                 write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
