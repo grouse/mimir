@@ -955,6 +955,13 @@ bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i3
     return true;
 }
 
+i32 seek_non_empty_line_back(BufferId buffer_id, Array<BufferLine> lines, i32 start_line)
+{
+    i32 line = start_line;
+    while (line > 0 && line_is_empty_or_whitespace(buffer_id, lines, line)) line--;
+    return line;
+}
+
 i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
 {
     if (wrapped_line >= lines.count-1) return wrapped_line;
@@ -1137,6 +1144,14 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
     }
     
     return byte_offset;
+}
+
+String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+{
+    line = seek_non_empty_line_back(buffer_id, lines, line);
+    i64 line_start = buffer_seek_beginning_of_line(buffer_id, lines, line);
+    i64 abs_start = line_start_offset(line, lines);
+    return buffer_read(buffer_id, abs_start, line_start);
 }
 
 i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
@@ -1585,9 +1600,11 @@ void app_event(InputEvent event)
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_ENTER:
-                write_string(view.buffer, buffer_newline_str(view.buffer));
-                break;
+            case VC_ENTER: {
+                    String indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
+                    write_string(view.buffer, buffer_newline_str(view.buffer));
+                    write_string(view.buffer, indent);
+                } break;
             case VC_TAB: 
                 write_string(view.buffer, "\t");
                 break;
