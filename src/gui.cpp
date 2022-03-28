@@ -733,14 +733,10 @@ Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor)
     return pos;
 }
 
-
-bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
+void gui_draw_button(GuiId id, Vector2 pos, Vector2 size)
 {
     GuiWindow *wnd = gui_current_window();
-
-    bool clicked = gui_clicked(id);
-    gui_hot_rect(id, pos, size);
-
+    
     Vector3 btn_bg = gui.pressed == id ? gui.style.button.bg_focus : gui.hot == id ? gui.style.button.bg_hot : gui.style.button.bg;
     Vector3 btn_bg_acc0 = gui.pressed == id ? gui.style.button.accent0_focus : gui.style.button.accent0;
     Vector3 btn_bg_acc1 = gui.pressed == id ? gui.style.button.accent1_focus : gui.style.button.accent1;
@@ -753,6 +749,14 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
     gui_draw_rect(pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, wnd->clip_rect, btn_bg_acc2);
     gui_draw_rect(pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, wnd->clip_rect, btn_bg_acc2);
     gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, wnd->clip_rect, btn_bg);
+}
+
+bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
+{
+
+    bool clicked = gui_clicked(id);
+    gui_hot_rect(id, pos, size);
+    gui_draw_button(id, pos, size);
     return clicked;
 }
 
@@ -2323,17 +2327,11 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
         y1 = MIN(scroll_size.y, y0+min_h);
     }
     
-    Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
-    Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
-    gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
-
-    Vector3 scroll_handle_bg = gui.pressed == handle_id ? 
-        gui.style.scrollbar.scroll_btn_focus: 
-        gui.hot == handle_id ? 
-        gui.style.scrollbar.scroll_btn_hot : 
-        gui.style.scrollbar.scroll_btn;
+    Vector2 handle_p{ scroll_pos.x, scroll_pos.y + y0 };
+    Vector2 handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
+    gui_hot_rect(handle_id, handle_p, handle_s);
     
-    gui_draw_rect(scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
+    gui_draw_button(handle_id, handle_p, handle_s);
 }
 
 void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, GuiAnchor anchor)
