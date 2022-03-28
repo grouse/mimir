@@ -2252,15 +2252,29 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     
     i32 step_size = 3;
     if (gui_button_id(up_id, btn_up_p, btn_size, gui.icons.up)) {
-        *current -= step_size;
-        *current = MAX(*current, 0);
-    }
-
-    if (gui_button_id(dwn_id, btn_dwn_p, btn_size, gui.icons.down)) {
-        *current += step_size;
+        *offset += step_size*line_height;
+        
+        if (*offset > line_height) {
+            f32 div = *offset / line_height;
+            *current = MAX(0, *current-1*div);
+            *offset -= line_height*div;
+        }
+        
         *current = MIN(*current, max-3);
     }
 
+    if (gui_button_id(dwn_id, btn_dwn_p, btn_size, gui.icons.down)) {
+        *offset -= step_size*line_height;
+        
+        if (*offset < -line_height) {
+            f32 div = *offset / -line_height;
+            *current += 1*div;
+            *offset += line_height*div;
+        }
+        
+        *current = MIN(*current, max-3);
+    }
+    
     // NOTE(jesper): line_height*total_to_scroll != row_height
     // The row_height is line_height converted to [0, scroll_size.y] coordinate space,
     // but the scroll_to_total and total_to_scroll coordintae space factors convert 
