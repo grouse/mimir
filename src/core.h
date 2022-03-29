@@ -28,7 +28,7 @@ extern "C" void* memmove(void *destination, const void *source, size_t num);
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #define MIN4(a, b, c, d) MIN(MIN(a, b), MIN(c, d))
 
-#define CLAMP(v, min, max) ((v) < (min) ? (min) : (v) > (max) ? (max) : (v));
+#define CLAMP(v, min, max) ((v) < (min) ? (min) : (v) > (max) ? (max) : (v))
 #define SWAP(a, b) do { auto tmp = a; a = b; b = tmp; } while(0)
 #define ARRAY_COUNT(arr) (i32)(sizeof(arr) / sizeof ((arr)[0]))
 
