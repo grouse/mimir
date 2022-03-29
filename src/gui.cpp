@@ -317,6 +317,10 @@ void gui_render()
 
 GfxCommand gui_command(GfxCommandType type)
 {
+    // TODO(jesper): this entire function essentially exists to initialise the vertex buffer
+    // data for the command. This should be replaced with a better API that lets you push
+    // some data onto a frame or persistent VBO and get back a structure that you pass
+    // to the command stream and it does the right thing
     GfxCommand cmd{ .type = type };
     switch (type) {
     case GFX_COMMAND_GUI_PRIM_COLOR:
@@ -737,23 +741,39 @@ void gui_draw_button(GuiId id, Vector2 pos, Vector2 size)
 {
     GuiWindow *wnd = gui_current_window();
     
-    Vector3 btn_bg = gui.pressed == id ? gui.style.button.bg_focus : gui.hot == id ? gui.style.button.bg_hot : gui.style.button.bg;
-    Vector3 btn_bg_acc0 = gui.pressed == id ? gui.style.button.accent0_focus : gui.style.button.accent0;
-    Vector3 btn_bg_acc1 = gui.pressed == id ? gui.style.button.accent1_focus : gui.style.button.accent1;
-    Vector3 btn_bg_acc2 = gui.style.button.accent2;
+    Vector3 btn_bg = gui.pressed == id ? gui.style.bg_press : gui.hot == id ? gui.style.bg_hot : gui.style.bg;
+    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.7f) : rgb_mul(btn_bg, 1.25f);
+    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.7f);
 
-    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0);
+    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0); 
     gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, wnd->clip_rect, btn_bg_acc0);
+    
     gui_draw_rect(pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, wnd->clip_rect, btn_bg_acc1);
     gui_draw_rect(pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, wnd->clip_rect, btn_bg_acc1);
-    gui_draw_rect(pos + Vector2{ size.x - 2.0f, 1.0f }, { 1.0f, size.y - 2.0f }, wnd->clip_rect, btn_bg_acc2);
-    gui_draw_rect(pos + Vector2{ 1.0f, size.y - 2.0f }, { size.x - 2.0f, 1.0f }, wnd->clip_rect, btn_bg_acc2);
-    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 3.0f, 3.0f }, wnd->clip_rect, btn_bg);
+    
+    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 2.0f, 2.0f }, wnd->clip_rect, btn_bg);
 }
+
+void gui_draw_accent_button(GuiId id, Vector2 pos, Vector2 size)
+{
+    GuiWindow *wnd = gui_current_window();
+
+    Vector3 btn_bg = gui.pressed == id ? gui.style.accent_bg_press : gui.hot == id ? gui.style.accent_bg_hot : gui.style.accent_bg;
+    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.7f) : rgb_mul(btn_bg, 1.25f);
+    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.7f);
+
+    gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0); 
+    gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, wnd->clip_rect, btn_bg_acc0);
+
+    gui_draw_rect(pos + Vector2{ size.x - 1.0f, 0.0f }, { 1.0f, size.y }, wnd->clip_rect, btn_bg_acc1);
+    gui_draw_rect(pos + Vector2{ 0.0f, size.y - 1.0f }, { size.x, 1.0f }, wnd->clip_rect, btn_bg_acc1);
+
+    gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 2.0f, 2.0f }, wnd->clip_rect, btn_bg);
+}
+
 
 bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
-
     bool clicked = gui_clicked(id);
     gui_hot_rect(id, pos, size);
     gui_draw_button(id, pos, size);
@@ -1350,13 +1370,13 @@ bool gui_begin_window_id(
     }
     
     Vector3 title_bg = gui.focused_window != id
-        ? gui.style.window.title_bg
-        : gui.hot == title_id ? gui.style.window.title_bg_hot : gui.style.window.title_bg_focus;
+        ? gui.style.bg_dark0
+        : gui.pressed == title_id ? gui.style.accent_bg_press : gui.hot == title_id ? gui.style.accent_bg_hot : gui.style.accent_bg;
     
     Vector2 title_pos = wnd->pos + window_border + Vector2{ 2.0f, 2.0f };
 
     gui_draw_rect(wnd->pos, wnd->size, title_bg);
-    gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.window.bg);
+    gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.bg_dark1);
     gui_draw_rect(wnd->pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
     
@@ -2376,12 +2396,18 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
         }
     }
 
-    if (gui_button_id(up_id, btn_up_p, btn_size)) {
+    if (gui_button_id(up_id, btn_up_p, btn_size, gui.icons.up)) {
         *current -= step_size;
         *current = MAX(*current, 0);
     }
 
-    if (total_height > total_size.y) {
+    if (gui_button_id(dwn_id, btn_dwn_p, btn_size, gui.icons.down)) {
+        *current += step_size;
+        *current = MIN(*current, max_c);
+    }
+
+    //if (total_height > total_size.y) 
+    {
         f32 y0 = *current*total_to_scroll;
         f32 y1 = y0 + yh;
 
@@ -2404,23 +2430,10 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
                 scroll_handle_s = { gui.style.scrollbar.thickness, y1 - y0 };
             }
         }
+        
         gui_hot_rect(handle_id, scroll_handle_p, scroll_handle_s);
-
-        Vector3 scroll_handle_bg = gui.pressed == handle_id ? 
-            gui.style.scrollbar.scroll_btn_focus : 
-            gui.hot == handle_id ? 
-            gui.style.scrollbar.scroll_btn_hot : 
-            gui.style.scrollbar.scroll_btn;
-
-        gui_draw_rect(scroll_handle_p, scroll_handle_s, wnd->clip_rect, scroll_handle_bg);
+        gui_draw_button(handle_id, scroll_handle_p, scroll_handle_s);
     }
-    
-    if (gui_button_id(dwn_id, btn_dwn_p, btn_size)) {
-        *current += step_size;
-        *current = MIN(*current, max_c);
-    }
-    
-    *current = CLAMP(*current, 0, max_c);
 }
 
 Rect gui_layout_widget_fill()

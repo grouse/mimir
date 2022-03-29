@@ -793,3 +793,12 @@ bool operator!=(const Rect &lhs, const Rect &rhs)
 {
     return lhs.pos != rhs.pos || lhs.size != rhs.size;
 }
+
+Vector3 rgb_mul(Vector3 rgb, f32 v)
+{
+    return { 
+        CLAMP(rgb.x * v, 0, 1), 
+        CLAMP(rgb.y * v, 0, 1), 
+        CLAMP(rgb.z * v, 0, 1) 
+   };
+}

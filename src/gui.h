@@ -229,14 +229,17 @@ struct GuiContext {
     } mouse;
     
     struct {
-        Vector3 accent_bg = rgb_unpack(0xFFCA5100);
-        Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
-        
         Vector3 bg = rgb_unpack(0xFF333333);
         Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
         Vector3 bg_press = rgb_unpack(0xFF2C2C2C);
-
         
+        Vector3 bg_dark0 = rgb_unpack(0xFF212121);
+        Vector3 bg_dark1 = rgb_unpack(0xFF282828);
+        
+        Vector3 accent_bg = rgb_unpack(0xFFCA5100);
+        Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
+        Vector3 accent_bg_press = rgb_unpack(0xFFDA4100);
+
         struct {
             Font font;
             
@@ -249,40 +252,19 @@ struct GuiContext {
 
             Vector2 close_size = { 16.0f, 16.0f };
             
-            Vector3 bg = rgb_unpack(0xFF282828);
-            
             f32 title_height = 21;
             
             Vector3 title_fg = { 1, 1, 1 };
-            
-            Vector3 title_bg = rgb_unpack(0xFF212121);
-            Vector3 title_bg_hot = rgb_unpack(0xFFFD8433);
-            Vector3 title_bg_focus = rgb_unpack(0xFFCA5100);
             
             Vector3 close_bg_hot = rgb_unpack(0xFFFF0000);
         } window;
         
         struct {
             Font font;
-            
-            Vector3 bg = rgb_unpack(0xFF333333);
-            Vector3 bg_focus = rgb_unpack(0xFF2C2C2C);
-            Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
-            
-            Vector3 accent0 = rgb_unpack(0xFF404040);
-            Vector3 accent0_focus = rgb_unpack(0xFF000000);
-            Vector3 accent1 = rgb_unpack(0xFF000000);
-            Vector3 accent1_focus = rgb_unpack(0xFF404040);
-            Vector3 accent2 = rgb_unpack(0xFF1D2021);
         } button;
         
         struct {
             Vector3 bg = rgb_unpack(0xFFCCCCCC);
-            
-            Vector3 scroll_btn = rgb_unpack(0xFF333333);
-            Vector3 scroll_btn_hot = rgb_unpack(0xFF3A3A3A);
-            Vector3 scroll_btn_focus = rgb_unpack(0xFF2C2C2C);
-            
             f32 thickness = 15.0f;
         } scrollbar;
         
