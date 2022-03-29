@@ -1931,17 +1931,13 @@ next_node:;
                 if (gui_clicked(id)) active_buffer = b->id;
                 gui_hot_rect(id, pos, size);
                 
-                Vector3 bg, fg;
                 if (i == current_tab) {
-                    bg = gui.hot == id ? gui.style.accent_bg_hot : gui.style.accent_bg;
-                    fg = rgb_unpack(0xFFFFFFFF);
+                    gui_draw_accent_button(id, pos, size);
+                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, { 1, 1, 1 }, font);
                 } else {
-                    bg = gui.pressed == id ? gui.style.bg_press : gui.hot == id ? gui.style.bg_hot : gui.style.bg;
-                    fg = rgb_unpack(0xFFFFFFFF);
+                    gui_draw_button(id, pos, size);
+                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, { 1, 1, 1 }, font);
                 }
-                
-                gui_draw_rect(pos, size, wnd->clip_rect, bg);
-                gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, fg, font);
                 
                 if (b->saved_at != b->history_index) {
                     gui_draw_rect(
