@@ -958,7 +958,7 @@ bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i3
 i32 seek_non_empty_line_back(BufferId buffer_id, Array<BufferLine> lines, i32 start_line)
 {
     i32 line = start_line;
-    while (line > 0 && line_is_empty_or_whitespace(buffer_id, lines, line)) line--;
+    while (line > 0 && (lines[line].wrapped || line_is_empty_or_whitespace(buffer_id, lines, line))) line--;
     return line;
 }
 
@@ -1601,6 +1601,7 @@ void app_event(InputEvent event)
                 move_view_to_caret();
                 break;
             case VC_ENTER: {
+                    BufferHistoryScope h(view.buffer);
                     String indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
                     write_string(view.buffer, buffer_newline_str(view.buffer));
                     write_string(view.buffer, indent);
