@@ -2474,13 +2474,12 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     GuiLister *lister = gui_find_or_create_lister(id);
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     Font *font = &gui.style.text.font;
     f32 item_height = font->line_height;
     
     Rect r = gui_layout_widget_fill();
-    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
+    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x + 1, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
     defer { gui_end_layout(); };
 
     i32 next_selected_item = *selected_item;
@@ -2520,7 +2519,13 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     }
     
     gui_draw_rect(r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
-    gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
+    gui_draw_rect({ r.pos.x, r.pos.y }, { r.size.x, 1 }, wnd->clip_rect, gui.style.lister.border);
+    gui_draw_rect({ r.pos.x, r.pos.y+r.size.y-1}, { r.size.x, 1 }, wnd->clip_rect, gui.style.lister.border);
+    gui_draw_rect({ r.pos.x+r.size.x-1, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, gui.style.lister.border);
+    gui_draw_rect({ r.pos.x, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, gui.style.lister.border);
+    // NOTE(jesper): I'm not using draw_line_rect at this point because there's something I don't understand
+    // going on with the pixel coordinate calculations for opengl line drawing
+    //gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
 
     f32 step_size = 5.0f;
     f32 total_height = item_height*items.count;

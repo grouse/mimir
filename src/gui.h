@@ -265,7 +265,7 @@ struct GuiContext {
         
         struct {
             Vector3 bg = rgb_unpack(0xFFCCCCCC);
-            f32 thickness = 15.0f;
+            f32 thickness = 10.0f;
         } scrollbar;
         
         struct {
