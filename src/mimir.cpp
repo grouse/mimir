@@ -1800,8 +1800,8 @@ void update_and_render(f32 dt)
             } else {
                 String lneedle = to_lower(needle);
 
-                DynamicArray<fzy_score_t> scores{};
-                array_create(&scores, app.lister.values.count, mem_tmp);
+                DynamicArray<fzy_score_t> scores{ .alloc = mem_tmp };
+                array_reserve(&scores, app.lister.values.count);
 
                 app.lister.filtered.count = 0;
 
@@ -1863,8 +1863,7 @@ void update_and_render(f32 dt)
 next_node:;
                 }
 
-                // TODO(jesper): this has to be a stable sort!
-                quicksort(scores, app.lister.filtered, 0, app.lister.filtered.count-1);
+                sort(scores, app.lister.filtered);
             }
         }
         

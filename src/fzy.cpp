@@ -46,7 +46,7 @@ void fzy_init_table()
     fzy_bonus_states[1]['.'] = fzy_bonus_states[2]['.'] = FZY_SCORE_MATCH_DOT;
 }
 
-void quicksort(Array<fzy_score_t> scores, Array<String> values, i32 l, i32 r)
+void sort(Array<fzy_score_t> scores, Array<String> values, i32 l, i32 r)
 {
     if (l >= r) return;
     
@@ -61,8 +61,15 @@ void quicksort(Array<fzy_score_t> scores, Array<String> values, i32 l, i32 r)
         }
     }
 
-    quicksort(scores, values, l, cnt-2);
-    quicksort(scores, values, cnt, r);
+    sort(scores, values, l, cnt-2);
+    sort(scores, values, cnt, r);
+}
+
+void sort(Array<fzy_score_t> scores, Array<String> values)
+{
+    ASSERT(scores.count == values.count);
+    sort(scores, values, 0, values.count-1);
 }
 
 
+    
