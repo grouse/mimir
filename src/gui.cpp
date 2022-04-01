@@ -170,7 +170,11 @@ void gui_handle_focus_grabbing(GuiId id)
     // TODO(jesper): intercept tabs if currently held focus and set
     // to invalid id to make the next widget grab focus. Keep track of
     // previous widget which wanted to grab focus for prev-tab
-    if (gui.focused == GUI_ID_INVALID) gui.focused = id;
+    if (gui.focused_window == gui_current_window()->id && 
+        gui.focused == GUI_ID_INVALID) 
+    {
+        gui.focused = id;
+    }
 }
 
 bool apply_clip_rect(GlyphRect *g, Rect clip_rect)
@@ -742,8 +746,8 @@ void gui_draw_button(GuiId id, Vector2 pos, Vector2 size)
     GuiWindow *wnd = gui_current_window();
     
     Vector3 btn_bg = gui.pressed == id ? gui.style.bg_press : gui.hot == id ? gui.style.bg_hot : gui.style.bg;
-    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.7f) : rgb_mul(btn_bg, 1.25f);
-    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.7f);
+    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.6f) : rgb_mul(btn_bg, 1.25f);
+    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.6f);
 
     gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0); 
     gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, wnd->clip_rect, btn_bg_acc0);
@@ -759,8 +763,8 @@ void gui_draw_accent_button(GuiId id, Vector2 pos, Vector2 size)
     GuiWindow *wnd = gui_current_window();
 
     Vector3 btn_bg = gui.pressed == id ? gui.style.accent_bg_press : gui.hot == id ? gui.style.accent_bg_hot : gui.style.accent_bg;
-    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.7f) : rgb_mul(btn_bg, 1.25f);
-    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.7f);
+    Vector3 btn_bg_acc0 = gui.pressed == id ? rgb_mul(btn_bg, 0.6f) : rgb_mul(btn_bg, 1.25f);
+    Vector3 btn_bg_acc1 = gui.pressed == id ? rgb_mul(btn_bg, 1.25f) : rgb_mul(btn_bg, 0.6f);
 
     gui_draw_rect(pos, { size.x - 1.0f, 1.0f }, wnd->clip_rect, btn_bg_acc0); 
     gui_draw_rect(pos, { 1.0f, size.y - 1.0f }, wnd->clip_rect, btn_bg_acc0);
@@ -1278,6 +1282,24 @@ bool gui_begin_window_id(
     return *visible;
 }
 
+bool gui_begin_window_id(
+    GuiId id, 
+    String title, 
+    Vector2 pos, 
+    Vector2 size,
+    bool visible,
+    u32 flags)
+{
+    if (!visible) return false;
+    ASSERT(gui.current_window == GUI_BACKGROUND);
+
+    if (!gui_begin_window_id(id, title, pos, size, flags & ~GUI_WINDOW_CLOSE)) {
+        visible = false;
+    }
+
+    return visible;
+}
+
 bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags)
 {
     return gui_begin_window_id(id, title, state->pos, state->size, &state->active, flags | GUI_WINDOW_CLOSE);
@@ -1444,6 +1466,7 @@ void gui_end_window()
                 resize_bl = { br.x - 10.0f, br.y };
             }
         }
+        
         if (gui.pressed == resize_id || 
             point_in_triangle(mouse, resize_tr, resize_br, resize_bl))
         {
@@ -2272,7 +2295,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
     
-    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_light0);
     
     i32 step_size = 3;
     if (gui_button_id(up_id, btn_up_p, btn_size, gui.icons.up)) {
@@ -2374,7 +2397,7 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
 
-    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.scrollbar.bg);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_light0);
 
     f32 scroll_to_total = total_height/scroll_size.y;
     f32 total_to_scroll = scroll_size.y/total_height;
@@ -2494,6 +2517,8 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
                 case VC_UP:
                     next_selected_item = MAX((*selected_item)-1, 0);
                     break;
+                case VC_ESC:
+                    return GUI_LISTER_CANCEL;
                 case VC_ENTER:
                     *selected_item = next_selected_item;
                     return GUI_LISTER_FINISH;
@@ -2600,6 +2625,17 @@ bool gui_begin_window_id(
     return gui_begin_window_id(id, title, pos - hadamard(size, anchor), size, visible, flags);
 }
 
+bool gui_begin_window_id(
+    GuiId id, 
+    String title, 
+    Vector2 pos, 
+    Vector2 size, 
+    Vector2 anchor, 
+    bool visible, 
+    u32 flags)
+{
+    return gui_begin_window_id(id, title, pos - hadamard(size, anchor), size, visible, flags & ~GUI_WINDOW_CLOSE);
+}
 
 void gui_divider(f32 thickness = 1, Vector3 color = gui.style.accent_bg)
 {

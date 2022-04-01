@@ -53,6 +53,7 @@ enum GuiListerAction {
     GUI_LISTER_NONE,
     GUI_LISTER_SELECT,
     GUI_LISTER_FINISH,
+    GUI_LISTER_CANCEL,
 };
 
 enum GuiGizmoAction {
@@ -230,11 +231,13 @@ struct GuiContext {
     
     struct {
         Vector3 bg = rgb_unpack(0xFF333333);
-        Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
-        Vector3 bg_press = rgb_unpack(0xFF2C2C2C);
+        Vector3 bg_hot = rgb_unpack(0xFF3F3F3F);
+        Vector3 bg_press = rgb_unpack(0xFF2A2A2A);
         
         Vector3 bg_dark0 = rgb_unpack(0xFF212121);
         Vector3 bg_dark1 = rgb_unpack(0xFF282828);
+        
+        Vector3 bg_light0 = rgb_unpack(0xFF828282);
         
         Vector3 accent_bg = rgb_unpack(0xFFCA5100);
         Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
@@ -264,8 +267,7 @@ struct GuiContext {
         } button;
         
         struct {
-            Vector3 bg = rgb_unpack(0xFFCCCCCC);
-            f32 thickness = 10.0f;
+            f32 thickness = 12.0f;
         } scrollbar;
         
         struct {
@@ -295,8 +297,10 @@ void gui_render(Camera camera);
 void gui_begin_layout(GuiLayout layout);
 void gui_end_layout();
 
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool visible, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, Vector2 anchor, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
+bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, Vector2 anchor, bool visible, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flags = GUI_WINDOW_DEFAULT);
 void gui_end_window();
