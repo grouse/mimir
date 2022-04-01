@@ -1791,9 +1791,10 @@ void update_and_render(f32 dt)
     // TODO(jesper): something smarter to use more of the space in small windows without taking up _all_ the space in
     // large windows
     f32 lister_w = gfx.resolution.x*0.7f;
-    gui_window("fuzzy lister", gfx.resolution * 0.5f, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
-        GuiEditboxAction action = gui_editbox("");
-        if (action & (GUI_EDITBOX_CHANGE)) {
+    gui_window("fuzzy lister", gfx.resolution * 0.5f, { lister_w, 200.0f }, { 0.5f, 0.5f }, app.lister.active, 0) {
+        GuiEditboxAction edit_action = gui_editbox("");
+        
+        if (edit_action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
                 array_copy(&app.lister.filtered, app.lister.values);
@@ -1867,9 +1868,8 @@ next_node:;
             }
         }
         
-        if (gui_lister(app.lister.filtered, &app.lister.selected_item) == GUI_LISTER_FINISH ||
-            action == GUI_EDITBOX_FINISH) 
-        {
+        GuiListerAction lister_action = gui_lister(app.lister.filtered, &app.lister.selected_item);
+        if (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH) {
             String file = app.lister.filtered[app.lister.selected_item];
             String path = absolute_path(file);
             
@@ -1881,6 +1881,10 @@ next_node:;
             app.lister.active = false;
             gui_clear_hot();
             gui.focused = GUI_ID_INVALID;
+        } else if (lister_action == GUI_LISTER_CANCEL) {
+            // TODO(jesper): this results in 1 frame of empty lister window being shown because
+            // we don't really have a good way to close windows from within the window
+            app.lister.active = false;
         }
     }
     
@@ -1895,7 +1899,7 @@ next_node:;
             
             Vector2 size{ 0, gui.style.button.font.line_height + 2 };
             Vector2 pos = gui_layout_widget(&size);
-            gui_draw_rect(pos, size, wnd->clip_rect, gui.style.bg);
+            gui_draw_rect(pos, size, wnd->clip_rect, gui.style.bg_dark1);
             
             gui_divider();
             
