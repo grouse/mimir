@@ -887,15 +887,6 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
         gui.edit.offset = gui.edit.cursor = gui.edit.selection = 0;
     }
 
-    
-    Vector3 selection_bg = rgb_unpack(0xFFCCCCCC);
-    Vector3 edit_bg = rgb_unpack(0xFF1D2021);
-    Vector3 edit_acc0 = rgb_unpack(0xFF404040);
-    Vector3 edit_fg = rgb_unpack(0xFFFFFFFF);
-    
-    Vector2 edit_pos = pos + Vector2{ 1.0f, 1.0f };
-    Vector2 edit_size = size - Vector2{ 2.0f, 2.0f };
-    
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
@@ -1031,36 +1022,52 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
         }
     }
 
+    Vector2 border{ 1, 1 };
+    
+    Vector3 selection_bg = gui.style.bg_light0;
+    
+    Vector3 bg = gui.style.bg_dark0;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 fg = gui.style.fg;
+    
+    Vector2 text_pos = pos+border+gui.style.edit.padding;
+
     Rect text_clip_rect;
-    text_clip_rect.pos.x = MAX(wnd->clip_rect.pos.x, edit_pos.x);
-    text_clip_rect.pos.y = MAX(wnd->clip_rect.pos.y, edit_pos.y);
-    text_clip_rect.size.x = MIN(edit_pos.x + edit_size.x, wnd->clip_rect.pos.x + wnd->clip_rect.size.x) - text_clip_rect.pos.x;
-    text_clip_rect.size.y = MIN(edit_pos.y + edit_size.y, wnd->clip_rect.pos.y + wnd->clip_rect.size.y) - text_clip_rect.pos.y;
+#if 1
+    text_clip_rect.pos = text_pos;
+    text_clip_rect.size = size-2*border-2*gui.style.edit.padding;
+#else
+    text_clip_rect.pos.x = MAX(wnd->clip_rect.pos.x, text_pos.x);
+    text_clip_rect.pos.y = MAX(wnd->clip_rect.pos.y, text_pos.y);
+    text_clip_rect.size.x = MIN(text_pos.x + text_pos.x, wnd->clip_rect.pos.x + wnd->clip_rect.size.x) - text_clip_rect.pos.x;
+    text_clip_rect.size.y = MIN(text_pos.y + text_pos.y, wnd->clip_rect.pos.y + wnd->clip_rect.size.y) - text_clip_rect.pos.y;
+#endif
     
     String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : initial_string;
     Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font);
 
-    gui_draw_rect(pos, size, wnd->clip_rect, edit_acc0);
-    gui_draw_rect(edit_pos, edit_size, wnd->clip_rect, edit_bg);
+    gui_draw_rect(pos, size, wnd->clip_rect, border_col);
+    gui_draw_rect(pos+border, size-2*border, wnd->clip_rect, bg);
 
-    Vector2 cursor_pos = pos + Vector2{ 1.0f, 0.0f };
-    Vector2 text_offset{}; 
+    Vector2 cursor_pos = text_pos;
+    Vector2 text_pan{}; 
     
     if (glyphs.count > 0) {
         i32 offset = gui.focused == id ? gui.edit.offset : 0;
         
         if (gui.focused == id) {
-            text_offset.x = gui.edit.offset < glyphs.count ? 
+            text_pan.x = gui.edit.offset < glyphs.count ? 
                 -glyphs[gui.edit.offset].x0 : 
                 -glyphs[gui.edit.offset-1].x1;
 
+            // TODO(jesper): this completely broken, fix it
             if (gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 i32 new_cursor;
                 for (new_cursor = 0; new_cursor < glyphs.count; new_cursor++) {
                     GlyphRect g = glyphs.data[new_cursor];
                     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
                     Vector2 rel = mouse - pos;
-                    if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
+                    if (rel.x >= g.x0 + text_pan.x && rel.x <= g.x1 + text_pan.x) {
                         break;
                     }
                 }
@@ -1072,7 +1079,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                     GlyphRect g = glyphs.data[new_selection];
                     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
                     Vector2 rel = mouse - pos;
-                    if (rel.x >= g.x0 + text_offset.x && rel.x <= g.x1 + text_offset.x) {
+                    if (rel.x >= g.x0 + text_pan.x && rel.x <= g.x1 + text_pan.x) {
                         break;
                     }
                 }
@@ -1081,14 +1088,14 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
             i32 cursor_ci = codepoint_index_from_byte_index(str, gui.edit.cursor);
             cursor_pos.x += cursor_ci < glyphs.count ? glyphs[cursor_ci].x0 : glyphs[cursor_ci-1].x1; 
-            while ((cursor_pos.x + text_offset.x) > (text_clip_rect.pos.x + text_clip_rect.size.x)) {
+            while ((cursor_pos.x + text_pan.x) > (text_clip_rect.pos.x + text_clip_rect.size.x)) {
                 gui.edit.offset++;
-                text_offset = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_pan = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
             }
 
-            while ((cursor_pos.x + text_offset.x < text_clip_rect.pos.x)) {
+            while ((cursor_pos.x + text_pan.x < text_clip_rect.pos.x)) {
                 gui.edit.offset--;
-                text_offset = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_pan = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
             }
             
             if (gui.edit.selection != gui.edit.cursor) {
@@ -1101,21 +1108,21 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                 if (x0 > x1) SWAP(x0, x1);
 
                 gui_draw_rect(
-                    Vector2{ x0, cursor_pos.y } + text_offset, 
+                    Vector2{ x0, cursor_pos.y } + text_pan, 
                     Vector2{ x1-x0, gui.style.text.font.line_height }, 
                     wnd->clip_rect, 
                     selection_bg);
             }
         }
 
-        gui_draw_text(slice(glyphs, offset), edit_pos + text_offset, text_clip_rect, edit_fg, &gui.style.text.font);
+        gui_draw_text(slice(glyphs, offset), text_pos + text_pan, text_clip_rect, fg, &gui.style.text.font);
     }
 
     if (gui.focused == id) {
         gui_draw_rect(
-            cursor_pos + text_offset, 
+            cursor_pos + text_pan, 
             Vector2{ 1.0f, gui.style.text.font.line_height }, 
-            wnd->clip_rect, edit_fg);
+            wnd->clip_rect, fg);
     }
     
     return (GuiEditboxAction)action;
@@ -1123,23 +1130,28 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
 GuiEditboxAction gui_editbox_id(GuiId id, String initial_string)
 {
-    Vector2 size{ 20.0f, 20.0f };
+    Vector2 size{ 20.0f, gui.style.text.font.line_height+2*gui.style.edit.padding.y };
     Vector2 pos = gui_layout_widget(&size);
     return gui_editbox_id(id, initial_string, pos, size);
 }
 
 
-GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, f32 width)
 {
+    Vector2 size{ width, gui.style.text.font.line_height+gui.style.edit.padding.y };
     Vector2 pos = gui_layout_widget(size);
     return gui_editbox_id(id, initial_string, pos, size);
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, String label, String initial_string, Vector2 size)
+#if 0
+GuiEditboxAction gui_editbox_id(GuiId id, String label, String initial_string, f32 width)
 {
     f32 margin = 5.0f;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
+    
+    Vector2 padding = gui.style.edit.padding;
+    Vector2 size = Vector2{ width, gui.style.text.font.line_height + padding.y }
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x + size.x + margin, MAX3(td.bounds.size.y, size.y, gui.style.text.font.line_height) });
@@ -1147,7 +1159,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, String initial_string, V
     return gui_editbox_id(id, initial_string, { pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, f32 width)
 {
     char buffer[100];
 
@@ -1155,13 +1167,13 @@ GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size)
         String{ gui.edit.buffer, gui.edit.length } : 
         stringf(buffer, sizeof buffer, "%f", *value);
     
-    GuiEditboxAction action = gui_editbox_id(id, str, size);
+    GuiEditboxAction action = gui_editbox_id(id, str, width);
     if (action & GUI_EDITBOX_FINISH) f32_from_string({ gui.edit.buffer, gui.edit.length }, value);
     
     return action;
 }
 
-GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 pos, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 pos, f32 width)
 {
     char buffer[100];
 
@@ -1169,14 +1181,14 @@ GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 pos, Vector2 size)
         String{ gui.edit.buffer, gui.edit.length } : 
         stringf(buffer, sizeof buffer, "%f", *value);
 
-    GuiEditboxAction action = gui_editbox_id(id, str, pos, size);
+    GuiEditboxAction action = gui_editbox_id(id, str, pos, width);
     if (action & GUI_EDITBOX_FINISH) f32_from_string({ gui.edit.buffer, gui.edit.length }, value);
 
     return action;
 }
 
 
-GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, Vector2 size)
+GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, f32 width)
 {
     f32 margin = 5.0f;
 
@@ -1187,6 +1199,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String label, f32 *value, Vector2 size
     gui_draw_text(td.glyphs, pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, &gui.style.text.font);
     return gui_editbox_id(id, value, Vector2{ pos.x + td.bounds.size.x + margin, pos.y }, size);
 }
+#endif
 
 GuiLister* gui_find_or_create_lister(GuiId id)
 {
@@ -2503,7 +2516,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x + 1, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
     defer { gui_end_layout(); };
 
-    i32 next_selected_item = *selected_item;
+    i32 next_selected_item = MIN(*selected_item, items.count-1);
     if (gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
@@ -2541,11 +2554,17 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         }
     }
     
-    gui_draw_rect(r.pos, r.size, wnd->clip_rect, gui.style.lister.bg);
-    gui_draw_rect({ r.pos.x, r.pos.y }, { r.size.x, 1 }, wnd->clip_rect, gui.style.lister.border);
-    gui_draw_rect({ r.pos.x, r.pos.y+r.size.y-1}, { r.size.x, 1 }, wnd->clip_rect, gui.style.lister.border);
-    gui_draw_rect({ r.pos.x+r.size.x-1, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, gui.style.lister.border);
-    gui_draw_rect({ r.pos.x, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, gui.style.lister.border);
+    Vector3 bg = gui.style.bg_dark0;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 selected_bg = gui.style.accent_bg;
+    Vector3 selected_hot_bg = gui.style.accent_bg_hot;
+    Vector3 hot_bg = gui.style.bg_light0;
+
+    gui_draw_rect(r.pos, r.size, wnd->clip_rect, bg);
+    gui_draw_rect({ r.pos.x, r.pos.y }, { r.size.x, 1 }, wnd->clip_rect, border_col);
+    gui_draw_rect({ r.pos.x, r.pos.y+r.size.y-1}, { r.size.x, 1 }, wnd->clip_rect, border_col);
+    gui_draw_rect({ r.pos.x+r.size.x-1, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, border_col);
+    gui_draw_rect({ r.pos.x, r.pos.y }, { 1, r.size.y }, wnd->clip_rect, border_col);
     // NOTE(jesper): I'm not using draw_line_rect at this point because there's something I don't understand
     // going on with the pixel coordinate calculations for opengl line drawing
     //gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
@@ -2572,8 +2591,9 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         }
         gui_hot_rect(item_id, pos, size);
 
-        if (gui.hot == item_id) gui_draw_rect(pos, size, r2, gui.style.lister.hot_bg);
-        else if (i == *selected_item) gui_draw_rect(pos, size, r2, gui.style.lister.selected_bg);
+        if (i == *selected_item && gui.hot == item_id) gui_draw_rect(pos, size, r2, selected_hot_bg);
+        else if (i == *selected_item) gui_draw_rect(pos, size, r2, selected_bg);
+        else if (gui.hot == item_id) gui_draw_rect(pos, size, r2, hot_bg);
 
         gui_textbox(items[i], pos, r2);
     }

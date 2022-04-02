@@ -270,16 +270,12 @@ struct GuiContext {
         } button;
         
         struct {
-            f32 thickness = 12.0f;
-        } scrollbar;
+            Vector2 padding = { 2.0f, 4.0f };
+        } edit;
         
         struct {
-            Vector3 bg = rgb_unpack(0xFF383838);
-            Vector3 border = rgb_unpack(0xFFAAAAAA);
-            Vector3 fg = rgb_unpack(0xFFFFFFFF);
-            Vector3 selected_bg = rgb_unpack(0xFF282828);
-            Vector3 hot_bg = rgb_unpack(0xFF2F2F2F);
-        } lister;
+            f32 thickness = 12.0f;
+        } scrollbar;
     } style;
     
     struct {
@@ -309,8 +305,8 @@ bool gui_begin_window_id(GuiId id, String title, GuiWindowState *state, u32 flag
 void gui_end_window();
 
 GuiEditboxAction gui_editbox_id(GuiId id, String initial_str);
-GuiEditboxAction gui_editbox_id(GuiId id, String initial_str, Vector2 size);
-GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, Vector2 size);
+GuiEditboxAction gui_editbox_id(GuiId id, String initial_str, f32 width);
+GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, f32 width);
 
 Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
 Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
