@@ -2072,7 +2072,8 @@ next_node:;
         defer { gui_end_layout(); };
 
         char buffer[256];
-        gui_textbox(stringf(buffer, sizeof buffer, "line: %d, col: %lld", view.caret.line+1, view.caret.column+1));
+        String nl = string_from_enum(get_buffer(view.buffer)->newline_mode);
+        gui_textbox(stringf(buffer, sizeof buffer, "Ln: %d, Col: %lld %.*s", view.caret.line+1, view.caret.column+1, STRFMT(nl)));
     }
 
     if (view.caret.wrapped_line >= view.line_offset && 
