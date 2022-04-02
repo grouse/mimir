@@ -157,6 +157,7 @@ struct View {
     struct {
         u64 lines_dirty : 1;
         u64 caret_dirty : 1;
+        u64 defer_move_view_to_caret : 1;
     };
 };
 
@@ -286,8 +287,9 @@ i64 prev_byte(Buffer *b, i64 i)
 
 void calculate_num_visible_lines()
 {
-    view.lines_visible = (i32)((gfx.resolution.y / (f32)app.mono.line_height) + 1.999f);
-    view.lines_dirty = true;
+    i32 lines_visible = (i32)((gfx.resolution.y / (f32)app.mono.line_height) + 1.999f);
+    view.lines_dirty = view.lines_dirty || lines_visible != view.lines_visible;
+    view.lines_visible = lines_visible;
 }
 
 String string_from_enum(NewlineMode mode)
@@ -564,6 +566,10 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     } else {
         LOG_ERROR("unimplemented, this is a case where we're appending new lines to the existing lines");
     }
+    
+#if DEBUG_LINE_WRAP_RECALC
+    LOG_INFO("start_line: %d, last_line: %d, start offset: %lld, end offset: %lld", wrapped_line, last_line, start, end);
+#endif
 
     i64 p = start;
 
@@ -680,13 +686,14 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
         }
         memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
         buffer->flat.size -= num_bytes;
+        
+        // TODO(jesper): do incremental line wrap recalc here, akin to the buffer_insert
+        if (view.buffer == buffer_id) {
+            view.lines_dirty = true;
+            view.caret_dirty = true;
+        }
+        
         return true;
-        break;
-    }
-    
-    if (view.buffer == buffer_id) {
-        view.lines_dirty = true;
-        view.caret_dirty = true;
     }
     
     return false;
@@ -1407,15 +1414,7 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
 
 void move_view_to_caret()
 {
-    i32 line_padding = 3;
-    
-    // TODO(jesper): do something sensible with the decimal vertical offset
-    if (view.caret.wrapped_line-line_padding < view.line_offset) {
-        view.line_offset = MAX(0, view.caret.wrapped_line-line_padding);
-    } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-4) {
-        ASSERT(!view.lines_dirty);
-        view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+4);
-    }
+    view.defer_move_view_to_caret = 1;
 }
 
 // NOTE(jesper): this is poorly named. It starts/stops a history group and records the active view's
@@ -1543,13 +1542,9 @@ void app_event(InputEvent event)
                 break;
             case VC_U:
                 buffer_undo(view.buffer);
-                view.lines_dirty = true;
-                view.caret_dirty = true;
                 break;
             case VC_R:
                 buffer_redo(view.buffer);
-                view.lines_dirty = true;
-                view.caret_dirty = true;
                 break;
             case VC_M:
                 if (event.key.modifiers == MF_CTRL) SWAP(view.mark, view.caret);
@@ -1569,14 +1564,10 @@ void app_event(InputEvent event)
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
-                        view.lines_dirty = true;
-
+                        // TODO(jesper): short-circuit the caret re-calc when buffer_remove does its own incremental line reflow
                         view.caret.byte_offset = r.start;
-                        ASSERT(!view.lines_dirty);
-                        view.caret_dirty = true;
-                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
+                        view.caret_dirty = true;
 
                         move_view_to_caret();
                     }
@@ -1590,13 +1581,10 @@ void app_event(InputEvent event)
                     set_clipboard_data(str);
                     
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view.lines_dirty = true;
-
+                        // TODO(jesper): short-circuit the caret re-calc when buffer_remove does its own incremental line reflow
                         view.caret.byte_offset = r.start;
-                        ASSERT(!view.lines_dirty);
-                        view.caret_dirty = true;
-                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
+                        view.caret_dirty = true;
 
                         move_view_to_caret();
                     }
@@ -1680,17 +1668,12 @@ void app_event(InputEvent event)
                     BufferHistoryScope h(view.buffer);
                     i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
-                        // TODO(jesper): recalculate only the lines affected, and short-circuit the caret re-calc
-                        view.lines_dirty = true;
+                        // TODO(jesper): short-circuit when buffer_remove does its own line reflow
                         view.caret.byte_offset = start;
                         view.mark = view.caret;
                         view.caret_dirty = true; 
                         
-                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        // TODO(jesper): what do I want here?
-                        //view.mark = view.caret;
-
-                        //move_view_to_caret();
+                        move_view_to_caret();
                     }
                 } break;
             case VC_DELETE: 
@@ -1698,14 +1681,11 @@ void app_event(InputEvent event)
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
-                        
-                        //view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        //view.mark = view.caret;
+                        // TODO(jesper): short-circuit when buffer_remove does its own line reflow
                         view.mark = view.caret;
                         view.caret_dirty = true;
 
-                        // TODO(jesper0: recalculate only lines affected
-                        view.lines_dirty = true;
+                        move_view_to_caret();
                     }
                 } break;
                 
@@ -2132,8 +2112,20 @@ next_node:;
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
         view.caret_dirty = false;
     }
-    ASSERT(!view.lines_dirty);
     view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+    
+    if (view.defer_move_view_to_caret) {
+        i32 line_padding = 3;
+
+        // TODO(jesper): do something sensible with the decimal vertical offset
+        if (view.caret.wrapped_line-line_padding < view.line_offset) {
+            view.line_offset = MAX(0, view.caret.wrapped_line-line_padding);
+        } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-4) {
+            view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+4);
+        }
+
+        view.defer_move_view_to_caret = 0;
+    }
     
     if (true) {
         Vector2 ib_s{ 0, 15.0f };
