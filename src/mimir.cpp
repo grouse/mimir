@@ -1937,10 +1937,10 @@ next_node:;
                 
                 if (i == current_tab) {
                     gui_draw_accent_button(id, pos, size);
-                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, { 1, 1, 1 }, font);
+                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
                 } else {
                     gui_draw_button(id, pos, size);
-                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, { 1, 1, 1 }, font);
+                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
                 }
                 
                 if (b->saved_at != b->history_index) {

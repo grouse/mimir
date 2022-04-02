@@ -803,14 +803,12 @@ bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size)
     
     bool clicked = gui_button_id(id, pos, size);
     
-    Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
-
     Rect clip_rect{ wnd->clip_rect };
     Vector2 text_center{ td.bounds.size.x * 0.5f, font->line_height*0.5f };
     Vector2 btn_center = size * 0.5f;
     Vector2 text_offset = btn_center - text_center;
 
-    gui_draw_text(td.glyphs, pos + text_offset, clip_rect, btn_fg, font);
+    gui_draw_text(td.glyphs, pos + text_offset, clip_rect, gui.style.fg, font);
     return clicked;
 }
 

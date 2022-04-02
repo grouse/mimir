@@ -230,6 +230,9 @@ struct GuiContext {
     } mouse;
     
     struct {
+        Vector3 fg = rgb_unpack(0xFFFFFFFF);
+        //Vector3 fg_hot = rgb_unpack(0xFFFD8433);
+        
         Vector3 bg = rgb_unpack(0xFF333333);
         Vector3 bg_hot = rgb_unpack(0xFF3F3F3F);
         Vector3 bg_press = rgb_unpack(0xFF2A2A2A);
