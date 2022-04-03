@@ -1836,10 +1836,13 @@ void update_and_render(f32 dt)
         }
     }
 
-    // TODO(jesper): something smarter to use more of the space in small windows without taking up _all_ the space in
-    // large windows
     f32 lister_w = gfx.resolution.x*0.7f;
-    gui_window("fuzzy lister", gfx.resolution * 0.5f, { lister_w, 200.0f }, { 0.5f, 0.5f }, app.lister.active, 0) {
+    lister_w = MAX(lister_w, 500.0f);
+    lister_w = MIN(lister_w, gfx.resolution.x-10);
+    
+    Vector2 lister_p = gfx.resolution*0.5f;
+    
+    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
         GuiEditboxAction edit_action = gui_editbox("");
         
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
@@ -1932,6 +1935,7 @@ next_node:;
             // TODO(jesper): this results in 1 frame of empty lister window being shown because
             // we don't really have a good way to close windows from within the window
             app.lister.active = false;
+            gui.focused = GUI_ID_INVALID;
         }
     }
     
