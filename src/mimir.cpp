@@ -1927,7 +1927,6 @@ next_node:;
             view_set_buffer(buffer);
             
             app.lister.active = false;
-            gui_clear_hot();
             gui.focused = GUI_ID_INVALID;
         } else if (lister_action == GUI_LISTER_CANCEL) {
             // TODO(jesper): this results in 1 frame of empty lister window being shown because
@@ -1979,8 +1978,8 @@ next_node:;
                 Vector2 pos = gui_layout_widget(size);
                 Vector2 text_offset = size*0.5f - Vector2{ td.bounds.size.x*0.5f, font->line_height*0.5f };
                 
-                if (gui_clicked(id)) active_buffer = b->id;
                 gui_hot_rect(id, pos, size);
+                if (gui_clicked(id)) active_buffer = b->id;
                 
                 if (i == current_tab) {
                     gui_draw_accent_button(id, pos, size);
@@ -2004,15 +2003,14 @@ next_node:;
                 // instead of a label button
 
                 GuiId mid = GUI_ID(0);
+                gui_hot_rect(mid, mpos, msize);
                 if (gui_pressed(mid)) {
                     if (gui.focused == mid) {
-                        gui_clear_hot();
                         gui.focused = GUI_ID_INVALID;
                     } else {
                         gui.focused = mid;
                     }
                 }
-                gui_hot_rect(mid, mpos, msize);
 
                 Vector3 mbg = gui.hot == mid ? gui.style.accent_bg_hot : gui.style.accent_bg;
                 gui_draw_rect(mpos, msize, wnd->clip_rect, mbg);
@@ -2053,18 +2051,16 @@ next_node:;
                         if (gui.hot == lid) gui_draw_rect(rect_p, rect_s, bg_hot);
                         gui_textbox(b->name, rect_p);
 
+                        // TODO(jesper): due to changes in gui_hot to not allow a new hot widget
+                        // if one is pressed, this doesn't behave the way I want for dropdowns where
+                        // I can press the trigger button, drag to an item, then release to select it
+                        gui_hot_rect(lid, rect_p, rect_s);
                         if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) || 
                             gui_clicked(lid)) 
                         {
                             active_buffer = b->id;
                             gui.focused = GUI_ID_INVALID;
-                            gui_clear_hot();
-                        } else {
-                            // TODO(jesper): due to changes in gui_hot to not allow a new hot widget
-                            // if one is pressed, this doesn't behave the way I want for dropdowns where
-                            // I can press the trigger button, drag to an item, then release to select it
-                            gui_hot_rect(lid, rect_p, rect_s);
-                        }
+                        } 
                     }
 
                     GuiLayout *cl = gui_current_layout();
