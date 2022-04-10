@@ -746,6 +746,11 @@ bool buffer_unsaved_changes(BufferId buffer_id)
     // TODO(jesper): ideally this should be smart enough to detect whether the changes 
     // made since last save point cancel out. There should be enough information in 
     // the buffer history to figure that out
+    // Alternatively, just hash the contents and compare to hash of version on disk. Any
+    // file I'm realistically going to open with this will take much less than a second to 
+    // calculate the hashes
+    // When/if I make this robust for very large files, I can add alternative paths 
+    // specifically for that which do simpler and less computationally expensive things
     Buffer *buffer = get_buffer(buffer_id);
     return buffer && buffer->saved_at != buffer->history_index;
 }
@@ -1943,10 +1948,12 @@ next_node:;
     
     view.caret_dirty |= view.lines_dirty;
     {
-        Rect tr = gui_layout_widget_fill();
-        gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = tr });
+        gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = gui_layout_widget_fill() });
         defer { gui_end_layout(); };
         
+        // TODO(jesper): kind of only want to do the tabs if there are more than 1 file open, but then I'll
+        // need to figure out reasonable ways of visualising unsaved changes as well as which file is open.
+        // Likely do-able with the window titlebar decoration on most/all OS?
         if (true) {
             GuiWindow *wnd = gui_current_window();
             
@@ -2080,8 +2087,7 @@ next_node:;
         }
 
         {
-            Rect r = gui_layout_widget_fill();
-            gui_begin_layout( { .type = GUI_LAYOUT_COLUMN, .rect = r });
+            gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .rect = gui_layout_widget_fill() });
             defer { gui_end_layout(); };
 
             // NOTE(jesper): the scrollbar is 1 frame delayed if the reflowing results in a different number of lines,
@@ -2089,8 +2095,8 @@ next_node:;
             // We could move it to after the reflow handling with some more layout plumbing, by letter caller deal with
             // the layouting and passing in absolute positions and sizes to the scrollbar
             gui_scrollbar(app.mono.line_height, &view.line_offset, view.lines.count, view.lines_visible, &view.voffset);
+            
             Rect text_rect = gui_layout_widget_fill();
-
             if (view.lines_dirty || text_rect != view.rect) {
                 view.rect = text_rect;
 
