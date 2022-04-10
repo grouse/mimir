@@ -13,6 +13,17 @@ struct AllocationHeader {
     u8 alignment;
 };
 
+void init_thread_allocators(i32 tmp_size = 10*1024*1024)
+{
+    ASSERT(mem_tmp.proc == nullptr);
+    mem_tmp = linear_allocator(tmp_size);
+}
+
+void init_default_allocators()
+{
+    init_thread_allocators();
+    mem_dynamic = malloc_allocator();
+}
 
 void* align_ptr(void *ptr, u8 alignment, u8 header_size)
 {
@@ -117,9 +128,3 @@ Allocator malloc_allocator()
     return Allocator{ nullptr, malloc_alloc };
 }
 
-void init_default_allocators()
-{
-    mem_tmp = linear_allocator(10*1024*1024);
-    mem_dynamic = malloc_allocator();
-}
-                   
