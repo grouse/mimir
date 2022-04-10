@@ -112,10 +112,23 @@ bool starts_with(String lhs, String rhs)
 
 char* sz_string(String str, Allocator mem)
 {
-    char *sz_str = (char*)ALLOC(mem, str.length+1);
+    if (str.length == 0) return nullptr;
+    
+    char *sz_str = ALLOC_ARR(mem, char, str.length+1);
     memcpy(sz_str, str.data, str.length);
     sz_str[str.length] = '\0';
     return sz_str;
+}
+
+wchar_t* wsz_string(String str, Allocator mem)
+{
+    i32 wl = utf16_length(str);
+    if (wl == 0) return nullptr;
+    
+    wchar_t *wsz_str = ALLOC_ARR(mem, wchar_t, wl+1);
+    utf16_from_string((u16*)wsz_str, wl, str);
+    wsz_str[wl] = L'\0';
+    return wsz_str;
 }
 
 i32 utf8_truncate(String str, i32 limit)

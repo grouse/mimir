@@ -49,6 +49,12 @@
 #define FILE_ATTRIBUTE_ARCHIVE              0x00000020
 #define FILE_FLAG_BACKUP_SEMANTICS 0x02000000
 
+#define STARTF_USESTDHANDLES 0x00000100
+
+#define HANDLE_FLAG_INHERIT 0x00000001
+
+#define CREATE_NO_WINDOW 0x08000000
+
 #define GMEM_MOVEABLE 0x0002
 
 #define MEM_COMMIT 0x00001000
@@ -361,6 +367,7 @@ typedef WCHAR *PWSTR;
 typedef CONST CHAR *LPCSTR;
 typedef CONST WCHAR *LPCWSTR;
 typedef unsigned char BYTE;
+typedef BYTE* LPBYTE;
 
 typedef int BOOL;
 
@@ -369,6 +376,7 @@ typedef void *LPVOID;
 typedef CONST void *LPCVOID;
 
 typedef PVOID HANDLE;
+typedef HANDLE* PHANDLE;
 typedef HANDLE HICON;
 typedef HANDLE HGLOBAL;
 typedef HANDLE HINSTANCE;
@@ -541,6 +549,33 @@ extern "C" {
         LONG bottom;
     } RECT, *PRECT, *NPRECT, *LPRECT;
     
+    typedef struct _STARTUPINFOW {
+        DWORD  cb;
+        LPWSTR lpReserved;
+        LPWSTR lpDesktop;
+        LPWSTR lpTitle;
+        DWORD  dwX;
+        DWORD  dwY;
+        DWORD  dwXSize;
+        DWORD  dwYSize;
+        DWORD  dwXCountChars;
+        DWORD  dwYCountChars;
+        DWORD  dwFillAttribute;
+        DWORD  dwFlags;
+        WORD   wShowWindow;
+        WORD   cbReserved2;
+        LPBYTE lpReserved2;
+        HANDLE hStdInput;
+        HANDLE hStdOutput;
+        HANDLE hStdError;
+    } STARTUPINFOW, *LPSTARTUPINFOW;
+    
+    typedef struct _PROCESS_INFORMATION {
+        HANDLE hProcess;
+        HANDLE hThread;
+        DWORD  dwProcessId;
+        DWORD  dwThreadId;
+    } PROCESS_INFORMATION, *PPROCESS_INFORMATION, *LPPROCESS_INFORMATION;
     
     // shell32.lib
     LPWSTR* CommandLineToArgvW(
@@ -558,6 +593,33 @@ extern "C" {
         LPVOID                  lpParameter,
         DWORD                   dwCreationFlags,
         LPDWORD                 lpThreadId);
+    
+    BOOL CreatePipe(
+        PHANDLE               hReadPipe,
+        PHANDLE               hWritePipe,
+        LPSECURITY_ATTRIBUTES lpPipeAttributes,
+        DWORD                 nSize);
+    
+    BOOL SetHandleInformation(
+        HANDLE hObject,
+        DWORD  dwMask,
+        DWORD  dwFlags);
+    
+    BOOL CreateProcessW(
+        LPCWSTR               lpApplicationName,
+        LPWSTR                lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        BOOL                  bInheritHandles,
+        DWORD                 dwCreationFlags,
+        LPVOID                lpEnvironment,
+        LPCWSTR               lpCurrentDirectory,
+        LPSTARTUPINFOW        lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation);
+    
+    BOOL GetExitCodeProcess(
+        HANDLE  hProcess,
+        LPDWORD lpExitCode);
     
     HANDLE CreateMutexA(
         LPSECURITY_ATTRIBUTES lpMutexAttributes,
