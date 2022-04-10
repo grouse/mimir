@@ -320,11 +320,13 @@ bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size);
 
 bool gui_checkbox_id(GuiId id, String label, bool *checked);
 
-template<typename T> void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value);
-template<typename T> void gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value);
+i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index);
+i32 gui_dropdown_id(GuiId id, String* labels, i32 count, i32 current_index);
+
+template<typename T> i32 gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value = nullptr);
+template<typename T> i32 gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value = nullptr);
 template<typename T> T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value);
 template<typename T> T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value);
-
 template<typename T> T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value);
 
 void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor = GUI_ANCHOR_RIGHT);

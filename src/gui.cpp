@@ -1977,38 +1977,35 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
     return action;
 }
 
-template<typename T>
-void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
+i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
 {
     // TODO(jesper): maybe this should be essentially a gui_menu. At the very least, a lot
     // of functionality should be the same in regards to arrow up/down navigation, and press
     // then dragging mouse to an option with release to trigger it
     ASSERT(labels.count > 0);
-    ASSERT(labels.count == values.count);
+    
+    i32 index = current_index;
     
     GuiWindow *wnd = &gui.windows[gui.current_window];
     GfxCommandBuffer *cmdbuf = &wnd->command_buffer;
     
     Font *font = &gui.style.text.font;
     
-    i32 current_index = array_find_index(values, *value);
-    ASSERT(current_index != -1);
-    
     f32 margin = 4.0f;
     f32 border = 1.0f;
     
     Vector2 total_size{ 100.0f + margin + border, font->line_height + margin };
+    Vector2 pos = gui_layout_widget(&total_size);
 
-    f32 rhs = total_size.y;
-    f32 rhs_margin = 6.0f;
+    // TODO(jesper): maybe this should be part of layout_widget procedures with some kind of flags
+    Vector2 size{ total_size.x, font->line_height + margin };
+    pos.y = floorf(pos.y + 0.5f*(total_size.y-size.y));
     
-    Vector2 inner_size{ total_size.x - 2*border, total_size.y - 2*border };
-
-    Vector2 pos = gui_layout_widget(total_size);
+    Vector2 inner_size{ size.x - 2*border, size.y - 2*border };
     Vector2 inner_pos{ pos.x + border, pos.y + border };
-    Vector2 text_pos{ inner_pos.x + 0.5f*margin, inner_pos.y + 0.5f*margin };
+    Vector2 text_pos{ inner_pos.x + 0.5f*margin, floorf(inner_pos.y + 0.5f*(inner_size.y - font->line_height)) };
     
-    gui_hot_rect(id, pos, total_size);
+    gui_hot_rect(id, pos, size);
     if (gui_pressed(id)) {
         if (gui.focused == id) {
             gui.focused = GUI_ID_INVALID;
@@ -2016,39 +2013,45 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             gui.focused = id;
         }
     }
+    
+    f32 rhs = MIN(size.y, 16.0f);
+    f32 rhs_margin = 4.0f;
+    
+    f32 rhs_y_o = floorf(0.5f*(inner_size.y-rhs));
 
     Vector2 rhs_p{ inner_pos.x + inner_size.x - rhs, inner_pos.y };
-    Vector2 rhs_p0{ rhs_p.x + border + rhs_margin, inner_pos.y + rhs_margin };
+    Vector2 rhs_p0{ floorf(rhs_p.x + border + rhs_margin), inner_pos.y + rhs_margin + rhs_y_o };
     Vector2 rhs_p1{ rhs_p0.x + (rhs-2.0f*rhs_margin), rhs_p0.y };
     Vector2 rhs_p2{ rhs_p0.x + 0.5f*(rhs_p1.x - rhs_p0.x), rhs_p0.y + (rhs-2.0f*rhs_margin) };
     
-    Vector3 bg_def = rgb_unpack(0xFF1d2021);
-    Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
-    Vector3 border_col = rgb_unpack(0xFFCCCCCC);
-    Vector3 rhs_col = gui.hot == id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
-    Vector3 bg_col = gui.hot == id ? bg_hot : bg_def;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 rhs_col = gui.hot == id ? gui.style.accent_bg : gui.style.fg;
+    Vector3 bg_col = gui.hot == id ? gui.style.bg_hot : gui.style.bg_dark0;
     
-    gui_draw_rect(pos, total_size, wnd->clip_rect, border_col);
+    gui_draw_rect(pos, size, wnd->clip_rect, border_col);
     gui_draw_rect(inner_pos, inner_size, wnd->clip_rect, bg_col);
-    gui_draw_text(labels[current_index], text_pos, wnd->clip_rect, { 1.0f, 1.0f, 1.0f }, font);
+    gui_draw_text(labels[index], text_pos, wnd->clip_rect, gui.style.fg, font);
     gui_draw_rect(rhs_p, { border, inner_size.y }, border_col);
     gfx_draw_triangle(rhs_p0, rhs_p1, rhs_p2, rhs_col, cmdbuf);
 
     // TODO(jesper): I think this needs to use something other than focused to keep track of whether
     // the menu is opened, as I want to use the focused id for tabbing and filtering certain input
     // events
+    // I want focused to primarly act as tab-focus. If dropdowns should open when focused and user
+    // presses a button, like enter or down-arrow
     if (gui.focused == id) {
-        Vector2 p{ pos.x, pos.y + total_size.y };
+        Vector2 p{ pos.x, pos.y + size.y };
         Vector2 inner_p{ p.x + border, p.y };
         Vector2 text_offset{ 0.5f*margin + border, 0.5f*margin };
         Vector2 text_p = p + text_offset;
         
-        Vector2 total_s{ total_size.x, labels.count * font->line_height + border + 0.5f*margin };
+        Vector2 total_s{ size.x, labels.count * font->line_height + border + 0.5f*margin };
         Vector2 inner_s{ total_s.x - 2*border, total_s.y - border };
         
         gui_draw_rect(p, total_s, gui.windows[GUI_OVERLAY].clip_rect, border_col, &gui.windows[GUI_OVERLAY].command_buffer);
-        gui_draw_rect(inner_p, inner_s, gui.windows[GUI_OVERLAY].clip_rect, bg_def, &gui.windows[GUI_OVERLAY].command_buffer);
+        gui_draw_rect(inner_p, inner_s, gui.windows[GUI_OVERLAY].clip_rect, gui.style.bg_dark0, &gui.windows[GUI_OVERLAY].command_buffer);
         
+        // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
         for (i32 i = 0; i < labels.count; i++) {
             String label = labels[i];
             GuiId label_id = GUI_ID_INTERNAL(id, i);
@@ -2056,7 +2059,7 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             Vector2 rect_p{ inner_p.x, inner_p.y + font->line_height*i };
             Vector2 rect_s{ inner_s.x, font->line_height + border };
 
-            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, bg_hot, &gui.windows[GUI_OVERLAY].command_buffer);
+            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, gui.style.bg_hot, &gui.windows[GUI_OVERLAY].command_buffer);
             gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, font, &gui.windows[GUI_OVERLAY].command_buffer);
             text_p.y += font->line_height;
             
@@ -2064,7 +2067,7 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
             if ((gui.hot == label_id && gui.pressed == id && !gui.mouse.left_pressed) || 
                 gui_clicked(label_id)) 
             {
-                *value = values[i];
+                index = i;
                 gui.focused = GUI_ID_INVALID;
             } 
         }
@@ -2076,39 +2079,75 @@ void gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
         }
 
     }
-}
     
+    return index;
+}
+
+i32 gui_dropdown_id(GuiId id, String* labels, i32 count, i32 current_index)
+{
+    Array<String> labels_arr{ .data = labels, .count = count };
+    return gui_dropdown_id(id, labels_arr, current_index);
+}
+
 template<typename T>
-void gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value)
+i32 gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
+{
+    i32 current_index = array_find_index(values, *value);
+    ASSERT(current_index != -1);
+    
+    i32 index = gui_dropdown_id(id, labels, current_index);
+    if (index != current_index && value != nullptr) *value = values[index];
+    return index;
+}
+
+template<typename T>
+i32 gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value)
 {
     Array<String> labels_arr = Array<String>{ labels, count };
     Array<T> values_arr = Array<T>{ values, count };
-    gui_dropdown_id(id, labels_arr, values_arr, value);
+    
+    i32 current_index = array_find_index(values_arr, *value);
+    ASSERT(current_index != -1);
+    
+    i32 index = gui_dropdown_id(id, labels_arr, values_arr, current_index);
+    if (index != current_index && value != nullptr) *value = values_arr[index];
+    return index;
 }
     
 template<typename T> 
 T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value)
 {
-    gui_dropdown_id(id, labels, values, &value);
-    return value;
+    i32 current_index = array_find_index(values_arr, value);
+    ASSERT(current_index != -1);
+    
+    i32 index = gui_dropdown_id(id, labels, current_index);
+    return values[index];
 }
 
 template<typename T> 
 T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value)
 {
-    gui_dropdown_id(id, labels, values, count, &value);
-    return value;
+    Array<String> labels_arr{ .data = labels, .count = count };
+    Array<T> values_arr{ .data = values, .count = count };
+    
+    i32 current_index = array_find_index(values_arr, value);
+    ASSERT(current_index != -1);
+    
+    i32 index = gui_dropdown_id(id, labels_arr, current_index);
+    return values_arr[index];
 }
     
 template<typename T> 
 T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value)
 {
-    gui_dropdown_id(
-        id,
-        Array<String>{ .data = (String*)labels.begin(), .count = (i32)labels.size() },
-        Array<T>{ .data = (T*)values.begin(), .count = (i32)values.size() },
-        &value);
-    return value;
+    Array<String> labels_arr{ .data = (String*)labels.begin(), .count = (i32)labels.size() };
+    Array<T> values_arr{ .data = (T*)values.begin(), .count = (i32)values.size() };
+    
+    i32 current_index = array_find_index(values_arr, value);
+    ASSERT(current_index != -1);
+    
+    i32 index = gui_dropdown_id(id, labels_arr, current_index);
+    return values_arr[index];
 }
 
 void gui_push_id(GuiId id)
