@@ -415,11 +415,11 @@ void view_set_buffer(BufferId buffer)
 
 void init_app()
 {
+    String exe_folder = get_exe_folder();
     String asset_folders[] = {
-        "./",
-        "../assets",
-        get_exe_folder(),
-        join_path(get_exe_folder(), "../assets"),
+        exe_folder,
+        join_path(exe_folder, "/assets"),
+        join_path(exe_folder, "../assets"),
     };
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
     
