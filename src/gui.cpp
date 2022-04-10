@@ -2327,14 +2327,13 @@ bool gui_menu_button_id(GuiId id, String label, bool *toggle_value)
 void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num_visible, f32 *offset, GuiAnchor anchor)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
-    GuiLayout *cl = gui_current_layout();
     
     GuiId up_id = GUI_ID_INTERNAL(id, 1);
     GuiId dwn_id = GUI_ID_INTERNAL(id, 2);
     GuiId handle_id = GUI_ID_INTERNAL(id, 3);
     
-    Vector2 total_size{ gui.style.scrollbar.thickness, cl->size.y };
-    Vector2 total_pos = gui_layout_widget(total_size, anchor);
+    Vector2 total_size{ gui.style.scrollbar.thickness, 50.0f };
+    Vector2 total_pos = gui_layout_widget(&total_size, anchor);
     
     Vector2 btn_size{ gui.style.scrollbar.thickness, gui.style.scrollbar.thickness };
     Vector2 btn_up_p{ total_pos.x, total_pos.y };
@@ -2435,8 +2434,8 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     GuiId dwn_id = GUI_ID_INTERNAL(id, 2);
     GuiId handle_id = GUI_ID_INTERNAL(id, 3);
     
-    Vector2 total_size{ gui.style.scrollbar.thickness, cl->size.y };
-    Vector2 total_pos = gui_layout_widget(total_size, anchor);
+    Vector2 total_size{ gui.style.scrollbar.thickness, 50.0f };
+    Vector2 total_pos = gui_layout_widget(&total_size, anchor);
 
     Vector2 btn_size{ gui.style.scrollbar.thickness, gui.style.scrollbar.thickness };
     Vector2 btn_up_p{ total_pos.x, total_pos.y };
@@ -2453,6 +2452,8 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
 
     f32 max_c = total_height > total_size.y ? total_height - total_size.y : 0;
     
+    // NOTE(jesper): this is a hacky way of checking whether the mouse is over the containing
+    // rect of the scrollbar. This definitely needs to change to something more sane
     if (gui_mouse_over_rect(lr.pos, lr.size) &&
         gui_capture(gui.capture_mouse_wheel)) 
     {
@@ -2598,7 +2599,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
     Vector3 selected_bg = gui.style.accent_bg;
     Vector3 selected_hot_bg = gui.style.accent_bg_hot;
-    Vector3 hot_bg = gui.style.bg_light0;
+    Vector3 hot_bg = gui.style.bg_hot;
 
     gui_draw_rect(r.pos, r.size, wnd->clip_rect, bg);
     gui_draw_rect({ r.pos.x, r.pos.y }, { r.size.x, 1 }, wnd->clip_rect, border_col);
@@ -2618,6 +2619,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = r2.pos, .size = r2.size });
     defer { gui_end_layout(); };
     
+    // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
     for (i32 i = 0; i < items.count; i++) {
         Vector2 size{ 0, item_height };
         Vector2 pos = gui_layout_widget(&size);
