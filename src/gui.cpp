@@ -1340,12 +1340,16 @@ bool gui_begin_window_id(
     if (gui.hot == id) gui_clear_hot();
     
     Vector2 window_border = gui.style.window.border;
-    Vector2 title_size = { wnd->size.x - 2.0f*window_border.x, gui.style.window.title_height };
+    
+    bool do_titlebar = !(flags & GUI_WINDOW_NO_TITLE);
+    Vector2 title_size{};
+    if (do_titlebar) title_size = { wnd->size.x - 2.0f*window_border.x, gui.style.window.title_height };
     
     GuiId title_id = GUI_ID_INTERNAL(id, 1);
     GuiId close_id = GUI_ID_INTERNAL(id, 30);
 
-    if (flags & GUI_WINDOW_MOVABLE) {
+    // TODO(jesper): alt-drag on any part of the window
+    if (flags & GUI_WINDOW_MOVABLE && do_titlebar) {
         gui_hot_rect(title_id, wnd->pos, title_size);
         if (gui_drag(title_id, wnd->pos) && (gui.mouse.dx != 0 || gui.mouse.dy != 0)) {
             Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
@@ -1418,7 +1422,7 @@ bool gui_begin_window_id(
     gui_draw_rect(wnd->pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
     
-    if (flags & GUI_WINDOW_CLOSE) {
+    if (flags & GUI_WINDOW_CLOSE && do_titlebar) {
         if (gui_window_close_button(close_id, wnd->pos, wnd->size)) {
             gui.focused = GUI_ID_INVALID;
             gui.current_window = GUI_BACKGROUND;

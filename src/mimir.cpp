@@ -1842,7 +1842,7 @@ void update_and_render(f32 dt)
     
     Vector2 lister_p = gfx.resolution*0.5f;
     
-    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, 0) {
+    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, GUI_WINDOW_NO_TITLE) {
         GuiEditboxAction edit_action = gui_editbox("");
         
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
@@ -1920,7 +1920,9 @@ next_node:;
         }
         
         GuiListerAction lister_action = gui_lister(app.lister.filtered, &app.lister.selected_item);
-        if (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH) {
+        if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count &&
+            (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH))
+        {
             String file = app.lister.filtered[app.lister.selected_item];
             String path = absolute_path(file);
             

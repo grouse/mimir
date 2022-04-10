@@ -75,6 +75,8 @@ enum GuiWindowFlags : u32 {
     GUI_WINDOW_MOVABLE = 1 << 1,
     GUI_WINDOW_RESIZABLE = 1 << 2,
     
+    GUI_WINDOW_NO_TITLE = 1 << 3,
+    
     GUI_WINDOW_DEFAULT = GUI_WINDOW_MOVABLE | GUI_WINDOW_RESIZABLE
 };
 
