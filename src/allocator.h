@@ -9,9 +9,9 @@
 #define ALLOC_A(alloc, size, alignment) alloc.proc(alloc.state, ALLOCATOR_CMD_ALLOC, nullptr, 0, size, alignment)
 #define ALLOC_T(alloc, T) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_ALLOC, nullptr, 0, sizeof(T), alignof(T))
 
-#define ALLOC_ARR(alloc, T, count) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_ALLOC, nullptr, 0, sizeof(T)*count, alignof(T))
-#define REALLOC_ARR(alloc, T, old_ptr, old_count, new_count) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, old_count*sizeof(T), sizeof(T)*new_count, alignof(T))
-#define REALLOC_ARR_A(alloc, T, old_ptr, old_count, new_count, alignment) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, old_count*sizeof(T), sizeof(T)*new_count, alignment)
+#define ALLOC_ARR(alloc, T, count) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_ALLOC, nullptr, 0, sizeof(T)*(count), alignof(T))
+#define REALLOC_ARR(alloc, T, old_ptr, old_count, new_count) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, sizeof(T)*(old_count), sizeof(T)*(new_count), alignof(T))
+#define REALLOC_ARR_A(alloc, T, old_ptr, old_count, new_count, alignment) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, sizeof(T)*(old_count), sizeof(T)*(new_count), alignment)
 
 
 #define FREE(alloc, ptr) alloc.proc(alloc.state, ALLOCATOR_CMD_FREE, nullptr, 0, 0, 0)
