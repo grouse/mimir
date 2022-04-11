@@ -14,6 +14,20 @@ String absolute_path(String relative, Allocator mem)
     return String{ pstr, (i32)length };
 }
 
+String directory_of(String file, Allocator mem)
+{
+    String absolute = absolute_path(file, mem);
+    if (is_directory(absolute)) return absolute;
+    
+    for (i32 i = absolute.length-1; i >= 0; i--) {
+        if (absolute[i] == '\\' || absolute[i] == '/') {
+            return slice(absolute, 0, i);
+        }
+    }
+    
+    return absolute;
+}
+
 FileInfo read_file(String path, Allocator mem, i32 retry_count)
 {
     FileInfo fi{};
@@ -405,14 +419,10 @@ String get_exe_folder(Allocator mem)
     i32 length = GetModuleFileNameW(NULL, sw, size);
 
     while (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
-        if (sw == buffer) {
-            sw = ALLOC_ARR(mem, wchar_t, size+10);
-        } else {
-            sw = REALLOC_ARR(mem, wchar_t, sw, size, size+10);
-        }
+        if (sw == buffer) sw = ALLOC_ARR(mem, wchar_t, size+10);
+        else sw = REALLOC_ARR(mem, wchar_t, sw, size, size+10);
         
         size += 10;
-
         length = GetModuleFileNameW(NULL, sw, size);
     }
 
@@ -427,7 +437,7 @@ String get_exe_folder(Allocator mem)
     return s;
 }
 
-String get_current_working_dir(Allocator mem)
+String get_working_dir(Allocator mem)
 {
     wchar_t buffer[255];
     i32 size = ARRAY_COUNT(buffer);
@@ -443,4 +453,12 @@ String get_current_working_dir(Allocator mem)
     
     String s = string_from_utf16(sw, length, mem);
     return s;
+}
+
+void set_working_dir(String path)
+{
+    wchar_t *wsz_path = wsz_string(path);
+    if (!SetCurrentDirectoryW(wsz_path)) {
+        LOG_ERROR("unable to change working dir to '%S': (%d) %s", wsz_path, WIN32_ERR_STR);
+    }
 }

@@ -161,9 +161,6 @@ int WINAPI wWinMain(
     win32_client_rect(wnd.hwnd, &resolution.x, &resolution.y);
     
     init_gfx(resolution);
-    init_app();
-    
-    has_init = true;
     
     Array<String> args{};
     
@@ -172,7 +169,6 @@ int WINAPI wWinMain(
     if (pCmdLine && *pCmdLine != '\0') {
         i32 argv = 0;
         LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
-
 
         if (argv > 0) {
             i32 total_utf8_length = 0;
@@ -198,10 +194,8 @@ int WINAPI wWinMain(
         }
     }
     
-    if (args.count > 0) {
-        app_open_file(args[0]);
-    }
-    
+    init_app(args);
+    has_init = true;
     
     LARGE_INTEGER frequency, last_time;
     QueryPerformanceFrequency(&frequency);

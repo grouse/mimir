@@ -30,6 +30,7 @@ FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
 Array<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
 void list_files(DynamicArray<String> *dst, String dir, u32 flags = 0, Allocator mem = mem_tmp);
 
+String directory_of(String path, Allocator mem = mem_tmp);
 String absolute_path(String relative, Allocator mem = mem_tmp);
 
 FileHandle open_file(String path, FileOpenMode mode);
@@ -45,6 +46,7 @@ bool file_exists(String path);
 void remove_file(String path);
 
 String get_exe_folder(Allocator mem = mem_tmp);
-String get_current_working_dir(Allocator mem = mem_tmp);
+String get_working_dir(Allocator mem = mem_tmp);
+void set_working_dir(String path);
 
 #endif //FILE_H

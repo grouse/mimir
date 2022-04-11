@@ -335,7 +335,7 @@ BufferId create_buffer(String file)
     Buffer b{ .type = BUFFER_FLAT };
     b.id = { .index = buffers.count };
     b.file_path = absolute_path(file, mem_dynamic);
-    b.name = duplicate_string(file, mem_dynamic);//filename_of(file);
+    b.name = filename_of(b.file_path);
     b.newline_mode = NEWLINE_LF;
     
     FileInfo f = read_file(file, mem_dynamic);
@@ -425,14 +425,18 @@ void view_set_buffer(BufferId buffer)
     view.lines_dirty = true;
 }
 
-void init_app()
+void init_app(Array<String> args)
 {
+    fzy_init_table();
+    
     String exe_folder = get_exe_folder();
+    
     String asset_folders[] = {
         exe_folder,
         join_path(exe_folder, "/assets"),
         join_path(exe_folder, "../assets"),
     };
+    
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
     
     init_gui();
@@ -446,15 +450,11 @@ void init_app()
         array_add(&app.process_commands, { .exe = "D:\\projects\\plumber\\build.bat" });
     }
     
-    //view_set_buffer(create_buffer("compilation"));
-    
-    fzy_init_table();
-}
-
-
-void app_open_file(String path)
-{
-    view_set_buffer(create_buffer(path));
+    if (args.count > 0) {
+        String dir = directory_of(args[0]);
+        if (dir.length > 0) set_working_dir(dir);
+        view_set_buffer(create_buffer(args[0]));
+    }
 }
 
 bool app_change_resolution(Vector2 resolution)

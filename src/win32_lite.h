@@ -653,9 +653,8 @@ extern "C" {
     BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
     BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
     
-    DWORD GetCurrentDirectoryW(
-        DWORD  nBufferLength,
-        LPWSTR lpBuffer);
+    DWORD GetCurrentDirectoryW(DWORD nBufferLength,LPWSTR lpBuffer);
+    BOOL SetCurrentDirectoryW(LPCWSTR lpPathName);
     
     BOOL ReadDirectoryChangesW(
         HANDLE                          hDirectory,
