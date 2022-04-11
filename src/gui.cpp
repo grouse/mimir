@@ -89,23 +89,17 @@ void gui_drag_start(Vector2 data, Vector2 data1)
     gui.drag_start_data1 = data1;
 }
 
-void gui_hot(GuiId id, i32 z)
+void gui_hot(GuiId id)
 {
-    if ((gui.pressed == GUI_ID_INVALID || gui.pressed == id) &&
-        (gui.next_hot == GUI_ID_INVALID || z == GUI_OVERLAY || (gui.next_hot_z < z && gui.next_hot_z != GUI_OVERLAY)))
+    if (gui.pressed == id || 
+        (gui.pressed == GUI_ID_INVALID && 
+         gui.hot_window == gui.windows[gui.current_window].id)) 
     {
         gui.next_hot = id;
-        gui.next_hot_z = z;
     }
 }
 
-void gui_clear_hot()
-{
-    gui.hot = gui.next_hot = GUI_ID_INVALID;
-    gui.hot_z = gui.next_hot_z = 0;
-}
-
-bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_window)
+bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
 {
     Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
     Vector2 rel = mouse - pos;
@@ -113,10 +107,15 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size, i32 z = gui.current_windo
     if ((rel.x >= 0.0f && rel.x < size.x &&
          rel.y >= 0.0f && rel.y < size.y))
     {
-        gui_hot(id, z);
+        gui_hot(id);
     } 
 
     return gui.hot == id;
+}
+
+void gui_clear_hot()
+{
+    gui.hot = gui.next_hot = GUI_ID_INVALID;
 }
 
 bool gui_clicked(GuiId id)
@@ -152,7 +151,7 @@ bool gui_drag(GuiId id, Vector2 data)
     }
     
     if (gui.pressed == id) {
-        gui_hot(id, gui.current_window);
+        gui_hot(id);
         gui.focused_window = gui_current_window()->id;
     }
     return gui.pressed == id;
@@ -238,6 +237,19 @@ bool apply_clip_rect(Vector2 *pos, Vector2 *size, Rect clip_rect)
     return true;
 }
 
+bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
+{
+    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+    Vector2 rel = mouse - pos;
+
+    if ((rel.x >= 0.0f && rel.x < size.x &&
+         rel.y >= 0.0f && rel.y < size.y))
+    {
+        return true;
+    }
+
+    return false;
+}
 
 Rect gui_layout_rect(GuiLayout *cl)
 {
@@ -293,15 +305,11 @@ void gui_end_frame()
     
     if (false && gui.hot != gui.next_hot) {
         LOG_INFO(
-            "next hot id: { %d, %d, %d }, z: %d", 
-            gui.next_hot.owner, gui.next_hot.index, gui.next_hot.internal, 
-            gui.next_hot_z);
+            "next hot id: { %d, %d, %d }",
+            gui.next_hot.owner, gui.next_hot.index, gui.next_hot.internal);
     }
     
     gui.hot = gui.next_hot;
-    gui.hot_z = gui.next_hot_z;
-    
-    gui.next_hot_z = 0;
     gui.next_hot = GUI_ID_INVALID;
 
     gui.events.count = 0;
@@ -318,6 +326,31 @@ void gui_end_frame()
         if (!wnd.active && gui.focused_window == wnd.id) {
             gui.focused_window = GUI_ID_INVALID;
         }
+    }
+    
+    GuiId old = gui.hot_window;
+    gui.hot_window = GUI_ID_INVALID;
+    
+#if 0
+    if (mouse_over_rect(gui.windows[GUI_OVERLAY].pos, gui.windows[GUI_OVERLAY].size)) {
+        gui.hot_window = gui.windows[GUI_OVERLAY].id;
+    }
+#endif
+
+    if (gui.hot_window == GUI_ID_INVALID) {
+        for (i32 i = gui.windows.count-1; i > 2; i--) {
+            GuiWindow &wnd = gui.windows[i];
+            if (wnd.active && gui_mouse_over_rect(wnd.pos, wnd.size)) {
+                gui.hot_window = wnd.id;
+                break;
+            }
+        }
+    }
+    
+    if (gui.hot_window == GUI_ID_INVALID) gui.hot_window = gui.windows[GUI_BACKGROUND].id;
+    
+    if (old != gui.hot_window) {
+        LOG_INFO("hot window: %d, %d, %d", gui.hot_window.owner, gui.hot_window.index, gui.hot_window.internal);
     }
 }
 
@@ -660,20 +693,6 @@ GuiWindow* push_window_to_top(i32 index)
     }
     gui.current_window = gui.windows.count-1;
     return &gui.windows[gui.windows.count-1];
-}
-
-bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
-{
-    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 rel = mouse - pos;
-
-    if ((rel.x >= 0.0f && rel.x < size.x &&
-         rel.y >= 0.0f && rel.y < size.y))
-    {
-        return true;
-    }
-
-    return false;
 }
 
 Vector2 gui_layout_widget(Vector2 size, GuiAnchor anchor)
@@ -1337,7 +1356,7 @@ bool gui_begin_window_id(
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
-    if (gui.hot == id) gui_clear_hot();
+    //if (gui.hot == id) gui_clear_hot();
     
     Vector2 window_border = gui.style.window.border;
     
@@ -1369,26 +1388,27 @@ bool gui_begin_window_id(
     if (!wnd->last_active) {
         wnd = push_window_to_top(index);
         gui.focused_window = id;
-    } else if (gui_mouse_over_rect(wnd->pos, wnd->size)) {
-        if (gui.mouse.left_pressed && 
-            !gui.mouse.left_was_pressed) 
-        {
-            wnd = push_window_to_top(index);
-            gui.focused_window = id;
-        }
-    } else {
-        if (gui.focused_window == id && 
-            gui.mouse.left_pressed && 
-            !gui.mouse.left_was_pressed) 
-        {
-            gui.focused_window = GUI_ID_INVALID;
-        }
+    } else if (gui.focused_window != id && 
+               gui.hot_window == id && 
+               gui.mouse.left_pressed && 
+               !gui.mouse.left_was_pressed) 
+    {
+        wnd = push_window_to_top(index);
+        gui.focused_window = id;
+    }
+    
+    if (gui.hot_window != id && 
+        gui.focused_window == id && 
+        gui.mouse.left_pressed && 
+        !gui.mouse.left_was_pressed) 
+    {
+        gui.focused_window = GUI_ID_INVALID;
     }
 
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
     // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
-    if (gui_capture(gui.capture_keyboard)) {
+    if (gui.focused_window == id && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
@@ -1465,7 +1485,7 @@ void gui_end_window()
 
         Vector2 window_border = { 1.0f, 1.0f };
         Vector2 title_size = { wnd->size.x - 2.0f*window_border.x, 20.0f };
-        Vector2 min_size = { 100.0f, title_size.y + 2.0f*window_border.y };
+        Vector2 min_size = { 200.0f, title_size.y + 2.0f*window_border.y + 5.0f };
 
         GuiId resize_id = GUI_ID_INTERNAL(wnd->id, 2);
 
@@ -1500,19 +1520,18 @@ void gui_end_window()
         {
             if (gui.next_hot == GUI_ID_INVALID) {
                 gui.next_hot = resize_id;
-                gui.next_hot_z = gui.current_window;
             }
         } 
 
         Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
     }
-    gui_hot_rect(wnd->id, wnd->pos, wnd->size);
+    //gui_hot_rect(wnd->id, wnd->pos, wnd->size);
     
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
     // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
-    if (gui_capture(gui.capture_keyboard)) {
+    if (gui.focused_window == wnd->id && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
@@ -1574,7 +1593,7 @@ GuiGizmoAction gui_2d_gizmo_translate_axis_id(GuiId id, Camera camera, Vector2 *
         point_in_rect(mouse, tl, tr, br, tl) ||
         point_in_triangle(mouse, t0, t1, t2))
     {
-        gui_hot(id, -1);
+        gui_hot(id);
     } 
 
     if (gui.pressed == id) {
@@ -1640,7 +1659,7 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
         point_in_rect(mouse, tl, tr, br, bl) ||
         point_in_rect(mouse, t0, t1, t2, t3))
     {
-        gui_hot(id, -1);
+        gui_hot(id);
     } 
 
     if (gui.pressed == id) {
@@ -1708,7 +1727,7 @@ GuiGizmoAction gui_2d_gizmo_size_axis_id(GuiId id, Camera camera, Vector2 positi
         point_in_rect(mouse, tl, tr, br, bl) ||
         point_in_rect(mouse, t0, t1, t2, t3))
     {
-        gui_hot(id, -1);
+        gui_hot(id);
     } 
 
     if (gui.pressed == id) {
@@ -1763,7 +1782,7 @@ GuiGizmoAction gui_2d_gizmo_translate_plane_id(GuiId id, Camera camera, Vector2 
         gui_drag_start(*position);
     } 
     if (gui.focused == id || point_in_rect(mouse, tl, tr, br, bl)) {
-        gui_hot(id, -1);
+        gui_hot(id);
     } 
 
     if (gui.focused == id) {
@@ -1858,7 +1877,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
             gui_drag_start(*size, *center);
         }
         if (gui.focused == id || point_in_rect(mouse, corners[i], gizmo_size)) {
-            gui_hot(id, -1);
+            gui_hot(id);
         } 
 
         Vector3 color{ 0.5f, 0.5f, 0.5f };
@@ -1940,7 +1959,7 @@ GuiGizmoAction gui_2d_gizmo_size_square_id(GuiId parent, Camera camera, Vector2 
             gui_drag_start(*size, *center);
         }
         if (gui.focused == id || point_in_rect(mouse, corners[i], gizmo_size)) {
-            gui_hot(id, -1);
+            gui_hot(id);
         } 
 
         if (gui.focused == id) corner_gizmo_active = true;

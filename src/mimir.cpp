@@ -2121,7 +2121,7 @@ next_node:;
                 view.lines_dirty = false;
             }
 
-            gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size, -1);
+            gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size);
         }
     }
 

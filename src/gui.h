@@ -195,11 +195,10 @@ struct GuiContext {
     GuiId last_focused = GUI_ID_INVALID;
 
     GuiId focused_window = GUI_ID_INVALID;
+    GuiId hot_window = GUI_ID_INVALID;
+    
     GuiId active_menu = GUI_ID_INVALID;
     
-    i32 hot_z = 0;
-    i32 next_hot_z = 0;
-
     i32 current_window;
     DynamicArray<GuiWindow> windows;
     DynamicArray<GuiLister> listers;
