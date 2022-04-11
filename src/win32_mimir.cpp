@@ -141,6 +141,8 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     return 0;
 }
 
+HWND win32_root_window;
+
 int WINAPI wWinMain(
     HINSTANCE hInstance, 
     HINSTANCE hPrevInstance, 
@@ -150,7 +152,7 @@ int WINAPI wWinMain(
     init_default_allocators();
     mem_frame = linear_allocator(100*1024*1024);
     
-    Vector2 resolution{ 400, 720 };
+    Vector2 resolution{ 1280, 720 };
     
     Win32Window wnd = create_opengl_window(
         "mimir",
@@ -159,6 +161,7 @@ int WINAPI wWinMain(
         &win32_event_proc,
         WS_OVERLAPPEDWINDOW);
     win32_client_rect(wnd.hwnd, &resolution.x, &resolution.y);
+    win32_root_window = wnd.hwnd;
     
     init_gfx(resolution);
     

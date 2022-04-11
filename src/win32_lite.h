@@ -390,6 +390,7 @@ typedef HICON HCURSOR;
 
 typedef unsigned short WORD;
 typedef short SHORT;
+typedef unsigned short USHORT;
 typedef unsigned int UINT;
 typedef unsigned long DWORD;
 typedef long LONG;
@@ -578,10 +579,55 @@ extern "C" {
     } PROCESS_INFORMATION, *PPROCESS_INFORMATION, *LPPROCESS_INFORMATION;
     
     // shell32.lib
+#define BIF_NEWDIALOGSTYLE (0x00000040)
+#define BIF_EDITBOX (0x00000010)
+#define BIF_USENEWUI (BIF_EDITBOX|BIF_NEWDIALOGSTYLE)
+#define BIF_RETURNONLYFSDIRS (0x00000001)
+    
+    typedef int GPFIDL_FLAGS;
+    
+    typedef struct _SHITEMID {
+        USHORT cb;
+        BYTE   abID[1];
+    } SHITEMID;
+    
+    typedef struct _ITEMIDLIST {
+        SHITEMID mkid;
+    } ITEMIDLIST, ITEMIDLIST_ABSOLUTE;
+    
+    typedef ITEMIDLIST_ABSOLUTE* PIDLIST_ABSOLUTE;
+    typedef const ITEMIDLIST_ABSOLUTE* PCIDLIST_ABSOLUTE;
+    
+    
+    typedef int ( CALLBACK *BFFCALLBACK)(
+        HWND   hwnd,
+        UINT   uMsg,
+        LPARAM lParam,
+        LPARAM lpData);
+    
+    typedef struct _browseinfoW {
+        HWND              hwndOwner;
+        PCIDLIST_ABSOLUTE pidlRoot;
+        LPWSTR            pszDisplayName;
+        LPCWSTR           lpszTitle;
+        UINT              ulFlags;
+        BFFCALLBACK       lpfn;
+        LPARAM            lParam;
+        int               iImage;
+    } BROWSEINFOW, *PBROWSEINFOW, *LPBROWSEINFOW;
+
     LPWSTR* CommandLineToArgvW(
         LPCWSTR lpCmdLine,
         int *pNumArgs);
-
+    
+    PIDLIST_ABSOLUTE SHBrowseForFolderW(LPBROWSEINFOW lpbi);
+    
+    BOOL SHGetPathFromIDListEx(
+        PCIDLIST_ABSOLUTE pidl,
+        PWSTR             pszPath,
+        DWORD             cchPath,
+        GPFIDL_FLAGS      uOptss);
+    
     // kernel32.lib
     HMODULE LoadLibraryA(LPCSTR lpLibFileName);
     FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);

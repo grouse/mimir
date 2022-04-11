@@ -49,4 +49,6 @@ String get_exe_folder(Allocator mem = mem_tmp);
 String get_working_dir(Allocator mem = mem_tmp);
 void set_working_dir(String path);
 
+String select_folder_dialog(Allocator mem = mem_tmp);
+
 #endif //FILE_H

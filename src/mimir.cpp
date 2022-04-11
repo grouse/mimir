@@ -1820,6 +1820,11 @@ void update_and_render(f32 dt)
     gui_menu() {
         gui_menu("file") {
             if (gui_menu_button("save")) buffer_save(view.buffer);
+            
+            if (gui_menu_button("select working dir...")) {
+                String wd = select_folder_dialog();
+                if (wd.length > 0) set_working_dir(wd);
+            }
         }
 
         gui_menu("debug") {

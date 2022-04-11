@@ -462,3 +462,32 @@ void set_working_dir(String path)
         LOG_ERROR("unable to change working dir to '%S': (%d) %s", wsz_path, WIN32_ERR_STR);
     }
 }
+
+String select_folder_dialog(Allocator mem)
+{
+    extern HWND win32_root_window;
+    
+    wchar_t display_name_buffer[WIN32_MAX_PATH];
+    BROWSEINFOW bi{
+        .hwndOwner = win32_root_window,
+        .pszDisplayName = display_name_buffer,
+        .lpszTitle = L"Select folder",
+        .ulFlags = BIF_USENEWUI|BIF_RETURNONLYFSDIRS,
+    };
+
+    PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+    if (pidl == NULL) return "";
+    
+    wchar_t buffer[WIN32_MAX_PATH];
+    
+    wchar_t *dst = buffer;
+    i32 dst_count = ARRAY_COUNT(buffer);
+    
+    while (!SHGetPathFromIDListEx(pidl, dst, dst_count, 0)) {
+        if (dst == buffer) dst = ALLOC_ARR(mem_tmp, wchar_t, dst_count+10);
+        else dst = REALLOC_ARR(mem_tmp, wchar_t, dst, dst_count, dst_count+10);
+        dst_count += 10;
+    }
+    
+    return string_from_utf16(dst, wcslen(dst), mem);
+}
