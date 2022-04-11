@@ -1,4 +1,5 @@
 #include "input.h"
+#include "process.h"
 
 #include "maths.cpp"
 #include "gui.cpp"
@@ -40,6 +41,13 @@ struct BufferLine {
     i64 wrapped : 1;
 };
 
+struct ProcessCommand {
+    String exe;
+    String args;
+    
+    Process *process;
+};
+
 struct Application {
     Font mono;
     i32 tab_width = 4;
@@ -52,16 +60,18 @@ struct Application {
         
         i32 selected_item;
     } lister;
-
+    
     EditMode mode, next_mode;
+    
+    DynamicArray<String> process_command_names;
+    DynamicArray<ProcessCommand> process_commands;
+    i32 selected_process;
     
     Vector3 bg = rgb_unpack(0x00142825);
     Vector3 fg = rgb_unpack(0x00D5C4A1);
-    
     Vector3 mark_fg = rgb_unpack(0xFFEF5F0A);
     Vector3 caret_fg = rgb_unpack(0xFFEF5F0A);
     Vector3 caret_bg = rgb_unpack(0xFF8a523f);
-    
     Vector3 line_bg = rgb_unpack(0xFF264041);
 };
 
@@ -325,7 +335,7 @@ BufferId create_buffer(String file)
     Buffer b{ .type = BUFFER_FLAT };
     b.id = { .index = buffers.count };
     b.file_path = absolute_path(file, mem_dynamic);
-    b.name = filename_of(b.file_path);
+    b.name = duplicate_string(file, mem_dynamic);//filename_of(file);
     b.newline_mode = NEWLINE_LF;
     
     FileInfo f = read_file(file, mem_dynamic);
@@ -333,20 +343,22 @@ BufferId create_buffer(String file)
     b.flat.size = f.size;
     b.flat.capacity = f.size;
     
-    char *start = (char*)f.data;
-    char *p = start+f.size-1;
-    while (p >= start) {
-        if (*p == '\n') {
-            if (p-1 >= start && *(p-1) == '\r') b.newline_mode = NEWLINE_CRLF;
-            else b.newline_mode = NEWLINE_LF;
-            break;
-        } else if (*p == '\r') {
-            if (p-1 >= start && *(p-1) == '\n') b.newline_mode = NEWLINE_LFCR;
-            else b.newline_mode = NEWLINE_CR;
-            break;
-        }
+    if (f.data) {
+        char *start = (char*)f.data;
+        char *p = start+f.size-1;
+        while (p >= start) {
+            if (*p == '\n') {
+                if (p-1 >= start && *(p-1) == '\r') b.newline_mode = NEWLINE_CRLF;
+                else b.newline_mode = NEWLINE_LF;
+                break;
+            } else if (*p == '\r') {
+                if (p-1 >= start && *(p-1) == '\n') b.newline_mode = NEWLINE_LFCR;
+                else b.newline_mode = NEWLINE_CR;
+                break;
+            }
 
-        p--;
+            p--;
+        }
     }
     
     String newline_str = string_from_enum(b.newline_mode);
@@ -429,12 +441,13 @@ void init_app()
     
     calculate_num_visible_lines();
     
-    //view_set_buffer(create_buffer("src/gui.cpp"));
-    //view_set_buffer(create_buffer("src/gui.h"));
-    //view_set_buffer(create_buffer("src/maths.cpp"));
-    //view_set_buffer(create_buffer("src/maths.h"));
-    //view_set_buffer(create_buffer("src/mimir.cpp"));
-
+    if (true) {
+        array_add(&app.process_command_names, { "build.bat" });
+        array_add(&app.process_commands, { .exe = "D:\\projects\\plumber\\build.bat" });
+    }
+    
+    //view_set_buffer(create_buffer("compilation"));
+    
     fzy_init_table();
 }
 
@@ -1525,6 +1538,15 @@ void app_event(InputEvent event)
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.virtual_code) {
+            case VC_F5:
+                if (app.process_commands.count > 0) {
+                    ProcessCommand *cmd = &app.process_commands[app.selected_process];
+                    if (!cmd->process || get_exit_code(cmd->process)) {
+                        release_process(cmd->process);
+                        cmd->process = create_process(cmd->exe, cmd->args, [](String s) { LOG_INFO("%.*s", STRFMT(s)); });
+                    }
+                }
+                break;
             case VC_Q:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
@@ -1802,21 +1824,14 @@ void update_and_render(f32 dt)
 
         gui_menu("debug") {
             gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
-            gui_menu_button("foobar");
-            gui_menu_button("foobar");
-            gui_menu_button("foobar");
-            gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
+        }
+        
+        if (app.process_commands.count > 0) {
+            app.selected_process = gui_dropdown(app.process_command_names, app.selected_process);
         }
     }
     
     gui_window("buffer history", &debug.buffer_history.wnd) {
-        
-        static i32 val = 1;
-        val = gui_dropdown({ "A", "B", "C" }, { 1, 2, 3 }, val);
-        if (gui_button("foobar")) LOG_INFO("CLICK");
-        
-        gui_editbox("foobar");
-        
         char str[256];
 
         Buffer *buffer = &buffers[view.buffer.index];

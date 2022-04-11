@@ -94,3 +94,20 @@ Process* create_process(String exe, String args, StdOutProc stdout_proc)
 
     return p;
 }
+
+void release_process(Process *process)
+{
+    if (process) FREE(mem_dynamic, process);
+}
+
+bool get_exit_code(Process *process, i32 *exit_code)
+{
+    DWORD dw_exit_code;
+    if (process && GetExitCodeProcess(process->process_handle, &dw_exit_code)) {
+        LOG_INFO("exit code: %d", dw_exit_code);
+        if (exit_code) *exit_code = dw_exit_code;
+        return true;
+    }
+    
+    return false;
+}
