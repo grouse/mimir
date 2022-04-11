@@ -1356,8 +1356,6 @@ bool gui_begin_window_id(
     GuiWindow *wnd = &gui.windows[index];
     gui.current_window = index;
     
-    //if (gui.hot == id) gui_clear_hot();
-    
     Vector2 window_border = gui.style.window.border;
     
     bool do_titlebar = !(flags & GUI_WINDOW_NO_TITLE);
@@ -1376,14 +1374,6 @@ bool gui_begin_window_id(
         }
     }
 
-
-    // TODO(jesper): the pushing to front and hot handling is totally broken for overlapping windows
-    // Essentially we need to be able to check whether the hot widget is itself or a child of it
-    // in a reliable way.
-    // I'm not sure what the solution is, but I'm leaning towards making the hot_z a 2-step, so
-    // if the window's z is 3 its children's z is 3.5, or an equivalent integer solution. Alternatively,
-    // this could probably be solved with a better widget id hierarchy, which we need anyway for other
-    // reasons, which'd let us easily, and reliably, check if hot.root == id 
     wnd->active = true;
     if (!wnd->last_active) {
         wnd = push_window_to_top(index);
