@@ -36,6 +36,11 @@ struct Range_i64 {
     i64 start, end;
 };
 
+struct Range_i32 {
+    i32 start, end;
+};
+
+
 struct BufferLine {
     i64 offset : 63;
     i64 wrapped : 1;
@@ -50,7 +55,6 @@ struct ProcessCommand {
 
 struct Application {
     Font mono;
-    i32 tab_width = 4;
     bool animating = true;
     
     struct {
@@ -110,7 +114,6 @@ struct BufferId {
     operator bool() { return *this != BUFFER_INVALID; }
 };
 
-
 struct Buffer {
     BufferId id;
     
@@ -122,7 +125,9 @@ struct Buffer {
     i32 saved_at;
     
     NewlineMode newline_mode;
-    
+    i32 tab_width = 4;
+    bool indent_with_tabs;
+
     BufferType type;
     union {
         struct { char *data; i64 size; i64 capacity; } flat;
@@ -312,11 +317,8 @@ String string_from_enum(NewlineMode mode)
     }
 }
 
-String buffer_newline_str(BufferId buffer_id)
+String buffer_newline_str(Buffer *buffer)
 {
-    Buffer *buffer = get_buffer(buffer_id);
-    ASSERT(buffer);
-    
     switch (buffer->newline_mode) {
     case NEWLINE_LF: return "\n";
     case NEWLINE_CR: return "\r";
@@ -325,12 +327,19 @@ String buffer_newline_str(BufferId buffer_id)
     }
 }
 
+String buffer_newline_str(BufferId buffer_id)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    return buffer_newline_str(buffer);
+}
+
 BufferId create_buffer(String file)
 {
     // TODO(jesper): do something to try and figure out/guess file type,
     // in particular try to detect whether the file is a binary so that we can
     // write a binary blob visualiser, or at least something that won't choke or
     // crash trying to render invalid text
+    // TODO(jesper): tab/spaces indent mode depending on file type and project settings
     
     Buffer b{ .type = BUFFER_FLAT };
     b.id = { .index = buffers.count };
@@ -359,6 +368,8 @@ BufferId create_buffer(String file)
 
             p--;
         }
+        
+        // TODO(jesper): guess tabs/spaces based on file content?
     }
     
     String newline_str = string_from_enum(b.newline_mode);
@@ -533,6 +544,11 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_i
     return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
 }
 
+Range_i32 range_i32(i32 a, i32 b)
+{
+    return { .start = MIN(a, b), .end = MAX(a, b) };
+}
+
 Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buffer, bool lines_block)
 {
     Range_i64 r;
@@ -626,7 +642,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
         }
 
         if (c == '\t') {
-            i32 w = app.tab_width - vcolumn % app.tab_width;
+            i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
             vcolumn += w;
             continue;
         }
@@ -785,7 +801,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
     
     i64 end_offset = offset;
     
-    String nl = buffer_newline_str(buffer_id);
+    String nl = buffer_newline_str(buffer);
     
     i32 required_extra_space = 0;
     for (i32 i = 0; i < in_text.length; i++) {
@@ -1246,7 +1262,7 @@ i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buff
         if (offset >= end_offset) break;
         if (c == '\n' || c == '\r') break;
         
-        if (c == '\t') count += app.tab_width - count % app.tab_width;
+        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
         else count++;
     }
 
@@ -1271,7 +1287,7 @@ i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
         if (c == '\n' || c == '\r') break;
         offset = utf8_incr(buffer, offset);
         
-        if (c == '\t') count += app.tab_width - count % app.tab_width;
+        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
         else count++;
     }
     
@@ -1286,7 +1302,7 @@ i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
             if (c == '\n' || c == '\r') break;
             offset = utf8_incr(buffer, offset);
             
-            if (c == '\t') count += app.tab_width - count % app.tab_width;
+            if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
             else count++;
         }
     }
@@ -1304,7 +1320,7 @@ i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Arra
     while (offset < byte_offset) {
         char c = char_at(buffer, offset);
         
-        if (c == '\t') column += app.tab_width - column % app.tab_width;
+        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
         else if (c == '\r' || c == '\n') break;
         else column += 1;
         
@@ -1325,7 +1341,7 @@ i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<BufferLine> l
     while (offset < end_offset && column < target_column) {
         char c = char_at(buffer, offset);
         
-        if (c == '\t') column += app.tab_width - column % app.tab_width;
+        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
         else if (c == '\r' || c == '\n') break;
         else column += 1;
         
@@ -1360,7 +1376,7 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
     i64 offset = lines[wrapped_line].offset;
     
     for (i64 c = 0; c < wrapped_column; c++) {
-        if (char_at(buffer, offset) == '\t') c += app.tab_width - c % app.tab_width - 1;
+        if (char_at(buffer, offset) == '\t') c += buffer->tab_width - c % buffer->tab_width - 1;
         offset = utf8_incr(buffer, offset);
     }
     
@@ -1661,6 +1677,84 @@ void app_event(InputEvent event)
             case VC_S:
                 if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
                 break;
+            case VC_TAB: {
+                    Buffer *buffer = get_buffer(view.buffer);
+                    if (!buffer) break;
+                    
+                    if (event.key.modifiers & MF_SHIFT) {
+                        // TODO(jesper): I'm pretty sure this is super buggy for multi-line un-indent becuase of 
+                        // stale line wrap offsets`
+                        Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
+                        if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
+                        
+                        BufferHistoryScope h(view.buffer);
+                        for (i32 l = r.start; l <= r.end; l++) {
+                            String current_indent = get_indent_for_line(view.buffer, view.lines, l);
+
+                            i32 vcol = 0;
+                            i32 i;
+                            for (i = 0, vcol = 0; i < current_indent.length && vcol < buffer->tab_width; i++) {
+                                if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                                else vcol += 1;
+                            }
+
+                            if (i > 0) {
+                                i64 line_start = line_start_offset(l, view.lines);
+
+                                if (buffer_remove(view.buffer, line_start, line_start+i)) {
+                                    if (view.caret.byte_offset >= line_start) {
+                                        view.caret.byte_offset -= i;
+                                        view.caret_dirty = true;
+                                        move_view_to_caret();
+                                    }
+
+                                    if (view.mark.byte_offset > line_start) {
+                                        view.mark.byte_offset -= i;
+                                        view.caret_dirty = true;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
+                        if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
+                        
+                        BufferHistoryScope h(view.buffer);
+                        for (i32 l = r.start; l <= r.end; l++) {
+                            i64 line_start = line_start_offset(l, view.lines);
+
+                            i64 new_offset;
+
+                            if (buffer->indent_with_tabs) new_offset = buffer_insert(view.buffer, line_start, "\t");
+                            else {
+                                String current_indent = get_indent_for_line(view.buffer, view.lines, l);
+
+                                i32 vcol = 0;
+                                for (i32 i = 0; i < current_indent.length; i++) {
+                                    if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                                    else vcol += 1;
+                                }
+
+
+                                i32 w = buffer->tab_width - vcol % buffer->tab_width;
+                                char *spaces = ALLOC_ARR(mem_tmp, char, w);
+                                memset(spaces, ' ', w);
+                                new_offset = buffer_insert(view.buffer, line_start, { spaces, w });
+                            }
+
+                            if (view.caret.byte_offset >= line_start) {
+                                view.caret.byte_offset += new_offset - line_start;
+                                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                                move_view_to_caret();
+                            }
+
+                            if (view.mark.byte_offset > line_start) {
+                                view.mark.byte_offset += new_offset - line_start;
+                                view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                            }
+                        }
+                    }
+                } break;
             default: break;
             }
         } else if (app.mode == MODE_INSERT) {
@@ -1687,9 +1781,28 @@ void app_event(InputEvent event)
                     write_string(view.buffer, buffer_newline_str(view.buffer));
                     write_string(view.buffer, indent);
                 } break;
-            case VC_TAB: 
-                write_string(view.buffer, "\t");
-                break;
+            case VC_TAB: {
+                    Buffer *buffer = get_buffer(view.buffer);
+                    if (!buffer) break;
+                    
+                    if (buffer->indent_with_tabs) write_string(view.buffer, "\t");
+                    else {
+                        String current_indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
+
+                        i32 vcol = 0;
+                        for (i32 i = 0; i < current_indent.length; i++) {
+                            if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                            else vcol += 1;
+                        }
+
+
+                        i32 w = buffer->tab_width - vcol % buffer->tab_width;
+                        char *spaces = ALLOC_ARR(mem_tmp, char, w);
+                        memset(spaces, ' ', w);
+                        write_string(view.buffer, { spaces, w });
+                    }
+
+                } break;
             case VC_BACKSPACE: 
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
@@ -2161,8 +2274,15 @@ next_node:;
         defer { gui_end_layout(); };
 
         char buffer[256];
+        
         String nl = string_from_enum(get_buffer(view.buffer)->newline_mode);
-        gui_textbox(stringf(buffer, sizeof buffer, "Ln: %d, Col: %lld %.*s", view.caret.line+1, view.caret.column+1, STRFMT(nl)));
+        String in = get_buffer(view.buffer)->indent_with_tabs ? String("TAB") : String("SPACE");
+        
+        gui_textbox(
+            stringf(buffer, sizeof buffer, 
+                    "Ln: %d, Col: %lld %.*s %.*s", 
+                    view.caret.line+1, view.caret.column+1, 
+                    STRFMT(nl), STRFMT(in)));
     }
 
     if (view.caret.wrapped_line >= view.line_offset && 
@@ -2244,7 +2364,7 @@ next_node:;
                 }
 
                 if (c == '\t') {
-                    i32 w = app.tab_width - vcolumn % app.tab_width;
+                    i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
                     vcolumn += w;
                     continue;
                 }
