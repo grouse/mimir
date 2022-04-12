@@ -205,6 +205,7 @@ struct GuiContext {
     DynamicArray<GuiMenu> menus;
     DynamicArray<GuiLayout> layout_stack;
     
+    DynamicArray<Rect> overlay_rects;
     
     GuiId current_id;
     DynamicArray<GuiId> id_stack;

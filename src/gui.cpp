@@ -17,23 +17,22 @@ void init_gui()
 {
     glGenBuffers(1, &gui.vbo);
     
-    GuiWindow world_wnd{
-        .id = GUI_ID_INVALID,
+    GuiWindow background{
+        .id = GUI_ID(0),
         .clip_rect = Rect{ { 0.0f, 0.0f }, { gfx.resolution.x, gfx.resolution.y } },
         .command_buffer.commands.alloc = mem_frame,
+        .size = gfx.resolution,
     };
-    array_add(&gui.windows, world_wnd);
+    array_add(&gui.windows, background);
     
-    GuiWindow root{
-        .id = GUI_ID_INVALID,
+    GuiWindow overlay{
+        .id = GUI_ID(0),
         .clip_rect = Rect{ { 0.0f, 0.0f }, { gfx.resolution.x, gfx.resolution.y } },
         .command_buffer.commands.alloc = mem_frame,
+        .size = gfx.resolution,
     };
-    array_add(&gui.windows, root);
-    
-    GuiWindow overlay = root;
     array_add(&gui.windows, overlay);
-
+    
     gui.current_window = GUI_BACKGROUND;
 
     gui.camera.projection = matrix4_identity();
@@ -330,15 +329,17 @@ void gui_end_frame()
     
     GuiId old = gui.hot_window;
     gui.hot_window = GUI_ID_INVALID;
-    
-#if 0
-    if (mouse_over_rect(gui.windows[GUI_OVERLAY].pos, gui.windows[GUI_OVERLAY].size)) {
-        gui.hot_window = gui.windows[GUI_OVERLAY].id;
+
+    for (Rect &r : gui.overlay_rects) {
+        if (gui_mouse_over_rect(r.pos, r.size)) {
+            gui.hot_window = gui.windows[GUI_OVERLAY].id;
+            break;
+        }
     }
-#endif
+    gui.overlay_rects.count = 0;
 
     if (gui.hot_window == GUI_ID_INVALID) {
-        for (i32 i = gui.windows.count-1; i > 2; i--) {
+        for (i32 i = gui.windows.count-1; i > GUI_OVERLAY; i--) {
             GuiWindow &wnd = gui.windows[i];
             if (wnd.active && gui_mouse_over_rect(wnd.pos, wnd.size)) {
                 gui.hot_window = wnd.id;
@@ -349,7 +350,7 @@ void gui_end_frame()
     
     if (gui.hot_window == GUI_ID_INVALID) gui.hot_window = gui.windows[GUI_BACKGROUND].id;
     
-    if (old != gui.hot_window) {
+    if (false && old != gui.hot_window) {
         LOG_INFO("hot window: %d, %d, %d", gui.hot_window.owner, gui.hot_window.index, gui.hot_window.internal);
     }
 }
@@ -2253,6 +2254,8 @@ bool gui_begin_menu_id(GuiId id, String label)
             .margin.y = 5,
             .column.spacing = 2,
         };
+        
+        array_add(&gui.overlay_rects, { menu_pos, menu->size });
 
         gui_begin_layout(layout);
     }
