@@ -13,6 +13,7 @@
 #include "win32_file.cpp"
 #include "win32_input.cpp"
 #include "win32_process.cpp"
+#include "win32_thread.cpp"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_malloc(x,u)  ((void)(u),malloc(x))
