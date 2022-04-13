@@ -1,10 +1,11 @@
 #include "process.h"
+#include "thread.h"
 
 struct Process {
     HANDLE process_handle;
 
     HANDLE stdout_rd;
-    HANDLE stdout_thread;
+    Thread *stdout_thread;
 
     StdOutProc stdout_proc;
 };
@@ -69,12 +70,9 @@ Process* create_process(String exe, String args, StdOutProc stdout_proc)
     p->stdout_proc = stdout_proc;
 
     if (p->stdout_proc) {
-        p->stdout_thread = CreateThread(
-            NULL, 0,
-            [](LPVOID thread_data) -> DWORD
+        p->stdout_thread = create_thread(
+            [](void *thread_data) -> i32
             {
-                init_thread_allocators();
-
                 Process *p = (Process*)thread_data;
 
                 char buffer[255];
@@ -88,8 +86,7 @@ Process* create_process(String exe, String args, StdOutProc stdout_proc)
                 }
 
                 return 0;
-            },
-            p, 0, NULL);
+            }, p);
     }
 
     return p;
