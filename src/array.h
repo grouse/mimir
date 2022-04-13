@@ -244,17 +244,14 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
     
     if (values.count > remove_count) {
         i32 move_count = new_count-1-end;
-        for (i32 i = 0; i < move_count; i++) {
-            arr->data[new_count-i-1] = arr->data[old_count-1-i];
-        }
+        for (i32 i = 0; i < move_count; i++) arr->data[new_count-i-1] = arr->data[old_count-1-i];
     }
     
     for (i32 i = 0; i < values.count; i++) arr->data[start+i] = values.data[i];
     
     if (remove_count > values.count) {
-        for (i32 i = 0; i < values.count-end; i++) {
-            arr->data[start+i] = arr->data[end+i];
-        }
+        i32 move_count = remove_count - values.count;
+        for (i32 i = 0; i < move_count; i++) arr->data[end-move_count+i] = arr->data[end+i];
     }
          
     arr->count = new_count;

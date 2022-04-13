@@ -544,6 +544,91 @@ i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_i
     return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
 }
 
+i64 buffer_prev_offset(Buffer *buffer, i64 byte_offset)
+{
+    ASSERT(buffer);
+    i64 prev_offset = byte_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        if (byte_offset == 0) return 0;
+
+        char c = char_at(buffer, prev_byte(buffer, byte_offset));
+        if (c == '\n' || c == '\r') {
+            prev_offset = prev_byte(buffer, byte_offset);
+            char prev_c = char_at(buffer, prev_byte(buffer, prev_offset));
+
+            if (prev_offset > 0 &&
+                ((c == '\n' && prev_c == '\r') ||
+                 (c == '\r' && prev_c == '\n')))
+            {
+                prev_offset = prev_byte(buffer, prev_offset);
+            }
+        } else {
+            prev_offset = utf8_decr(buffer, byte_offset);
+        }
+        break;
+    }
+
+    return prev_offset;
+}
+
+i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+    return buffer_prev_offset(buffer, byte_offset);
+}
+
+
+i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
+    i64 end_offset = buffer_end(buffer_id);
+    if (byte_offset >= end_offset) return end_offset;
+
+    i64 next_offset = byte_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        char c = char_at(buffer, byte_offset);
+        if (c == '\n' || c == '\r') {
+            next_offset = next_byte(buffer, byte_offset);
+            char next_c = char_at(buffer, next_offset);
+
+            if (next_offset < buffer->flat.size &&
+                ((c == '\n' && next_c == '\r') ||
+                 (c == '\r' && next_c == '\n')))
+            {
+                next_offset = next_byte(buffer, next_offset);
+            }
+        } else {
+            next_offset = utf8_incr(buffer, byte_offset);
+        }
+        break;
+    }
+
+    return next_offset;
+}
+
+i64 buffer_increment_offset(BufferId buffer_id, i64 byte_offset, i64 count)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return byte_offset;
+
+    i64 end_offset = buffer_end(buffer_id);
+    if (byte_offset >= end_offset) return end_offset;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        return MIN(end_offset, byte_offset+count);
+    }
+
+    return byte_offset;
+}
+
 Range_i32 range_i32(i32 a, i32 b)
 {
     return { .start = MIN(a, b), .end = MAX(a, b) };
@@ -564,8 +649,186 @@ Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buff
         r.end = MAX(c0.byte_offset, c1.byte_offset);
     }
     
-    if (r.start == r.end) r.end += 1;
+    if (r.start == r.end) r.end = buffer_next_offset(buffer, r.end);
     return r;
+}
+
+i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
+{
+    i64 offset = current;
+    while (n--) offset = buffer_next_offset(buffer_id, offset);
+    return offset;
+}
+
+i32 wrapped_line_from_offset(i64 offset, i32 guessed_line, Array<BufferLine> lines)
+{
+    i32 line = guessed_line;
+    while (line > 0 && offset < lines[line].offset) line--;
+    while (line < (lines.count-2) && offset > lines[line+1].offset) line++;
+    return line;
+}
+
+i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 count = 0;
+
+    i64 offset = lines[wrapped_line].offset;
+    i64 end_offset = line_end_offset(wrapped_line, lines, buffer);
+    while (true) {
+        char c = char_at(buffer, offset);
+
+        offset = utf8_incr(buffer, offset);
+        if (offset >= end_offset) break;
+        if (c == '\n' || c == '\r') break;
+
+        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
+        else count++;
+    }
+
+
+    return count;
+}
+
+i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 count = 0;
+
+    i32 line = wrapped_line;
+    while (line > 0 && lines[line].wrapped) line--;
+
+    i64 offset = lines[line].offset;
+    i64 end_offset = line_end_offset(line, lines, buffer);
+
+    while (offset < end_offset) {
+        char c = char_at(buffer, offset);
+        if (c == '\n' || c == '\r') break;
+        offset = utf8_incr(buffer, offset);
+
+        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
+        else count++;
+    }
+
+    while (line < lines.count-1 && lines[line+1].wrapped) {
+        line++;
+
+        offset = lines[line].offset;
+        end_offset = line_end_offset(line, lines, buffer);
+
+        while (offset < end_offset) {
+            char c = char_at(buffer, offset);
+            if (c == '\n' || c == '\r') break;
+            offset = utf8_incr(buffer, offset);
+
+            if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
+            else count++;
+        }
+    }
+
+    return count;
+}
+
+i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 column = 0;
+
+    i64 offset = lines[wrapped_line].offset;
+    while (offset < byte_offset) {
+        char c = char_at(buffer, offset);
+
+        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
+        else if (c == '\r' || c == '\n') break;
+        else column += 1;
+
+        offset = utf8_incr(buffer, offset);
+    }
+
+    return column;
+}
+
+i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 column = 0;
+
+    i64 offset = lines[wrapped_line].offset;
+    i64 end_offset = line_end_offset(wrapped_line, lines, buffer);
+    while (offset < end_offset && column < target_column) {
+        char c = char_at(buffer, offset);
+
+        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
+        else if (c == '\r' || c == '\n') break;
+        else column += 1;
+
+        offset = utf8_incr(buffer, offset);
+    }
+
+
+    return column;
+}
+
+i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 column = wrapped_column;
+
+    if (lines[wrapped_line].wrapped) {
+        for (i32 l = wrapped_line-1; l >= 0; l--) {
+            column += wrapped_column_count(l, lines, buffer);
+            if (!lines[l].wrapped) break;
+        }
+    }
+
+    return column;
+}
+
+
+i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+{
+    if (wrapped_line >= lines.count) return 0;
+
+    i64 offset = lines[wrapped_line].offset;
+
+    for (i64 c = 0; c < wrapped_column; c++) {
+        if (char_at(buffer, offset) == '\t') c += buffer->tab_width - c % buffer->tab_width - 1;
+        offset = utf8_incr(buffer, offset);
+    }
+
+    return offset;
+}
+
+void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<BufferLine> lines)
+{
+    if (new_wrapped_line == 0) {
+        *wrapped_line = 0;
+        *line = 0;
+        return;
+    } else if (new_wrapped_line == *wrapped_line) return;
+
+    if (*wrapped_line >= lines.count) {
+        *wrapped_line = MIN(new_wrapped_line, lines.count-1);
+        *line = 0;
+        for (i32 i = 0; i < *wrapped_line; i++) {
+            if (!lines[i].wrapped) *line = *line + 1;
+        }
+
+        return;
+    }
+
+    while (*wrapped_line > new_wrapped_line) {
+        if (!lines[(*wrapped_line)--].wrapped) (*line)--;
+    }
+
+    while (*wrapped_line < new_wrapped_line) {
+        if (!lines[++(*wrapped_line)].wrapped) (*line)++;
+    }
 }
 
 void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_lines, BufferId buffer_id)
@@ -580,12 +843,11 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     while (last_line+1 < existing_lines->count && existing_lines->at(last_line+1).wrapped) last_line++;
     i64 end_line = MIN(last_line+1, existing_lines->count);
 
-    i64 start = 0;
-    i64 end = line_end_offset(last_line, *existing_lines, buffer);
-
     DynamicArray<BufferLine> tmp_lines{ .alloc = mem_tmp };
     DynamicArray<BufferLine> *new_lines = &tmp_lines;
 
+    i64 start = 0;
+    i64 end = line_end_offset(last_line, *existing_lines, buffer);
     if (wrapped_line < existing_lines->count) {
         array_add(new_lines, existing_lines->at(wrapped_line));
         start = existing_lines->at(wrapped_line).offset;
@@ -666,7 +928,9 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     }
     
     Array<BufferLine> lines = *new_lines;
-    if (end != buffer_end(buffer)) lines = slice(*new_lines, 0, new_lines->count-1);
+    if (end != buffer_end(buffer)) {
+        lines = slice(*new_lines, 0, new_lines->count-1);
+    }
     
     if (new_lines != existing_lines) {
         if (wrapped_line == end_line) {
@@ -713,13 +977,28 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             };
             buffer_history(buffer_id, h);
         }
+        
         memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
         buffer->flat.size -= num_bytes;
         
-        // TODO(jesper): do incremental line wrap recalc here, akin to the buffer_insert
         if (view.buffer == buffer_id) {
-            view.lines_dirty = true;
-            view.caret_dirty = true;
+            i32 line = wrapped_line_from_offset(byte_start, view.caret.wrapped_line, view.lines);
+            
+#if DEBUG_LINE_WRAP_RECALC && 0
+            LOG_INFO("new buffer end offset after removal: %lld", buffer->flat.size);
+            LOG_INFO("reducing byte offsets for lines starting at %d with %lld bytes", line+1, num_bytes);
+            for (i32 i = line; i < view.lines.count; i++) LOG_RAW("\tline[%d]: %lld\n", i, view.lines[i].offset);
+#endif
+
+            i64 start_offset = view.lines[line].offset;
+            for (i32 i = line+1; i < view.lines.count; i++) {
+                view.lines[i].offset -= num_bytes;
+                
+                if (view.lines[i].offset <= start_offset) 
+                    array_remove_sorted(&view.lines, i--);
+            }
+            
+            recalculate_line_wrap(line, &view.lines, view.buffer);
         }
         
         return true;
@@ -782,14 +1061,6 @@ bool buffer_unsaved_changes(BufferId buffer_id)
     // specifically for that which do simpler and less computationally expensive things
     Buffer *buffer = get_buffer(buffer_id);
     return buffer && buffer->saved_at != buffer->history_index;
-}
-
-i32 wrapped_line_from_offset(i64 offset, i32 guessed_line, Array<BufferLine> lines)
-{
-    i32 line = guessed_line;
-    while (line > 0 && offset < lines[line].offset) line--;
-    while (line < (lines.count-2) && offset > lines[line+1].offset) line++;
-    return line;
 }
 
 i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_history = true)
@@ -936,92 +1207,6 @@ void buffer_redo(BufferId buffer_id)
     
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
     move_view_to_caret();
-}
-
-
-i64 buffer_prev_offset(Buffer *buffer, i64 byte_offset)
-{
-    ASSERT(buffer);
-    i64 prev_offset = byte_offset;
-
-    switch (buffer->type) {
-    case BUFFER_FLAT:
-        if (byte_offset == 0) return 0;
-        
-        char c = char_at(buffer, prev_byte(buffer, byte_offset));
-        if (c == '\n' || c == '\r') {
-            prev_offset = prev_byte(buffer, byte_offset);
-            char prev_c = char_at(buffer, prev_byte(buffer, prev_offset));
-
-            if (prev_offset > 0 &&
-                ((c == '\n' && prev_c == '\r') ||
-                 (c == '\r' && prev_c == '\n')))
-            {
-                prev_offset = prev_byte(buffer, prev_offset);
-            }
-        } else {
-            prev_offset = utf8_decr(buffer, byte_offset);
-        }
-        break;
-    }
-    
-    return prev_offset;
-}
-
-i64 buffer_prev_offset(BufferId buffer_id, i64 byte_offset)
-{
-    Buffer *buffer = get_buffer(buffer_id);
-    if (!buffer) return byte_offset;
-    return buffer_prev_offset(buffer, byte_offset);
-}
-
-
-i64 buffer_next_offset(BufferId buffer_id, i64 byte_offset)
-{
-    Buffer *buffer = get_buffer(buffer_id);
-    if (!buffer) return byte_offset;
-
-    i64 end_offset = buffer_end(buffer_id);
-    if (byte_offset >= end_offset) return end_offset;
-    
-    i64 next_offset = byte_offset;
-    
-    switch (buffer->type) {
-    case BUFFER_FLAT:
-        char c = char_at(buffer, byte_offset);
-        if (c == '\n' || c == '\r') {
-            next_offset = next_byte(buffer, byte_offset);
-            char next_c = char_at(buffer, next_offset);
-
-            if (next_offset < buffer->flat.size &&
-                ((c == '\n' && next_c == '\r') ||
-                 (c == '\r' && next_c == '\n')))
-            {
-                next_offset = next_byte(buffer, next_offset);
-            }
-        } else {
-            next_offset = utf8_incr(buffer, byte_offset);
-        }
-        break;
-    }
-
-    return next_offset;
-}
-
-i64 buffer_increment_offset(BufferId buffer_id, i64 byte_offset, i64 count)
-{
-    Buffer *buffer = get_buffer(buffer_id);
-    if (!buffer) return byte_offset;
-
-    i64 end_offset = buffer_end(buffer_id);
-    if (byte_offset >= end_offset) return end_offset;
-
-    switch (buffer->type) {
-    case BUFFER_FLAT:
-        return MIN(end_offset, byte_offset+count);
-    }
-
-    return byte_offset;
 }
 
 bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
@@ -1240,176 +1425,6 @@ String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line
     return buffer_read(buffer_id, abs_start, line_start);
 }
 
-i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
-{
-    i64 offset = current;
-    while (n--) offset = buffer_next_offset(buffer_id, offset);
-    return offset;
-}
-
-i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 count = 0;
-    
-    i64 offset = lines[wrapped_line].offset;
-    i64 end_offset = line_end_offset(wrapped_line, lines, buffer);
-    while (true) {
-        char c = char_at(buffer, offset);
-        
-        offset = utf8_incr(buffer, offset);
-        if (offset >= end_offset) break;
-        if (c == '\n' || c == '\r') break;
-        
-        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
-        else count++;
-    }
-
-    
-    return count;
-}
-
-i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 count = 0;
-    
-    i32 line = wrapped_line;
-    while (line > 0 && lines[line].wrapped) line--;
-    
-    i64 offset = lines[line].offset;
-    i64 end_offset = line_end_offset(line, lines, buffer);
-
-    while (offset < end_offset) {
-        char c = char_at(buffer, offset);
-        if (c == '\n' || c == '\r') break;
-        offset = utf8_incr(buffer, offset);
-        
-        if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
-        else count++;
-    }
-    
-    while (line < lines.count-1 && lines[line+1].wrapped) {
-        line++;
-        
-        offset = lines[line].offset;
-        end_offset = line_end_offset(line, lines, buffer);
-
-        while (offset < end_offset) {
-            char c = char_at(buffer, offset);
-            if (c == '\n' || c == '\r') break;
-            offset = utf8_incr(buffer, offset);
-            
-            if (c == '\t') count += buffer->tab_width - count % buffer->tab_width;
-            else count++;
-        }
-    }
-
-    return count;
-}
-
-i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 column = 0;
-    
-    i64 offset = lines[wrapped_line].offset;
-    while (offset < byte_offset) {
-        char c = char_at(buffer, offset);
-        
-        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
-        else if (c == '\r' || c == '\n') break;
-        else column += 1;
-        
-        offset = utf8_incr(buffer, offset);
-    }
-
-    return column;
-}
-
-i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 column = 0;
-    
-    i64 offset = lines[wrapped_line].offset;
-    i64 end_offset = line_end_offset(wrapped_line, lines, buffer);
-    while (offset < end_offset && column < target_column) {
-        char c = char_at(buffer, offset);
-        
-        if (c == '\t') column += buffer->tab_width - column % buffer->tab_width;
-        else if (c == '\r' || c == '\n') break;
-        else column += 1;
-        
-        offset = utf8_incr(buffer, offset);
-    }
-    
-    
-    return column;
-}
-
-i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 column = wrapped_column;
-
-    if (lines[wrapped_line].wrapped) {
-        for (i32 l = wrapped_line-1; l >= 0; l--) {
-            column += wrapped_column_count(l, lines, buffer);
-            if (!lines[l].wrapped) break;
-        }
-    }
-    
-    return column;
-}
-
-
-i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
-{
-    if (wrapped_line >= lines.count) return 0;
-    
-    i64 offset = lines[wrapped_line].offset;
-    
-    for (i64 c = 0; c < wrapped_column; c++) {
-        if (char_at(buffer, offset) == '\t') c += buffer->tab_width - c % buffer->tab_width - 1;
-        offset = utf8_incr(buffer, offset);
-    }
-    
-    return offset;
-}
-
-void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<BufferLine> lines)
-{
-    if (new_wrapped_line == 0) {
-        *wrapped_line = 0;
-        *line = 0;
-        return;
-    } else if (new_wrapped_line == *wrapped_line) return;
-    
-    if (*wrapped_line >= lines.count) {
-        *wrapped_line = MIN(new_wrapped_line, lines.count-1);
-        *line = 0;
-        for (i32 i = 0; i < *wrapped_line; i++) {
-            if (!lines[i].wrapped) *line = *line + 1;
-        }
-        
-        return;
-    }
-    
-    while (*wrapped_line > new_wrapped_line) {
-        if (!lines[(*wrapped_line)--].wrapped) (*line)--;
-    }
-
-    while (*wrapped_line < new_wrapped_line) {
-        if (!lines[++(*wrapped_line)].wrapped) (*line)++;
-    }
-}
-
 bool app_needs_render()
 {
     return app.next_mode != app.mode || app.animating || view.lines_dirty || view.caret_dirty;
@@ -1607,10 +1622,9 @@ void app_event(InputEvent event)
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        // TODO(jesper): short-circuit the caret re-calc when buffer_remove does its own incremental line reflow
                         view.caret.byte_offset = r.start;
-                        view.mark = view.caret;
-                        view.caret_dirty = true;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        view.mark = view.mark;
 
                         move_view_to_caret();
                     }
@@ -1624,10 +1638,9 @@ void app_event(InputEvent event)
                     set_clipboard_data(str);
                     
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        // TODO(jesper): short-circuit the caret re-calc when buffer_remove does its own incremental line reflow
                         view.caret.byte_offset = r.start;
-                        view.mark = view.caret;
-                        view.caret_dirty = true;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        view.mark = view.mark;
 
                         move_view_to_caret();
                     }
@@ -1682,8 +1695,6 @@ void app_event(InputEvent event)
                     if (!buffer) break;
                     
                     if (event.key.modifiers & MF_SHIFT) {
-                        // TODO(jesper): I'm pretty sure this is super buggy for multi-line un-indent becuase of 
-                        // stale line wrap offsets`
                         Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
                         if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
                         
@@ -1704,13 +1715,14 @@ void app_event(InputEvent event)
                                 if (buffer_remove(view.buffer, line_start, line_start+i)) {
                                     if (view.caret.byte_offset >= line_start) {
                                         view.caret.byte_offset -= i;
-                                        view.caret_dirty = true;
+                                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                                         move_view_to_caret();
                                     }
 
                                     if (view.mark.byte_offset > line_start) {
                                         view.mark.byte_offset -= i;
-                                        view.caret_dirty = true;
+                                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                                        move_view_to_caret();
                                     }
                                 }
                             }
@@ -1808,10 +1820,9 @@ void app_event(InputEvent event)
                     BufferHistoryScope h(view.buffer);
                     i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
-                        // TODO(jesper): short-circuit when buffer_remove does its own line reflow
                         view.caret.byte_offset = start;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
-                        view.caret_dirty = true; 
                         
                         move_view_to_caret();
                     }
@@ -1821,9 +1832,8 @@ void app_event(InputEvent event)
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
-                        // TODO(jesper): short-circuit when buffer_remove does its own line reflow
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
-                        view.caret_dirty = true;
 
                         move_view_to_caret();
                     }
@@ -1980,7 +1990,7 @@ void update_and_render(f32 dt)
     
     Vector2 lister_p = gfx.resolution*0.5f;
     
-    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active, GUI_WINDOW_NO_TITLE) {
+    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
         GuiEditboxAction edit_action = gui_editbox("");
         
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
