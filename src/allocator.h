@@ -14,7 +14,7 @@
 #define REALLOC_ARR_A(alloc, T, old_ptr, old_count, new_count, alignment) (T*)alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, sizeof(T)*(old_count), sizeof(T)*(new_count), alignment)
 
 
-#define FREE(alloc, ptr) alloc.proc(alloc.state, ALLOCATOR_CMD_FREE, nullptr, 0, 0, 0)
+#define FREE(alloc, ptr) alloc.proc(alloc.state, ALLOCATOR_CMD_FREE, ptr, 0, 0, 0)
 #define REALLOC(alloc, old_ptr, old_size, size) alloc.proc(alloc.state, ALLOCATOR_CMD_REALLOC, old_ptr, old_size, size, DEFAULT_ALIGN)
 #define RESET_ALLOC(alloc) alloc.proc(alloc.state, ALLOCATOR_CMD_RESET, nullptr, 0, 0, 0)
 
