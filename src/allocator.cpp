@@ -6,6 +6,8 @@ struct LinearAllocatorState {
     u8 *start;
     u8 *end;
     u8 *current;
+    
+    void *last;
 };
 
 struct AllocationHeader {
@@ -50,12 +52,15 @@ void* linear_alloc(void *v_state, AllocatorCmd cmd, void *old_ptr, i64 old_size,
     switch (cmd) {
     case ALLOCATOR_CMD_ALLOC: 
         {
+            if (size == 0) return nullptr;
+            
             if (state->current + size >= state->end) {
                 LOG_ERROR("allocator does not have enough memory for allocation: %lld", size);
                 return nullptr;
             }
             u8 *ptr = state->current;
             state->current += size;
+            state->last = ptr;
             return ptr;
         } break;
     case ALLOCATOR_CMD_FREE: 
@@ -63,11 +68,20 @@ void* linear_alloc(void *v_state, AllocatorCmd cmd, void *old_ptr, i64 old_size,
         return nullptr;
     case ALLOCATOR_CMD_REALLOC:
         {
+            if (size == 0) return nullptr;
+            
+            if (old_ptr && state->last == old_ptr) {
+                state->current += size-old_size;
+                return old_ptr;
+            }
+            
+            //LOG_INFO("leaking %lld bytes", old_size);
             void *ptr = linear_alloc(v_state, ALLOCATOR_CMD_ALLOC, nullptr, 0, size, alignment);
             if (old_size > 0) memcpy(ptr, old_ptr, old_size);
             return ptr;
         } break;
     case ALLOCATOR_CMD_RESET:
+        state->last = nullptr;
         state->current = state->start;
         return nullptr;
     }
@@ -77,6 +91,8 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
 {
     switch (cmd) {
     case ALLOCATOR_CMD_ALLOC: {
+            if (size == 0) return nullptr;
+            
             u8 header_size = sizeof(AllocationHeader);
             void *ptr = malloc(size+alignment+header_size);
             void *aligned_ptr = align_ptr(ptr, alignment, header_size);
@@ -119,6 +135,7 @@ Allocator linear_allocator(i64 size)
     state->start = mem + sizeof *state;
     state->end = mem+size;
     state->current = state->start;
+    state->last = nullptr;
     
     return Allocator{ state, linear_alloc };
 }
