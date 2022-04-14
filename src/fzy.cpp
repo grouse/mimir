@@ -46,29 +46,40 @@ void fzy_init_table()
     fzy_bonus_states[1]['.'] = fzy_bonus_states[2]['.'] = FZY_SCORE_MATCH_DOT;
 }
 
-void sort(Array<fzy_score_t> scores, Array<String> values, i32 l, i32 r)
+void quicksort(Array<fzy_score_t> scores, Array<String> values, i32 l, i32 r)
 {
-    if (l >= r) return;
-    
-    fzy_score_t pivot = scores[r];
-    i32 cnt = l;
+    if (l < 0 || r < 0 || l >= r) return;
 
-    for (i32 i = l; i <= r; i++) {
-        if (scores[i] >= pivot) {
-            SWAP(values[cnt], values[i]);
-            SWAP(scores[cnt], scores[i]);
-            cnt++;
+    fzy_score_t pivot = scores[(r+l)/2];
+
+    i32 i = l-1;
+    i32 j = r+1;
+
+    i32 pi = -1;
+    while (true) {
+        do i += 1; while(scores[i] > pivot);
+        do j -= 1; while(scores[j] < pivot);
+
+        if (i >= j) { 
+            pi = j;
+            break;
         }
+
+        SWAP(scores[j], scores[i]);
+        SWAP(values[j], values[i]);
     }
 
-    sort(scores, values, l, cnt-2);
-    sort(scores, values, cnt, r);
+    ASSERT(pi >= 0);
+
+    quicksort(scores, values, l, pi);
+    quicksort(scores, values, pi+1, r);
 }
+
 
 void sort(Array<fzy_score_t> scores, Array<String> values)
 {
     ASSERT(scores.count == values.count);
-    sort(scores, values, 0, values.count-1);
+    quicksort(scores, values, 0, values.count-1);
 }
 
 

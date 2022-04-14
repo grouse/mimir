@@ -2012,6 +2012,9 @@ void update_and_render(f32 dt)
                 DynamicArray<fzy_score_t> M{ .alloc = mem_tmp };
                 DynamicArray<fzy_score_t> match_bonus{ .alloc = mem_tmp };
 
+                i32 lower_buffer_size = 100;
+                char *lower_buffer = ALLOC_ARR(mem_tmp, char, lower_buffer_size);
+                
                 for (String s : app.lister.values) {
                     fzy_score_t match_score;
                     
@@ -2023,7 +2026,15 @@ void update_and_render(f32 dt)
 
                     array_resize(&match_bonus, s.length);
                     
-                    String ls = to_lower(s);
+                    if (s.length >= lower_buffer_size) {
+                        lower_buffer = REALLOC_ARR(mem_tmp, char, lower_buffer, lower_buffer_size, s.length);
+                        lower_buffer_size = s.length;
+                    }
+                    memcpy(lower_buffer, s.data, s.length);
+                    
+                    String ls{ lower_buffer, s.length };
+                    to_lower(&ls);
+                    
                     char prev = '/';
                     for (i32 i = 0; i < ls.length; i++) {
                         if (ls[i] == '\\') ls[i] = '/';
