@@ -1611,7 +1611,10 @@ void app_event(InputEvent event)
             case VC_O:
                 app.lister.active = true;
                 app.lister.selected_item = 0;
+                
+                for (String s : app.lister.values) FREE(mem_dynamic, s.data);
                 app.lister.values.count = 0;
+                
                 list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
                 array_copy(&app.lister.filtered, app.lister.values);
                 
@@ -2087,6 +2090,11 @@ next_node:;
             app.lister.active = false;
             gui.focused = GUI_ID_INVALID;
         }
+        
+        if (!app.lister.active) {
+            for (String s : app.lister.values) FREE(mem_dynamic, s.data);
+            app.lister.values.count = 0;
+        }
     }
     
     view.caret_dirty |= view.lines_dirty;
@@ -2097,7 +2105,7 @@ next_node:;
         // TODO(jesper): kind of only want to do the tabs if there are more than 1 file open, but then I'll
         // need to figure out reasonable ways of visualising unsaved changes as well as which file is open.
         // Likely do-able with the window titlebar decoration on most/all OS?
-        if (true) {
+        if (view.buffers.count > 0) {
             GuiWindow *wnd = gui_current_window();
             
             Vector2 size{ 0, gui.style.button.font.line_height + 2 };
@@ -2278,18 +2286,17 @@ next_node:;
         view.defer_move_view_to_caret = 0;
     }
     
-    if (true) {
+    if (auto buffer = get_buffer(view.buffer); buffer) {
         Vector2 ib_s{ 0, 15.0f };
         gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { view.rect.pos.x, view.rect.pos.y+view.rect.size.y-ib_s.y }, .size = ib_s });
         defer { gui_end_layout(); };
 
-        char buffer[256];
+        String nl = string_from_enum(buffer->newline_mode);
+        String in = buffer->indent_with_tabs ? String("TAB") : String("SPACE");
         
-        String nl = string_from_enum(get_buffer(view.buffer)->newline_mode);
-        String in = get_buffer(view.buffer)->indent_with_tabs ? String("TAB") : String("SPACE");
-        
+        char str[256];
         gui_textbox(
-            stringf(buffer, sizeof buffer, 
+            stringf(str, sizeof str, 
                     "Ln: %d, Col: %lld %.*s %.*s", 
                     view.caret.line+1, view.caret.column+1, 
                     STRFMT(nl), STRFMT(in)));
