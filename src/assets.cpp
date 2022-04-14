@@ -14,18 +14,18 @@ void init_assets(Array<String> folders)
     }
 }
 
-String resolve_asset_path(String name)
+String resolve_asset_path(String name, Allocator mem = mem_tmp)
 {
     if (file_exists(name) && !is_directory(name)) {
-        return absolute_path(name);
+        return absolute_path(name, mem);
     }
     
     for (auto f : g_assets.folders) {
         String s = join_path(f, name);
-        if (file_exists(s) && !is_directory(s)) return absolute_path(s);
+        if (file_exists(s) && !is_directory(s)) return absolute_path(s, mem);
     }
     
-    return "";
+    return {};
 }
 
 AssetHandle find_asset_handle(String name)
