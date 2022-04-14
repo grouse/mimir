@@ -33,28 +33,36 @@ struct DynamicArray : Array<T> {
 };
 
 template<typename T>
-void array_create(DynamicArray<T> *arr, i32 capacity = 0, Allocator mem = mem_tmp)
+void array_resize(DynamicArray<T> *arr, i32 count, Allocator mem = mem_dynamic)
 {
-    arr->data = capacity > 0 ? ALLOC_ARR(mem, T, capacity) : nullptr;
-    arr->count = arr->capacity = capacity;
-    arr->alloc = mem;
+    if (!arr->alloc.proc) arr->alloc = mem;
+
+    if (arr->capacity < count) {
+        arr->data = REALLOC_ARR(arr->alloc, T, arr->data, arr->capacity, count);
+        arr->capacity = count;
+    }
+
+    arr->count = count;
 }
 
 template<typename T>
-void array_create(Array<T> *arr, i32 capacity = 0, Allocator mem = mem_dynamic)
+void array_create(Array<T> *arr, i32 count, Allocator mem = mem_dynamic)
 {
-    arr->data = capacity > 0 ? ALLOC_ARR(mem, T, capacity) : nullptr;
-    arr->count = capacity;
+    T *nptr = ALLOC_ARR(mem, T, count);
+    if (arr->count > 0) {
+        for (i32 i = 0; i < arr->count; i++) nptr[i] = arr->data[i];
+    }
+
+    arr->data = nptr;
+    arr->count = count;
 }
 
 template<typename T>
 void array_reserve(DynamicArray<T> *arr, i32 capacity)
 {
-    if (arr->alloc.proc == nullptr) {
-        arr->alloc = mem_dynamic;
-    }
-
-    arr->data = (T*)ALLOC(arr->alloc, capacity*sizeof(T));
+    if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
+    
+    arr->data = ALLOC_ARR(arr->alloc, T, capacity);
     arr->capacity = capacity;
 }
 
@@ -69,19 +77,6 @@ void array_reserve_add(DynamicArray<T> *arr, i32 extra_capacity)
         arr->capacity += diff;
         arr->data = REALLOC_ARR(arr->alloc, T, arr->data, old_capacity, arr->capacity);
     }
-}
-
-template<typename T>
-void array_resize(DynamicArray<T> *arr, i32 count)
-{
-    if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
-    
-    if (arr->capacity < count) {
-        arr->data = REALLOC_ARR(arr->alloc, T, arr->data, arr->capacity, count);
-        arr->capacity = count;
-    }
-    
-    arr->count = count;
 }
 
 template<typename T>
