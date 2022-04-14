@@ -2631,11 +2631,15 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = r2.pos, .size = r2.size });
     defer { gui_end_layout(); };
     
+    i32 start = lister->offset / item_height;
+    i32 end = MIN(items.count, (start + r2.size.y / item_height)+2);
+    f32 offset = fmodf(lister->offset, item_height);
+    
     // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
-    for (i32 i = 0; i < items.count; i++) {
+    for (i32 i = start; i < end; i++) {
         Vector2 size{ 0, item_height };
         Vector2 pos = gui_layout_widget(&size);
-        pos.y -= lister->offset;
+        pos.y -= offset;
         
         GuiId item_id = GUI_ID_INTERNAL(id, i+10);
         
