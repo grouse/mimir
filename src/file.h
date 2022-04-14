@@ -22,7 +22,7 @@ enum FileOpenMode {
 
 enum ListFileFlags : u32 {
     FILE_LIST_RECURSIVE = 1 << 0,
-    FILE_LIST_ABSOLUTE  = 1 << 0,
+    FILE_LIST_ABSOLUTE  = 1 << 1,
 };
 
 FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);

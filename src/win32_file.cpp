@@ -169,27 +169,36 @@ void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem)
 {
     DynamicArray<char*> folders{ .alloc = mem_tmp };
     array_add(&folders, sz_string(dir));
-
+    
+    char f[WIN32_MAX_PATH];
     for (i32 i = 0; i < folders.count; i++) {
         char *folder = folders[i];
-        char *f = join_path(folder, "/*");
+        
+        String fs = stringf(f, sizeof f, "%s/*", folder);
+        f[fs.length] = '\0';
         
         WIN32_FIND_DATAA ffd{};
         HANDLE ff = FindFirstFileA(f, &ffd);
 
         do {
             if (ffd.cFileName[0] == '.') continue;
-
-            if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
-                String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
-                String path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem);
-                if (flags & FILE_LIST_ABSOLUTE) path = absolute_path(path, mem);
-                array_add(dst, path);
-            } else if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 if (flags & FILE_LIST_RECURSIVE) {
                     char *child = join_path(folder, ffd.cFileName);
                     array_add(&folders, child);
                 }
+            } else if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
+                String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
+
+                String path;
+                if (flags & FILE_LIST_ABSOLUTE) {
+                    path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem_tmp);
+                    path = absolute_path(path, mem);
+                } else {
+                    path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem);
+                }
+                array_add(dst, path);
             } else {
                 LOG_ERROR("unsupported file attribute for file '%s': %s", 
                           ffd.cFileName, string_from_file_attribute(ffd.dwFileAttributes));
