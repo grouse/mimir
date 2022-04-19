@@ -2,24 +2,24 @@
 #define CORE_H
 
 #include "string.h"
+#include "platform.h"
 
-extern "C" void* malloc(size_t size);
-extern "C" void free(void* ptr);
-extern "C" void* realloc(void* ptr, size_t size);
+extern "C" void* malloc(size_t size) NOTHROW;
+extern "C" void* realloc(void* ptr, size_t size) NOTHROW;
+extern "C" void free(void* ptr) NOTHROW;
 
-extern "C" void exit(int status);
+extern "C" void exit(int status) NOTHROW;
 
-extern "C" size_t strlen(const char * str);
-extern "C" size_t wcslen(const wchar_t* wcs);
-extern "C" int strcmp(const char * str1, const char * str2);
-extern "C" int strncmp(const char * str1, const char * str2, size_t num);
+extern "C" size_t strlen(const char * str) NOTHROW;
+extern "C" size_t wcslen(const wchar_t* wcs) NOTHROW;
+extern "C" int strcmp(const char * str1, const char * str2) NOTHROW;
+extern "C" int strncmp(const char * str1, const char * str2, size_t num) NOTHROW;
 extern "C" int tolower(int ch);
 
-
-extern "C" void* memcpy(void *destination, const void *source, size_t num);
-extern "C" void* memset(void *ptr, int value, size_t num);
-extern "C" int memcmp(const void *ptr1, const void *ptr2, size_t num);
-extern "C" void* memmove(void *destination, const void *source, size_t num);
+extern "C" void* memcpy(void *destination, const void *source, size_t num) NOTHROW;
+extern "C" void* memset(void *ptr, int value, size_t num) NOTHROW;
+extern "C" int memcmp(const void *ptr1, const void *ptr2, size_t num) NOTHROW;
+extern "C" void* memmove(void *destination, const void *source, size_t num) NOTHROW;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MAX3(a, b, c) MAX(MAX(a, b), c)
@@ -96,6 +96,8 @@ enum LogType {
     LOG_TYPE_INFO,
     LOG_TYPE_ASSERT
 };
+
+void init_core(int argc, char *argv);
 
 bool debugger_attached();
 

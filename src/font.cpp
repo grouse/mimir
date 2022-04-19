@@ -1,8 +1,8 @@
 #include "font.h"
 
-Font create_font(String path, f32 pixel_height)
+FontAtlas create_font(String path, f32 pixel_height)
 {
-    Font font{};
+    FontAtlas font{};
 
     Asset *asset = find_asset(path);
     if (asset) {
@@ -24,7 +24,7 @@ Font create_font(String path, f32 pixel_height)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-        // TODO(jesper): figure out if we need to do this or what the preferred way to clear a 
+        // TODO(jesper): figure out if we need to do this or what the preferred way to clear a
         // texture to black is
         u8 *black = (u8*)ALLOC(mem_dynamic, 1024*1024);
         memset(black, 0, 1024*1024);
@@ -34,7 +34,7 @@ Font create_font(String path, f32 pixel_height)
     return font;
 }
 
-Glyph find_or_create_glyph(Font *font, u32 codepoint)
+Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
 {
     Glyph *existing = find(&font->glyphs, codepoint);
     if (existing) return *existing;
@@ -97,16 +97,16 @@ Glyph find_or_create_glyph(Font *font, u32 codepoint)
     return glyph;
 }
 
-f32 glyph_advance(Font *font, u32 codepoint)
+f32 glyph_advance(FontAtlas *font, u32 codepoint)
 {
     Glyph glyph = find_or_create_glyph(font, codepoint);
     return glyph.advance;
 }
 
-GlyphRect get_glyph_rect(Font *font, u32 codepoint, Vector2 *pen)
+GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen)
 {
     Glyph glyph = find_or_create_glyph(font, codepoint);
-    
+
     f32 iuv_x = 1.0f / font->size.x;
     f32 iuv_y = 1.0f / font->size.y;
 
@@ -115,14 +115,14 @@ GlyphRect get_glyph_rect(Font *font, u32 codepoint, Vector2 *pen)
         .y0 = floorf((pen->y+(f32)glyph.yoff) + 0.5f),
         .x1 = g.x0 + glyph.x1 - glyph.x0,
         .y1 = g.y0 + glyph.y1 - glyph.y0,
-    
+
         .s0 = glyph.x0*iuv_x,
         .t0 = glyph.y0*iuv_y,
         .s1 = glyph.x1*iuv_x,
         .t1 = glyph.y1*iuv_y,
     };
-    
+
     pen->x += glyph.advance;
     return g;
 }
-    
+

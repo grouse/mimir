@@ -3,21 +3,20 @@
 
 #include "platform.h"
 
-extern "C" double fabs( double arg );
-extern "C" double floor (double x);
-extern "C" float floorf(float x);
-extern "C" float powf( float base, float exponent );
-extern "C" double ceil (double x);
-extern "C" float fabsf( float arg );
-extern "C" float cosf( float arg );
-extern "C" float tanf( float arg );
-extern "C" float sinf( float arg );
-extern "C" double sin( double arg );
-extern "C" float sqrtf( float arg );
-extern "C" double sqrt( double arg );
-extern "C" float cosf( float arg );
-extern "C" float copysignf(float x, float y);
-extern "C" float fmodf( float x, float y );
+extern "C" double fabs( double arg ) NOTHROW;
+extern "C" double floor (double x) NOTHROW;
+extern "C" float floorf(float x) NOTHROW;
+extern "C" float powf( float base, float exponent ) NOTHROW;
+extern "C" double ceil (double x) NOTHROW;
+extern "C" float fabsf( float arg ) NOTHROW;
+extern "C" float cosf( float arg ) NOTHROW;
+extern "C" float tanf( float arg ) NOTHROW;
+extern "C" float sinf( float arg ) NOTHROW;
+extern "C" double sin( double arg ) NOTHROW;
+extern "C" float sqrtf( float arg ) NOTHROW;
+extern "C" double sqrt( double arg ) NOTHROW;
+extern "C" float copysignf(float x, float y) NOTHROW;
+extern "C" float fmodf( float x, float y ) NOTHROW;
 
 union Vector2 {
     struct { f32 x, y; };

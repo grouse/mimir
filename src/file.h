@@ -4,7 +4,8 @@
 #ifdef _WIN32
 using FileHandle = HANDLE;
 #else
-#error "unsupported platform"
+struct FileHandle_;
+using FileHandle = FileHandle_*;
 #endif
 
 #include "array.h"
@@ -27,7 +28,7 @@ enum ListFileFlags : u32 {
 
 FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
 
-Array<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
+DynamicArray<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
 void list_files(DynamicArray<String> *dst, String dir, u32 flags = 0, Allocator mem = mem_tmp);
 
 String directory_of(String path, Allocator mem = mem_tmp);

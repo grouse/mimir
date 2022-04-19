@@ -25,7 +25,7 @@ struct GlyphRect {
     f32 s1, t1;
 };
 
-struct Font {
+struct FontAtlas {
     GLuint texture;
 
     i32 ascent;
@@ -40,14 +40,14 @@ struct Font {
     Vector2 size;
     Vector2 current;
     f32 current_row_height;
-    
+
     HashTable<u32, Glyph> glyphs;
     //DynamicArray<Glyph> glyphs;
 };
 
-Font create_font(String path, f32 pixel_height);
-f32 glyph_advance(Font *font, u32 codepoint);
-GlyphRect get_glyph_rect(Font *font, u32 codepoint, Vector2 *pen);
+FontAtlas create_font(String path, f32 pixel_height);
+f32 glyph_advance(FontAtlas *font, u32 codepoint);
+GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen);
 
 
 #endif // FONT_H

@@ -74,17 +74,17 @@ enum GuiWindowFlags : u32 {
     GUI_WINDOW_CLOSE = 1 << 0,
     GUI_WINDOW_MOVABLE = 1 << 1,
     GUI_WINDOW_RESIZABLE = 1 << 2,
-    
+
     GUI_WINDOW_NO_TITLE = 1 << 3,
-    
+
     GUI_WINDOW_DEFAULT = GUI_WINDOW_MOVABLE | GUI_WINDOW_RESIZABLE
 };
 
 enum GuiLayoutFlags : u32 {
     GUI_LAYOUT_EXPAND_X = 1 << 0,
     GUI_LAYOUT_EXPAND_Y = 1 << 1,
-    
-    
+
+
     GUI_LAYOUT_EXPAND = GUI_LAYOUT_EXPAND_X | GUI_LAYOUT_EXPAND_Y,
 };
 
@@ -112,11 +112,11 @@ struct TextQuadsAndBounds {
 
 struct GuiWindow {
     GuiId id;
-    
+
     Rect clip_rect;
-    
+
     GfxCommandBuffer command_buffer;
-    
+
     u32 flags;
     Vector2 pos;
     Vector2 size;
@@ -146,16 +146,16 @@ enum GuiLayoutType {
 struct GuiLayout {
     GuiLayoutType type;
     u32 flags;
-    
+
     union {
         struct {
             Vector2 pos;
             Vector2 size;
         };
-        
+
         Rect rect;
     };
-    
+
     Vector2 current;
     Vector2 available_space;
     Vector2 margin;
@@ -186,44 +186,44 @@ struct GuiContext {
         char buffer[200];
         i32 length = 0;
     } edit;
-    
+
     GuiId hot = GUI_ID_INVALID;
     GuiId focused = GUI_ID_INVALID;
     GuiId pressed = GUI_ID_INVALID;
-    
+
     GuiId next_hot = GUI_ID_INVALID;
     GuiId last_focused = GUI_ID_INVALID;
 
     GuiId focused_window = GUI_ID_INVALID;
     GuiId hot_window = GUI_ID_INVALID;
-    
+
     GuiId active_menu = GUI_ID_INVALID;
-    
+
     i32 current_window;
     DynamicArray<GuiWindow> windows;
     DynamicArray<GuiLister> listers;
     DynamicArray<GuiMenu> menus;
     DynamicArray<GuiLayout> layout_stack;
-    
+
     DynamicArray<Rect> overlay_rects;
-    
+
     GuiId current_id;
     DynamicArray<GuiId> id_stack;
 
     DynamicArray<f32> vertices;
-    
+
     bool capture_text[2];
     bool capture_keyboard[2];
     bool capture_mouse_wheel[2];
-    
+
     DynamicArray<InputEvent> events;
 
     Vector2 drag_start_mouse;
     Vector2 drag_start_data;
     Vector2 drag_start_data1;
-    
+
     Camera camera;
-    
+
     struct {
         i16 x, y;
         i16 dx, dy;
@@ -232,56 +232,56 @@ struct GuiContext {
         bool left_was_pressed;
         bool middle_pressed;
     } mouse;
-    
+
     struct {
         Vector3 fg = rgb_unpack(0xFFFFFFFF);
         //Vector3 fg_hot = rgb_unpack(0xFFFD8433);
-        
+
         Vector3 bg = rgb_unpack(0xFF333333);
         Vector3 bg_hot = rgb_unpack(0xFF3F3F3F);
         Vector3 bg_press = rgb_unpack(0xFF2A2A2A);
-        
+
         Vector3 bg_dark0 = rgb_unpack(0xFF212121);
         Vector3 bg_dark1 = rgb_unpack(0xFF282828);
-        
+
         Vector3 bg_light0 = rgb_unpack(0xFF828282);
-        
+
         Vector3 accent_bg = rgb_unpack(0xFFCA5100);
         Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
         Vector3 accent_bg_press = rgb_unpack(0xFFDA4100);
 
         struct {
-            Font font;
-            
+            FontAtlas font;
+
             Vector3 color = Vector3{ 1.0f, 1.0f, 1.0f };
         } text;
-        
+
         struct {
             Vector2 margin = { 5.0f, 5.0f };
             Vector2 border = { 1, 1 };
 
             Vector2 close_size = { 16.0f, 16.0f };
-            
+
             f32 title_height = 21;
-            
+
             Vector3 title_fg = { 1, 1, 1 };
-            
+
             Vector3 close_bg_hot = rgb_unpack(0xFFFF0000);
         } window;
-        
+
         struct {
-            Font font;
+            FontAtlas font;
         } button;
-        
+
         struct {
             Vector2 padding = { 2.0f, 4.0f };
         } edit;
-        
+
         struct {
             f32 thickness = 12.0f;
         } scrollbar;
     } style;
-    
+
     struct {
         GLuint close;
         GLuint check;
@@ -318,7 +318,7 @@ Rect gui_layout_widget_fill();
 
 bool gui_button_id(GuiId id, String text);
 bool gui_button_id(GuiId id, String text, Vector2 size);
-bool gui_button_id(GuiId id, Font *font, TextQuadsAndBounds td, Vector2 size);
+bool gui_button_id(GuiId id, FontAtlas *font, TextQuadsAndBounds td, Vector2 size);
 
 bool gui_checkbox_id(GuiId id, String label, bool *checked);
 

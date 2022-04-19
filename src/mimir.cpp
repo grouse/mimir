@@ -1,3 +1,7 @@
+#include "platform.h"
+#include "core.h"
+#include "maths.h"
+#include "allocator.h"
 #include "input.h"
 #include "process.h"
 
@@ -49,28 +53,28 @@ struct BufferLine {
 struct ProcessCommand {
     String exe;
     String args;
-    
+
     Process *process;
 };
 
 struct Application {
-    Font mono;
+    FontAtlas mono;
     bool animating = true;
-    
+
     struct {
         bool active;
         DynamicArray<String> values;
         DynamicArray<String> filtered;
-        
+
         i32 selected_item;
     } lister;
-    
+
     EditMode mode, next_mode;
-    
+
     DynamicArray<String> process_command_names;
     DynamicArray<ProcessCommand> process_commands;
     i32 selected_process;
-    
+
     Vector3 bg = rgb_unpack(0x00142825);
     Vector3 fg = rgb_unpack(0x00D5C4A1);
     Vector3 mark_fg = rgb_unpack(0xFFEF5F0A);
@@ -116,14 +120,14 @@ struct BufferId {
 
 struct Buffer {
     BufferId id;
-    
+
     String name;
     String file_path;
-    
+
     DynamicArray<BufferHistory> history;
     i32 history_index;
     i32 saved_at;
-    
+
     NewlineMode newline_mode;
     i32 tab_width = 4;
     bool indent_with_tabs;
@@ -136,7 +140,7 @@ struct Buffer {
 
 struct Caret {
     i64 byte_offset = 0;
-    
+
     i64 wrapped_column = 0;
     i64 column = 0;
     i64 preferred_column = 0;
@@ -148,27 +152,27 @@ struct Caret {
 struct ViewBufferState {
     BufferId buffer;
     Caret caret, mark;
-    
+
     f32 voffset;
     i32 line_offset;
 };
 
 struct View {
     GuiId gui_id = GUI_ID(0);
-    
+
     DynamicArray<BufferId> buffers;
     DynamicArray<ViewBufferState> saved_buffer_state;
     DynamicArray<BufferLine> lines;
-    
+
     f32 voffset;
     i32 line_offset;
     i32 lines_visible;
-    
+
     Rect rect;
     BufferId buffer;
     Caret caret, mark;
-    
-    
+
+
     struct {
         u64 lines_dirty : 1;
         u64 caret_dirty : 1;
@@ -198,18 +202,18 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
 {
     Buffer *buffer = get_buffer(buffer_id);
     ASSERT(buffer);
-    
+
     if (entry.type == BUFFER_HISTORY_GROUP_END) {
         if (buffer->history.count > 2 &&
             buffer->history[buffer->history.count-1].type == BUFFER_CURSOR_POS &&
             buffer->history[buffer->history.count-2].type == BUFFER_CURSOR_POS &&
-            buffer->history[buffer->history.count-3].type == BUFFER_HISTORY_GROUP_START) 
+            buffer->history[buffer->history.count-3].type == BUFFER_HISTORY_GROUP_START)
         {
             buffer->history.count -= 3;
             buffer->history_index = MIN(buffer->history_index, buffer->history.count);
             return;
         } else if (buffer->history.count > 0 &&
-                   buffer->history[buffer->history.count-1].type == BUFFER_HISTORY_GROUP_START) 
+                   buffer->history[buffer->history.count-1].type == BUFFER_HISTORY_GROUP_START)
         {
             buffer->history.count -= 1;
             buffer->history_index = MIN(buffer->history_index, buffer->history.count);
@@ -234,8 +238,8 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
     case BUFFER_CURSOR_POS:
         break;
     }
-    
-    
+
+
     array_add(&buffer->history, entry);
     buffer->history_index = buffer->history.count;
 }
@@ -340,18 +344,18 @@ BufferId create_buffer(String file)
     // write a binary blob visualiser, or at least something that won't choke or
     // crash trying to render invalid text
     // TODO(jesper): tab/spaces indent mode depending on file type and project settings
-    
+
     Buffer b{ .type = BUFFER_FLAT };
     b.id = { .index = buffers.count };
     b.file_path = absolute_path(file, mem_dynamic);
     b.name = filename_of(b.file_path);
     b.newline_mode = NEWLINE_LF;
-    
+
     FileInfo f = read_file(file, mem_dynamic);
     b.flat.data = (char*)f.data;
     b.flat.size = f.size;
     b.flat.capacity = f.size;
-    
+
     if (f.data) {
         char *start = (char*)f.data;
         char *p = start+f.size-1;
@@ -368,13 +372,13 @@ BufferId create_buffer(String file)
 
             p--;
         }
-        
+
         // TODO(jesper): guess tabs/spaces based on file content?
     }
-    
+
     String newline_str = string_from_enum(b.newline_mode);
     LOG_INFO("created buffer: %.*s, newline mode: %.*s", STRFMT(file), STRFMT(newline_str));
-    
+
     array_add(&buffers, b);
     return b.id;
 }
@@ -384,7 +388,7 @@ BufferId find_buffer(String file)
     for (auto b : buffers) {
         if (b.file_path == file) return b.id;
     }
-    
+
     return BUFFER_INVALID;
 }
 
@@ -439,28 +443,28 @@ void view_set_buffer(BufferId buffer)
 void init_app(Array<String> args)
 {
     fzy_init_table();
-    
+
     String exe_folder = get_exe_folder();
-    
+
     String asset_folders[] = {
         exe_folder,
         join_path(exe_folder, "/assets"),
         join_path(exe_folder, "../assets"),
     };
-    
+
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
-    
+
     init_gui();
-    
+
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
-    
+
     calculate_num_visible_lines();
-    
+
     if (true) {
         array_add(&app.process_command_names, { "build.bat" });
         array_add(&app.process_commands, { .exe = "D:\\projects\\plumber\\build.bat" });
     }
-    
+
     if (args.count > 0) {
         String dir = directory_of(args[0]);
         if (dir.length > 0) set_working_dir(dir);
@@ -493,7 +497,7 @@ i64 utf8_decr(BufferId buffer_id, i64 i)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return i;
-    
+
     return utf8_decr(buffer, i);
 }
 
@@ -506,7 +510,7 @@ i32 utf32_it_next(Buffer *buffer, i64 *byte_offset)
 
 i64 buffer_end(Buffer *buffer)
 {
-    switch (buffer->type) { 
+    switch (buffer->type) {
     case BUFFER_FLAT: return buffer->flat.size;
     }
 }
@@ -515,14 +519,14 @@ i64 buffer_end(BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return 0;
-    
+
     return buffer_end(buffer);
 }
 
 
 i64 buffer_start(Buffer *buffer)
 {
-    switch (buffer->type) { 
+    switch (buffer->type) {
     case BUFFER_FLAT: return 0;
     }
 }
@@ -637,18 +641,18 @@ Range_i32 range_i32(i32 a, i32 b)
 Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buffer, bool lines_block)
 {
     Range_i64 r;
-    
+
     if (lines_block) {
         i32 start_line = MIN(c0.wrapped_line, c1.wrapped_line);
         i32 end_line = MAX(c0.wrapped_line, c1.wrapped_line);
-        
+
         r.start = line_start_offset(start_line, lines);
         r.end = line_end_offset(end_line, lines, buffer);
     } else {
         r.start = MIN(c0.byte_offset, c1.byte_offset);
         r.end = MAX(c0.byte_offset, c1.byte_offset);
     }
-    
+
     if (r.start == r.end) r.end = buffer_next_offset(buffer, r.end);
     return r;
 }
@@ -835,7 +839,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
-    
+
     Rect r = view.rect;
     f32 base_x = r.pos.x;
 
@@ -857,7 +861,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
     } else {
         LOG_ERROR("unimplemented, this is a case where we're appending new lines to the existing lines");
     }
-    
+
 #if DEBUG_LINE_WRAP_RECALC
     LOG_INFO("start_line: %d, last_line: %d, start offset: %lld, end offset: %lld", wrapped_line, last_line, start, end);
 #endif
@@ -911,7 +915,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
 
         f32 x1 = base_x + (vcolumn+1) * app.mono.space_width;
         if (x1 >= r.pos.x + r.size.x) {
-            if (!is_word_boundary(c) && line_start != word_start) { 
+            if (!is_word_boundary(c) && line_start != word_start) {
                 p = line_start = word_start;
                 array_add(new_lines, { (i64)line_start, 1 });
                 vcolumn = 0;
@@ -926,12 +930,12 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
 
         vcolumn++;
     }
-    
+
     Array<BufferLine> lines = *new_lines;
     if (end != buffer_end(buffer)) {
         lines = slice(*new_lines, 0, new_lines->count-1);
     }
-    
+
     if (new_lines != existing_lines) {
         if (wrapped_line == end_line) {
 #if DEBUG_LINE_WRAP_RECALC
@@ -950,7 +954,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\texisting line[%d]: %lld\n", i, existing_lines->at(i).offset);
 #endif
             array_replace_range(existing_lines, wrapped_line, end_line, lines);
-            
+
 #if DEBUG_LINE_WRAP_RECALC
             for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\tresulting line[%d]: %lld\n", i, existing_lines->at(i).offset);
 #endif
@@ -962,28 +966,28 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
-    
+
     switch (buffer->type) {
     case BUFFER_FLAT:
         byte_start = MAX(0, byte_start);
         byte_end = MIN(byte_end, buffer->flat.size);
-        
+
         i64 num_bytes = byte_end-byte_start;
         if (record_history) {
             BufferHistory h{
-                .type = BUFFER_REMOVE, 
-                .offset = byte_start, 
+                .type = BUFFER_REMOVE,
+                .offset = byte_start,
                 .text = { &buffer->flat.data[byte_start], (i32)num_bytes }
             };
             buffer_history(buffer_id, h);
         }
-        
+
         memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
         buffer->flat.size -= num_bytes;
-        
+
         if (view.buffer == buffer_id) {
             i32 line = wrapped_line_from_offset(byte_start, view.caret.wrapped_line, view.lines);
-            
+
 #if DEBUG_LINE_WRAP_RECALC && 0
             LOG_INFO("new buffer end offset after removal: %lld", buffer->flat.size);
             LOG_INFO("reducing byte offsets for lines starting at %d with %lld bytes", line+1, num_bytes);
@@ -993,17 +997,17 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             i64 start_offset = view.lines[line].offset;
             for (i32 i = line+1; i < view.lines.count; i++) {
                 view.lines[i].offset -= num_bytes;
-                
-                if (view.lines[i].offset <= start_offset) 
+
+                if (view.lines[i].offset <= start_offset)
                     array_remove_sorted(&view.lines, i--);
             }
-            
+
             recalculate_line_wrap(line, &view.lines, view.buffer);
         }
-        
+
         return true;
     }
-    
+
     return false;
 }
 
@@ -1013,18 +1017,18 @@ String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator m
     if (!buffer) return {};
 
     String s{};
-    
+
     switch (buffer->type) {
     case BUFFER_FLAT:
         byte_start = MAX(0, byte_start);
         byte_end = MIN(byte_end, buffer->flat.size);
 
         i64 num_bytes = byte_end-byte_start;
-        
+
         s.length = num_bytes;
         s.data = ALLOC_ARR(mem, char, s.length);
         memcpy(s.data, &buffer->flat.data[byte_start], num_bytes);
-        
+
         break;
     }
 
@@ -1035,9 +1039,9 @@ void buffer_save(BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
-    
+
     if (buffer->saved_at == buffer->history_index) return;
-    
+
     FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
     switch (buffer->type) {
     case BUFFER_FLAT:
@@ -1045,19 +1049,19 @@ void buffer_save(BufferId buffer_id)
         break;
     }
     close_file(f);
-    
+
     buffer->saved_at = buffer->history_index;
 }
 
 bool buffer_unsaved_changes(BufferId buffer_id)
 {
-    // TODO(jesper): ideally this should be smart enough to detect whether the changes 
-    // made since last save point cancel out. There should be enough information in 
+    // TODO(jesper): ideally this should be smart enough to detect whether the changes
+    // made since last save point cancel out. There should be enough information in
     // the buffer history to figure that out
     // Alternatively, just hash the contents and compare to hash of version on disk. Any
-    // file I'm realistically going to open with this will take much less than a second to 
+    // file I'm realistically going to open with this will take much less than a second to
     // calculate the hashes
-    // When/if I make this robust for very large files, I can add alternative paths 
+    // When/if I make this robust for very large files, I can add alternative paths
     // specifically for that which do simpler and less computationally expensive things
     Buffer *buffer = get_buffer(buffer_id);
     return buffer && buffer->saved_at != buffer->history_index;
@@ -1066,39 +1070,39 @@ bool buffer_unsaved_changes(BufferId buffer_id)
 i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_history = true)
 {
     if (in_text.length <= 0) return offset;
-    
+
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return offset;
-    
+
     i64 end_offset = offset;
-    
+
     String nl = buffer_newline_str(buffer);
-    
+
     i32 required_extra_space = 0;
     for (i32 i = 0; i < in_text.length; i++) {
         if (in_text[i] == '\r' || in_text[i] == '\n') {
             if (i < in_text.length-1 && in_text[i] == '\r' && in_text[i+1] == '\n') i++;
             if (i < in_text.length-1 && in_text[i] == '\n' && in_text[i+1] == '\r') i++;
             required_extra_space += nl.length;
-        } else { 
+        } else {
             required_extra_space++;
         }
     }
-    
+
     String text = in_text;
     if (required_extra_space != in_text.length) {
         text.data = ALLOC_ARR(mem_tmp, char, required_extra_space);
         text.length = required_extra_space;
-        
-        i32 s = 0; 
+
+        i32 s = 0;
         for (i32 i = 0; i < in_text.length; i++) {
             if (in_text[i] == '\r' || in_text[i] == '\n') {
                 if (i < in_text.length-1 && in_text[i] == '\r' && in_text[i+1] == '\n') i++;
                 if (i < in_text.length-1 && in_text[i] == '\n' && in_text[i+1] == '\r') i++;
-                
+
                 memcpy(&text[s], nl.data, nl.length);
                 s += nl.length;
-            } else { 
+            } else {
                 text[s++] = in_text[i];
             }
         }
@@ -1115,27 +1119,27 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
             for (i64 i = buffer->flat.size+text.length-1; i > offset; i--) {
                 buffer->flat.data[i] = buffer->flat.data[i-text.length];
             }
-            
+
             memcpy(buffer->flat.data+offset, text.data, text.length);
             buffer->flat.size += required_extra_space;
             end_offset += required_extra_space;
         } break;
     }
-    
+
     // TODO(jesper): multi-view support
     if (view.buffer == buffer_id) {
         i32 line = wrapped_line_from_offset(offset, view.caret.wrapped_line, view.lines);
         for (i32 i = line+1; i < view.lines.count; i++) {
             view.lines[i].offset += required_extra_space;
         }
-        
+
         recalculate_line_wrap(line, &view.lines, view.buffer);
     }
 
     if (record_history) {
         buffer_history(buffer_id, { .type = BUFFER_INSERT, .offset = offset, .text = text });
     }
-    
+
     return end_offset;
 }
 
@@ -1143,9 +1147,9 @@ void buffer_undo(BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
-    
+
     if (buffer->history_index == 0) return;
-    
+
     i32 group_level = 0;
     do {
         BufferHistory h = buffer->history[--buffer->history_index];
@@ -1169,7 +1173,7 @@ void buffer_undo(BufferId buffer_id)
             break;
         }
     } while (group_level < 0);
-    
+
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
     move_view_to_caret();
 }
@@ -1178,7 +1182,7 @@ void buffer_redo(BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
-    
+
     if (buffer->history_index == buffer->history.count) return;
 
     i32 group_level = 0;
@@ -1204,7 +1208,7 @@ void buffer_redo(BufferId buffer_id)
             break;
         }
     } while (group_level > 0);
-    
+
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
     move_view_to_caret();
 }
@@ -1213,16 +1217,16 @@ bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i3
 {
     Buffer *buffer = get_buffer(buffer_id);
     ASSERT(buffer);
-    
+
     i64 start = lines[wrapped_line].offset;
     i64 end = line_end_offset(wrapped_line, lines, buffer);
-    
+
     i64 p = prev_byte(buffer, end);
     while (p >= start) {
         if (!is_whitespace(char_at(buffer, p))) return false;
         p = prev_byte(buffer, p);
     }
-    
+
     return true;
 }
 
@@ -1237,7 +1241,7 @@ i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32
 {
     if (wrapped_line >= lines.count-1) return wrapped_line;
     bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
-    
+
     i32 line = wrapped_line+1;
     for (; line < lines.count; line++) {
         if (line_is_empty_or_whitespace(buffer_id, lines, line)) {
@@ -1253,7 +1257,7 @@ i32 buffer_seek_prev_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32
 {
     if (wrapped_line <= 1) return 0;
     bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
-    
+
     i32 line = wrapped_line-1;
     for (; line >= 0; line--) {
         if (line_is_empty_or_whitespace(buffer_id, lines, line)) {
@@ -1274,31 +1278,31 @@ i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
     case BUFFER_FLAT: {
             i64 offset = byte_offset;
             i64 end = buffer_end(buffer_id);
-            
+
             if (byte_offset >= end) return end;
-            
+
             char *p = &buffer->flat.data[0];
-            
+
             char start_c = p[offset++];
             bool start_is_whitespace = is_whitespace(start_c);
             bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
             bool in_whitespace = start_is_whitespace;
             bool was_cr = start_c == '\r';
-            
+
             for (; offset < end; offset++) {
                 char c = buffer->flat.data[offset];
-                
+
                 bool whitespace = is_whitespace(c);
                 bool boundary = !whitespace && is_word_boundary(c);
-                
+
                 if (c == '\r') {
                     was_cr = true;
                     boundary = true;
-                } else { 
+                } else {
                     if (!was_cr && c == '\r') boundary = true;
                     was_cr = false;
                 }
-                
+
                 if (start_is_boundary && !whitespace) return offset;
                 if (!start_is_whitespace) {
                     if (boundary || (in_whitespace && !whitespace)) {
@@ -1310,30 +1314,30 @@ i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
                     return offset;
                 }
             }
-            
+
             return offset;
         } break;
     }
-    
+
     return byte_offset;
 }
 
 i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
 {
     if (line >= lines.count) return 0;
-    
+
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return 0;
-    
+
     i64 start = lines[line].offset;
     i64 end = line_end_offset(line, lines, buffer);
-    
+
     i64 offset = start;
     while (offset < end) {
         if (!is_whitespace(char_at(buffer, offset))) return offset;
         offset = next_byte(buffer, offset);
     }
-    
+
     return offset;
 }
 
@@ -1343,7 +1347,7 @@ i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 lin
 
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return 0;
-    
+
     if (line == lines.count-1) return buffer_end(buffer_id);
 
     i64 end = line_end_offset(line, lines, buffer);
@@ -1359,9 +1363,9 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
     case BUFFER_FLAT: {
             i64 offset = byte_offset;
             i64 end = buffer_end(buffer_id);
-            
+
             char *p = &buffer->flat.data[0];
-            
+
             char start_c = p[offset--];
             bool start_is_whitespace = is_whitespace(start_c);
             bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
@@ -1370,12 +1374,12 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
             bool was_whitespace = start_is_whitespace;
             bool has_whitespace = false;
             bool was_ln = start_c == '\n';
-            
+
             for (; offset >= 0; offset--) {
                 char c = p[offset];
                 bool whitespace = is_whitespace(c);
                 bool boundary = !whitespace && is_word_boundary(c);
-                
+
                 if (c == '\n') {
                     was_ln = true;
                     boundary = true;
@@ -1383,14 +1387,14 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
                     if (was_ln && c == '\r') boundary = true;
                     was_ln = false;
                 }
-                
+
                 has_whitespace = has_whitespace || whitespace;
                 if (whitespace && !was_whitespace) {
                     if (offset+1 != byte_offset) {
                         return CLAMP(0, offset+1, end);
                     }
                 }
-                
+
                 if (start_is_boundary && !whitespace && boundary && (offset+1 != byte_offset)) {
                     if (was_whitespace) {
                         return CLAMP(0, offset, end);
@@ -1398,7 +1402,7 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
                         return CLAMP(0, offset+1, end);
                     }
                 }
-                
+
                 if (boundary && offset != byte_offset) {
                     if ((has_whitespace || start_is_normal) && !was_whitespace && offset+1 != byte_offset) {
                         return CLAMP(0, offset+1, end);
@@ -1406,14 +1410,14 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
                         return CLAMP(0, offset, end);
                     }
                 }
-                
+
                 was_whitespace = whitespace;
             }
-            
+
             return 0;
         } break;
     }
-    
+
     return byte_offset;
 }
 
@@ -1443,11 +1447,11 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
     } else {
         caret.wrapped_line = MIN(caret.wrapped_line, lines.count-1);
         caret.wrapped_line = MAX(0, caret.wrapped_line);
-        
+
         while (caret.byte_offset < lines[caret.wrapped_line].offset) {
             if (!lines[caret.wrapped_line--].wrapped) caret.line--;
         }
-        
+
         while (caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) {
             if (!lines[++caret.wrapped_line].wrapped) caret.line++;
         }
@@ -1456,7 +1460,7 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
     caret.wrapped_column = calc_wrapped_column_from_byte_offset(caret.byte_offset, caret.wrapped_line, lines, buffer);
     caret.column = calc_unwrapped_column(caret.wrapped_line, caret.wrapped_column, lines, buffer);
     caret.preferred_column = caret.wrapped_column;
-    
+
     app.animating = true;
     return caret;
 }
@@ -1470,13 +1474,13 @@ void move_view_to_caret()
 // caret and mark appropriately so that undo/redo also moves the carets appropriately
 struct BufferHistoryScope {
     BufferId buffer;
-    
+
     BufferHistoryScope(BufferId buffer) : buffer(buffer)
     {
         buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_START });
         buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
     }
-    
+
     ~BufferHistoryScope()
     {
         buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
@@ -1489,17 +1493,17 @@ void view_seek_line(i32 wrapped_line)
     ASSERT(!view.lines_dirty);
     wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
     Buffer *buffer = get_buffer(view.buffer);
-    
+
     if (buffer && wrapped_line != view.caret.wrapped_line) {
         i32 l = view.caret.wrapped_line;
         while (l > wrapped_line) {
             if (!view.lines[l--].wrapped) view.caret.line--;
         }
-        
+
         while (l < wrapped_line) {
             if (!view.lines[++l].wrapped) view.caret.line++;
         }
-        
+
         view.caret.wrapped_line = l;
         view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
         view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
@@ -1514,10 +1518,10 @@ void view_seek_line(i32 wrapped_line)
 void view_seek_byte_offset(i64 byte_offset)
 {
     byte_offset = CLAMP(byte_offset, 0, buffer_end(view.buffer));
-    
+
     if (byte_offset != view.caret.byte_offset) {
         view.caret.byte_offset = byte_offset;
-        
+
         ASSERT(!view.lines_dirty);
         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
         view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
@@ -1540,7 +1544,7 @@ void write_string(BufferId buffer_id, String str, u32 flags = 0)
     view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
 
     move_view_to_caret();
-    
+
     app.animating = true;
 }
 
@@ -1550,22 +1554,22 @@ void app_event(InputEvent event)
         app.animating = true;
         return;
     }
-    
+
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
     // management in order to record the cursor position in the history groups, so that when
-    // a user undo/redo the cursor is repositioned to where it was before/after the edit 
+    // a user undo/redo the cursor is repositioned to where it was before/after the edit
 
     // TODO(jesper): figure out if there's a better way for us to signal that the event results
     // in an update/redraw. If nothing else, the app.animating variable name just feels wrong at
     // this point, especially when I don't even have anything animating
-    
+
     switch (event.type) {
-    case IE_TEXT: 
+    case IE_TEXT:
         if (app.mode == MODE_INSERT) {
             write_string(view.buffer, String{ (char*)&event.text.c[0], event.text.length });
-        } 
+        }
         break;
-    case IE_KEY_PRESS: 
+    case IE_KEY_PRESS:
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.virtual_code) {
@@ -1611,13 +1615,13 @@ void app_event(InputEvent event)
             case VC_O:
                 app.lister.active = true;
                 app.lister.selected_item = 0;
-                
+
                 for (String s : app.lister.values) FREE(mem_dynamic, s.data);
                 app.lister.values.count = 0;
-                
-                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
+
+                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE);
                 array_copy(&app.lister.filtered, app.lister.values);
-                
+
                 app.mode = MODE_DIALOG;
                 break;
             case VC_D: {
@@ -1634,12 +1638,12 @@ void app_event(InputEvent event)
                 } break;
             case VC_X: {
                     BufferHistoryScope h(view.buffer);
-                    
+
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     String str = buffer_read(view.buffer, r.start, r.end);
                     set_clipboard_data(str);
-                    
+
                     if (buffer_remove(view.buffer, r.start, r.end)) {
                         view.caret.byte_offset = r.start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
@@ -1656,7 +1660,7 @@ void app_event(InputEvent event)
             case VC_P:
                 write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
                 break;
-            case VC_W: 
+            case VC_W:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_byte_offset(buffer_seek_next_word(view.buffer, view.caret.byte_offset));
                 break;
@@ -1676,7 +1680,7 @@ void app_event(InputEvent event)
                 app.next_mode = MODE_INSERT;
                 view.mark = view.caret;
                 break;
-            case VC_L: 
+            case VC_L:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
@@ -1696,11 +1700,11 @@ void app_event(InputEvent event)
             case VC_TAB: {
                     Buffer *buffer = get_buffer(view.buffer);
                     if (!buffer) break;
-                    
+
                     if (event.key.modifiers & MF_SHIFT) {
                         Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
                         if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
-                        
+
                         BufferHistoryScope h(view.buffer);
                         for (i32 l = r.start; l <= r.end; l++) {
                             String current_indent = get_indent_for_line(view.buffer, view.lines, l);
@@ -1733,7 +1737,7 @@ void app_event(InputEvent event)
                     } else {
                         Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
                         if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
-                        
+
                         BufferHistoryScope h(view.buffer);
                         for (i32 l = r.start; l <= r.end; l++) {
                             i64 line_start = line_start_offset(l, view.lines);
@@ -1777,7 +1781,7 @@ void app_event(InputEvent event)
             case VC_ESC:
                 app.next_mode = MODE_EDIT;
                 break;
-            case VC_LEFT: 
+            case VC_LEFT:
                 view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
@@ -1799,7 +1803,7 @@ void app_event(InputEvent event)
             case VC_TAB: {
                     Buffer *buffer = get_buffer(view.buffer);
                     if (!buffer) break;
-                    
+
                     if (buffer->indent_with_tabs) write_string(view.buffer, "\t");
                     else {
                         String current_indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
@@ -1818,7 +1822,7 @@ void app_event(InputEvent event)
                     }
 
                 } break;
-            case VC_BACKSPACE: 
+            case VC_BACKSPACE:
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
@@ -1826,11 +1830,11 @@ void app_event(InputEvent event)
                         view.caret.byte_offset = start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
-                        
+
                         move_view_to_caret();
                     }
                 } break;
-            case VC_DELETE: 
+            case VC_DELETE:
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
@@ -1841,14 +1845,14 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-                
+
             default: break;
             }
         }
-        
+
         if (app.mode == MODE_EDIT || app.mode == MODE_INSERT) {
             switch (event.key.virtual_code) {
-            case VC_PAGE_DOWN: 
+            case VC_PAGE_DOWN:
                 // TODO(jesper: page up/down should take current caret line into account when moving
                 // view to caret, so that it remains where it was proportionally
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
@@ -1874,16 +1878,16 @@ void app_event(InputEvent event)
             {
                 Buffer *buffer = get_buffer(view.buffer);
                 if (!buffer) break;
-                
+
                 ASSERT(!view.lines_dirty);
                 i64 wrapped_line = view.line_offset + (event.mouse.y - view.rect.pos.y + view.voffset) / app.mono.line_height;
                 wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
-                
+
                 while (view.caret.wrapped_line > wrapped_line) {
                     if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
                     view.caret.wrapped_line--;
                 }
-                
+
                 while (view.caret.wrapped_line < wrapped_line) {
                     if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
                     view.caret.wrapped_line++;
@@ -1894,7 +1898,7 @@ void app_event(InputEvent event)
                 view.caret.preferred_column = view.caret.wrapped_column;
                 view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
                 view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-                
+
                 app.animating = true;
             }
         } break;
@@ -1916,10 +1920,10 @@ void app_event(InputEvent event)
             view.line_offset += 1*div;
             view.voffset += app.mono.line_height*div;
         }
-        
+
         ASSERT(!view.lines_dirty);
         view.line_offset = MIN(view.line_offset, view.lines.count - 3);
-        
+
         app.animating = true;
         break;
     default: break;
@@ -1933,20 +1937,20 @@ struct {
 } debug{};
 
 
-void update_and_render(f32 dt)
+void update_and_render(f32 /*dt*/)
 {
     gfx_begin_frame();
     gui_begin_frame();
-    
+
     GfxCommandBuffer debug_gfx = gfx_command_buffer();
 
     GuiLayout *root = gui_current_layout();
     gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = root->pos, .size = root->size });
-    
+
     gui_menu() {
         gui_menu("file") {
             if (gui_menu_button("save")) buffer_save(view.buffer);
-            
+
             if (gui_menu_button("select working dir...")) {
                 String wd = select_folder_dialog();
                 if (wd.length > 0) set_working_dir(wd);
@@ -1956,12 +1960,12 @@ void update_and_render(f32 dt)
         gui_menu("debug") {
             gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
         }
-        
+
         if (app.process_commands.count > 0) {
             app.selected_process = gui_dropdown(app.process_command_names, app.selected_process);
         }
     }
-    
+
     gui_window("buffer history", &debug.buffer_history.wnd) {
         char str[256];
 
@@ -1990,12 +1994,12 @@ void update_and_render(f32 dt)
     f32 lister_w = gfx.resolution.x*0.7f;
     lister_w = MAX(lister_w, 500.0f);
     lister_w = MIN(lister_w, gfx.resolution.x-10);
-    
+
     Vector2 lister_p = gfx.resolution*0.5f;
-    
+
     gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
         GuiEditboxAction edit_action = gui_editbox("");
-        
+
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
@@ -2014,10 +2018,10 @@ void update_and_render(f32 dt)
 
                 i32 lower_buffer_size = 100;
                 char *lower_buffer = ALLOC_ARR(mem_tmp, char, lower_buffer_size);
-                
+
                 for (String s : app.lister.values) {
                     fzy_score_t match_score;
-                    
+
                     array_resize(&D, needle.length*s.length);
                     array_resize(&M, needle.length*s.length);
 
@@ -2025,23 +2029,23 @@ void update_and_render(f32 dt)
                     memset(M.data, 0, M.count*sizeof *M.data);
 
                     array_resize(&match_bonus, s.length);
-                    
+
                     if (s.length >= lower_buffer_size) {
                         lower_buffer = REALLOC_ARR(mem_tmp, char, lower_buffer, lower_buffer_size, s.length);
                         lower_buffer_size = s.length;
                     }
                     memcpy(lower_buffer, s.data, s.length);
-                    
+
                     String ls{ lower_buffer, s.length };
                     to_lower(&ls);
-                    
+
                     char prev = '/';
                     for (i32 i = 0; i < ls.length; i++) {
                         if (ls[i] == '\\') ls[i] = '/';
                         match_bonus[i] = fzy_compute_bonus(prev, ls[i]);
-                        
+
                     }
-                    
+
                     for (i32 i = 0; i < needle.length; i++) {
                         fzy_score_t prev_score = FZY_SCORE_MIN;
                         fzy_score_t gap_score = i == needle.length-1 ? FZY_SCORE_GAP_TRAILING : FZY_SCORE_GAP_INNER;
@@ -2080,19 +2084,19 @@ next_node:;
                 sort(scores, app.lister.filtered);
             }
         }
-        
+
         GuiListerAction lister_action = gui_lister(app.lister.filtered, &app.lister.selected_item);
         if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count &&
             (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH))
         {
             String file = app.lister.filtered[app.lister.selected_item];
             String path = absolute_path(file);
-            
+
             BufferId buffer = find_buffer(path);
             if (!buffer) buffer = create_buffer(path);
-            
+
             view_set_buffer(buffer);
-            
+
             app.lister.active = false;
             gui.focused = GUI_ID_INVALID;
         } else if (lister_action == GUI_LISTER_CANCEL) {
@@ -2101,61 +2105,61 @@ next_node:;
             app.lister.active = false;
             gui.focused = GUI_ID_INVALID;
         }
-        
+
         if (!app.lister.active) {
             for (String s : app.lister.values) FREE(mem_dynamic, s.data);
             app.lister.values.count = 0;
         }
     }
-    
+
     view.caret_dirty |= view.lines_dirty;
     {
         gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = gui_layout_widget_fill() });
         defer { gui_end_layout(); };
-        
+
         // TODO(jesper): kind of only want to do the tabs if there are more than 1 file open, but then I'll
         // need to figure out reasonable ways of visualising unsaved changes as well as which file is open.
         // Likely do-able with the window titlebar decoration on most/all OS?
         if (view.buffers.count > 0) {
             GuiWindow *wnd = gui_current_window();
-            
+
             Vector2 size{ 0, gui.style.button.font.line_height + 2 };
             Vector2 pos = gui_layout_widget(&size);
             gui_draw_rect(pos, size, wnd->clip_rect, gui.style.bg_dark1);
-            
+
             gui_divider();
-            
+
             gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = pos, .size = size, .column.spacing = 2 });
             defer { gui_end_layout(); };
-            
-            Font *font = &gui.style.button.font;
+
+            FontAtlas *font = &gui.style.button.font;
             Vector2 msize{ gui.style.button.font.line_height, gui.style.button.font.line_height };
             Vector2 mpos = gui_layout_widget(msize, GUI_ANCHOR_RIGHT);
-            
+
             i32 current_tab = 0;
             GuiId parent = GUI_ID(0);
-            
+
             BufferId active_buffer = view.buffer;
-            
+
             i32 cutoff = -1;
             for (i32 i = 0; i < view.buffers.count; i++) {
                 Buffer *b = get_buffer(view.buffers[i]);
-                
+
                 GuiId id = GUI_ID_INDEX(parent, i);
-                
+
                 TextQuadsAndBounds td = calc_text_quads_and_bounds(b->name, font);
                 Vector2 size = td.bounds.size + Vector2{ 14.0f, 2.0f };
                 if (gui_current_layout()->available_space.x < size.x) {
                     cutoff = i;
                     break;
                 }
-                
+
                 Vector2 pos = gui_layout_widget(size);
                 Vector2 text_offset = size*0.5f - Vector2{ td.bounds.size.x*0.5f, font->line_height*0.5f };
-                
+
                 gui_hot_rect(id, pos, size);
                 if (gui_clicked(id)) active_buffer = b->id;
-                
+
                 if (i == current_tab) {
                     gui_draw_accent_button(id, pos, size);
                     gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
@@ -2163,16 +2167,16 @@ next_node:;
                     gui_draw_button(id, pos, size);
                     gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
                 }
-                
+
                 if (b->saved_at != b->history_index) {
                     gui_draw_rect(
-                        pos + Vector2{ size.x-4-1, 1 }, 
-                        { 4, 4 }, 
-                        wnd->clip_rect, 
+                        pos + Vector2{ size.x-4-1, 1 },
+                        { 4, 4 },
+                        wnd->clip_rect,
                         rgb_unpack(0xFF990000));
                 }
             }
-            
+
             if (cutoff >= 0) {
                 // TODO(jesper): this is essentially a dropdown with an icon button as the trigger button
                 // instead of a label button
@@ -2189,7 +2193,7 @@ next_node:;
 
                 Vector3 mbg = gui.hot == mid ? gui.style.accent_bg_hot : gui.style.accent_bg;
                 gui_draw_rect(mpos, msize, wnd->clip_rect, mbg);
-                
+
                 Vector2 icon_s{ 16, 16 };
                 Vector2 icon_p = mpos + 0.5f*(msize - icon_s);
                 gui_draw_rect(icon_p, icon_s, gui.icons.down);
@@ -2198,15 +2202,15 @@ next_node:;
                     i32 old_window = gui.current_window;
                     gui.current_window = GUI_OVERLAY;
                     defer { gui.current_window = old_window; };
-                    
+
                     GuiWindow *overlay = &gui.windows[GUI_OVERLAY];
-                    
+
                     Vector3 border_col = rgb_unpack(0xFFCCCCCC);
                     Vector3 bg = rgb_unpack(0xFF1d2021);
                     Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
 
                     i32 bg_index = overlay->command_buffer.commands.count;
-                    
+
                     // TODO(jesper): figure out a reasonable way to make this layout anchored to the right and expand to the
                     // left with the subsequent labels. Right now I'm just hoping that the width is wide enough
                     Vector2 s{ 200.0f, 0 };
@@ -2230,12 +2234,12 @@ next_node:;
                         // if one is pressed, this doesn't behave the way I want for dropdowns where
                         // I can press the trigger button, drag to an item, then release to select it
                         gui_hot_rect(lid, rect_p, rect_s);
-                        if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) || 
-                            gui_clicked(lid)) 
+                        if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) ||
+                            gui_clicked(lid))
                         {
                             active_buffer = b->id;
                             gui.focused = GUI_ID_INVALID;
-                        } 
+                        }
                     }
 
                     GuiLayout *cl = gui_current_layout();
@@ -2257,7 +2261,7 @@ next_node:;
             // We could move it to after the reflow handling with some more layout plumbing, by letter caller deal with
             // the layouting and passing in absolute positions and sizes to the scrollbar
             gui_scrollbar(app.mono.line_height, &view.line_offset, view.lines.count, view.lines_visible, &view.voffset);
-            
+
             Rect text_rect = gui_layout_widget_fill();
             if (view.lines_dirty || text_rect != view.rect) {
                 view.rect = text_rect;
@@ -2283,7 +2287,7 @@ next_node:;
         view.caret_dirty = false;
     }
     view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
-    
+
     if (view.defer_move_view_to_caret) {
         i32 line_padding = 3;
 
@@ -2296,7 +2300,7 @@ next_node:;
 
         view.defer_move_view_to_caret = 0;
     }
-    
+
     if (auto buffer = get_buffer(view.buffer); buffer) {
         Vector2 ib_s{ 0, 15.0f };
         gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { view.rect.pos.x, view.rect.pos.y+view.rect.size.y-ib_s.y }, .size = ib_s });
@@ -2304,23 +2308,23 @@ next_node:;
 
         String nl = string_from_enum(buffer->newline_mode);
         String in = buffer->indent_with_tabs ? String("TAB") : String("SPACE");
-        
+
         char str[256];
         gui_textbox(
-            stringf(str, sizeof str, 
-                    "Ln: %d, Col: %lld %.*s %.*s", 
-                    view.caret.line+1, view.caret.column+1, 
+            stringf(str, sizeof str,
+                    "Ln: %d, Col: %lld %.*s %.*s",
+                    view.caret.line+1, view.caret.column+1,
                     STRFMT(nl), STRFMT(in)));
     }
 
-    if (view.caret.wrapped_line >= view.line_offset && 
+    if (view.caret.wrapped_line >= view.line_offset &&
         view.caret.wrapped_line < view.line_offset + view.lines_visible)
     {
         i32 y = view.caret.wrapped_line - view.line_offset;
         f32 w = app.mono.space_width;
         f32 h = app.mono.line_height - 2.0f;
 
-        Vector2 p0{ 
+        Vector2 p0{
             view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
             view.rect.pos.y + y*app.mono.line_height - view.voffset,
         };
@@ -2334,14 +2338,14 @@ next_node:;
         gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
     }
 
-    if (view.mark.wrapped_line >= view.line_offset && 
+    if (view.mark.wrapped_line >= view.line_offset &&
         view.mark.wrapped_line < view.line_offset + view.lines_visible)
     {
         i32 y = view.mark.wrapped_line - view.line_offset;
         f32 w = app.mono.space_width/2;
         f32 h = app.mono.line_height - 2.0f;
 
-        Vector2 p0{ 
+        Vector2 p0{
             view.rect.pos.x + view.mark.wrapped_column*app.mono.space_width,
             view.rect.pos.y + y*app.mono.line_height - view.voffset,
         };
@@ -2396,17 +2400,17 @@ next_node:;
                     vcolumn += w;
                     continue;
                 }
-                
+
                 Vector2 pen{ baseline.x + vcolumn*app.mono.space_width, baseline.y };
                 GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
 
                 // NOTE(jesper): if this fires then we haven't done line reflowing correctly
                 ASSERT(g.x1 < view.rect.pos.x + view.rect.size.x);
 
-                // TODO(jesper): the way this text rendering works it'd probably be far cheaper for us to just 
+                // TODO(jesper): the way this text rendering works it'd probably be far cheaper for us to just
                 // overdraw a background outside the view rect
                 if (apply_clip_rect(&g, view.rect)) {
-                    f32 vertices[] = { 
+                    f32 vertices[] = {
                         g.x0, g.y0, g.s0, g.t0,
                         g.x0, g.y1, g.s0, g.t1,
                         g.x1, g.y1, g.s1, g.t1,
@@ -2426,7 +2430,7 @@ next_node:;
         // TODO(jesper): I'm lazy and re-using the GUI's vertex buffer here, which is why this is using
         // gui draw procedures and being kind of weird as hell about it. This also makes some causes
         // some error-prone weirdness because we need to end the gui frame, submit the standard command buffers
-        // and only then submit the gui draw commands. I don't much like having gui_end_frame separate from 
+        // and only then submit the gui draw commands. I don't much like having gui_end_frame separate from
         // gui_render, and this interaction is just weird.
         gui_push_command(&gfx.frame_cmdbuf, cmd);
     }

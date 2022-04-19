@@ -1,6 +1,6 @@
 #ifndef STRING_H
 #define STRING_H
-    
+
 #include "allocator.h"
 
 #define STRFMT(str) (str).length, (str).data
@@ -23,13 +23,13 @@ struct String {
         data = (char*)str;
     }
 
-    char& operator[](i32 i) 
-    { 
-        // NOTE(jesper): disabled because C/C++ is garbage and assert is defined 
-        // in core.h but core.h needs to include string.h for its procedures. Need 
+    char& operator[](i32 i)
+    {
+        // NOTE(jesper): disabled because C/C++ is garbage and assert is defined
+        // in core.h but core.h needs to include string.h for its procedures. Need
         // to make them not rely on string or some nonsense
         //ASSERT(i < length && i >= 0);
-        return data[i]; 
+        return data[i];
     }
 };
 
@@ -66,26 +66,25 @@ String filename_of(String path);
 String extension_of(String path);
 String path_relative_to(String path, String root);
 String join_path(String root, String filename, Allocator mem = mem_tmp);
-char* join_path(const char *sz_root, const char *sz_filename, Allocator mem = mem_tmp);
 
 String slice(String str, i32 start, i32 end);
 String slice(String str, i32 start);
 
+i32 last_of(String str, char c);
+
 char* sz_string(String str, Allocator mem = mem_tmp);
-wchar_t* wsz_string(String str, Allocator mem = mem_tmp);
+char* join_path(const char *sz_root, const char *sz_filename, Allocator mem = mem_tmp);
+char* last_of(char *str, char c);
 
 i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit);
 i32 utf8_length(const u16 *str, i32 utf16_len);
-i32 utf8_length(const wchar_t *str, i32 utf16_len);
 i32 utf8_from_utf16(u8 *dst, i32 capacity, const u16 *src, i32 length);
-i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length);
 i32 utf8_from_utf32(u8 utf8[4], i32 utf32);
 
 i32 utf16_length(String str);
 void utf16_from_string(u16 *dst, i32 capacity, String src);
 
 String string_from_utf16(const u16 *in_str, i32 length, Allocator mem = mem_tmp);
-String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem = mem_tmp);
 
 i32 utf32_next(char **p, char *end);
 i32 utf32_it_next(char **utf8, char *end);
@@ -99,5 +98,12 @@ i32 codepoint_index_from_byte_index(String str, i32 byte);
 
 void append_string(StringBuilder *sb, String str);
 void append_stringf(StringBuilder *sb, const char *fmt, ...);
+
+#if defined(_WIN32)
+wchar_t* wsz_string(String str, Allocator mem = mem_tmp);
+i32 utf8_length(const wchar_t *str, i32 utf16_len);
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length);
+String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem = mem_tmp);
+#endif // defined(WIN32)
 
 #endif // STRING_H

@@ -36,13 +36,13 @@ String stringf(char *buffer, i32 size, const char *fmt, ...)
 
     va_list args;
     va_start(args, fmt);
-    
+
     i32 length = vsnprintf(buffer, size-1, fmt, args);
     if (length <= size) {
         result.data = buffer;
         result.length = length;
     }
-    
+
     va_end(args);
     return result;
 }
@@ -55,12 +55,12 @@ String stringf(Allocator mem, const char *fmt, ...)
     va_start(args, fmt);
     i32 length = vsnprintf(nullptr, 0, fmt, args);
     va_end(args);
-    
+
     va_start(args, fmt);
     result.data = (char*)ALLOC(mem, length+1);
     result.length = vsnprintf(result.data, length+1, fmt, args);
     va_end(args);
-    
+
     return result;
 }
 
@@ -113,42 +113,31 @@ bool starts_with(String lhs, String rhs)
 char* sz_string(String str, Allocator mem)
 {
     if (str.length == 0) return nullptr;
-    
+
     char *sz_str = ALLOC_ARR(mem, char, str.length+1);
     memcpy(sz_str, str.data, str.length);
     sz_str[str.length] = '\0';
     return sz_str;
 }
 
-wchar_t* wsz_string(String str, Allocator mem)
-{
-    i32 wl = utf16_length(str);
-    if (wl == 0) return nullptr;
-    
-    wchar_t *wsz_str = ALLOC_ARR(mem, wchar_t, wl+1);
-    utf16_from_string((u16*)wsz_str, wl, str);
-    wsz_str[wl] = L'\0';
-    return wsz_str;
-}
-
 i32 utf8_truncate(String str, i32 limit)
 {
     if (str.length < limit) return str.length;
-    
+
     i32 truncated = 0;
     for (i32 i = 0; i < str.length; i++) {
         char c = str[i++];
-        
+
         if (c & 0x80) {
             if (~c & (1 << 5))      i += 1;
             else if (~c & (1 << 4)) i += 2;
             else if (~c & (1 << 3)) i += 3;
         }
-        
+
         if (i > limit) return truncated;;
         truncated = i;
     }
-    
+
     return truncated;
 }
 
@@ -187,26 +176,20 @@ i32 utf8_from_utf16(u8 *dst, i32 capacity, const u16 *src, i32 length)
             dst[written++] = (u8)(0b11000000 | (0b00011111 & (u8)(utf32 >> 6)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32)));
         } else if (utf32 <= 0xFFFF) {
-            if (written+3 > capacity) return written; 
+            if (written+3 > capacity) return written;
             dst[written++] = (u8)(0b11100000 | (0b00001111 & (u8)(utf32 >> 12)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6)));
-            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32))); 
+            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32)));
         } else {
             if (written+4 > capacity) return written;
             dst[written++] = (u8)(0b11110000 | (0b00000111 & (u8)(utf32 >> 18)));
             dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 12)));
-            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6))); 
-            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32))); 
+            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6)));
+            dst[written++] = (u8)(0b10000000 | (0b00111111 & (u8)(utf32)));
         }
     }
-    
-    return written;
-}
 
-i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length)
-{
-    static_assert(sizeof(wchar_t) == sizeof(u16));
-    return utf8_from_utf16(dst, capacity, (const u16*)src, length);
+    return written;
 }
 
 String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
@@ -246,7 +229,7 @@ String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
                 capacity = str.length + 1;
                 str.data = (char*)REALLOC(mem, str.data, old_capacity, capacity);
             }
-            
+
             str.data[str.length++] = (char)utf32;
         } else if (utf32 <= 0x7FF) {
             if (str.length + 2 > capacity) {
@@ -255,7 +238,7 @@ String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
                 str.data = (char*)REALLOC(mem, str.data, old_capacity, capacity);
 
             }
-            
+
             str.data[str.length++] = (char)(0b11000000 | (0b00011111 & (u8)(utf32 >> 6)));
             str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32)));
         } else if (utf32 <= 0xFFFF) {
@@ -264,31 +247,25 @@ String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
                 capacity = str.length + 3;
                 str.data = (char*)REALLOC(mem, str.data, old_capacity, capacity);
             }
-            
+
             str.data[str.length++] = (char)(0b11100000 | (0b00001111 & (u8)(utf32 >> 12)));
             str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6)));
-            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32))); 
+            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32)));
         } else {
             if (str.length + 4 > capacity) {
                 i32 old_capacity = capacity;
                 capacity = str.length + 4;
                 str.data = (char*)REALLOC(mem, str.data, old_capacity, capacity);
             }
-            
+
             str.data[str.length++] = (char)(0b11110000 | (0b00000111 & (u8)(utf32 >> 18)));
             str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32 >> 12)));
-            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6))); 
-            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32))); 
+            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32 >> 6)));
+            str.data[str.length++] = (char)(0b10000000 | (0b00111111 & (u8)(utf32)));
         }
     }
 
     return str;
-}
-
-String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem)
-{
-    static_assert(sizeof(wchar_t) == sizeof(u16));
-    return string_from_utf16((const u16*)in_str, length, mem);
 }
 
 i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit)
@@ -377,13 +354,6 @@ i32 utf8_length(const u16 *str, i32 utf16_len)
     return length;
 }
 
-i32 utf8_length(const wchar_t *str, i32 utf16_len)
-{
-    static_assert(sizeof(wchar_t) == sizeof(u16));
-    return utf8_length((const u16*)str, utf16_len);
-}
-
-
 i32 utf16_length(String str)
 {
     i32 length = 0;
@@ -394,36 +364,36 @@ i32 utf16_length(String str)
             if (~c & (1 << 5)) {
                 if (i+1 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00011111) << 6 | 
+                c = (str.data[i] & 0b00011111) << 6 |
                     (str.data[i+1] & 0b00111111);
                 i += 1;
             } else if (~c & (1 << 4)) {
                 if (i+2 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00001111) << 12 | 
-                    (str.data[i+1] & 0b00111111) << 6 | 
+                c = (str.data[i] & 0b00001111) << 12 |
+                    (str.data[i+1] & 0b00111111) << 6 |
                     (str.data[i+2] & 0b00111111);
                 i += 2;
             } else if (~c & (1 << 3)) {
                 if (i+3 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00000111) << 18 | 
-                    (str.data[i+1] & 0b00111111) << 12 | 
-                    (str.data[i+2] & 0b00111111) << 6 | 
+                c = (str.data[i] & 0b00000111) << 18 |
+                    (str.data[i+1] & 0b00111111) << 12 |
+                    (str.data[i+2] & 0b00111111) << 6 |
                     (str.data[i+3] & 0b00111111);
                 i += 3;
             }
         }
 
-        if ((c >= 0x0000 && c <= 0xD7FF) || 
-            (c >= 0xE000 && c <= 0xFFFF)) 
+        if ((c >= 0x0000 && c <= 0xD7FF) ||
+            (c >= 0xE000 && c <= 0xFFFF))
         {
             length += 1;
         } else {
             length += 2;
         }
     }
-end:    
+end:
     return length;
 }
 
@@ -437,29 +407,29 @@ void utf16_from_string(u16 *dst, i32 capacity, String src)
             if (~c & (1 << 5)) {
                 if (i+1 >= src.length) goto end;
 
-                c = (src.data[i] & 0b00011111) << 6 | 
+                c = (src.data[i] & 0b00011111) << 6 |
                     (src.data[i+1] & 0b00111111);
                 i += 1;
             } else if (~c & (1 << 4)) {
                 if (i+2 >= src.length) goto end;
 
-                c = (src.data[i] & 0b00001111) << 12 | 
-                    (src.data[i+1] & 0b00111111) << 6 | 
+                c = (src.data[i] & 0b00001111) << 12 |
+                    (src.data[i+1] & 0b00111111) << 6 |
                     (src.data[i+2] & 0b00111111);
                 i += 2;
             } else if (~c & (1 << 3)) {
                 if (i+3 >= src.length) goto end;
 
-                c = (src.data[i] & 0b00000111) << 18 | 
-                    (src.data[i+1] & 0b00111111) << 12 | 
-                    (src.data[i+2] & 0b00111111) << 6 | 
+                c = (src.data[i] & 0b00000111) << 18 |
+                    (src.data[i+1] & 0b00111111) << 12 |
+                    (src.data[i+2] & 0b00111111) << 6 |
                     (src.data[i+3] & 0b00111111);
                 i += 3;
             }
         }
 
-        if ((c >= 0x0000 && c <= 0xD7FF) || 
-            (c >= 0xE000 && c <= 0xFFFF)) 
+        if ((c >= 0x0000 && c <= 0xD7FF) ||
+            (c >= 0xE000 && c <= 0xFFFF))
         {
             if (length+1 > capacity) goto end;
             dst[length++] = (u16)c;
@@ -480,44 +450,44 @@ u16* utf16_from_string(String str, i32 *utf16_length, Allocator mem = mem_tmp)
     i32 length = 0;
     i32 capacity = str.length;
     u16 *utf16 = (u16*)ALLOC(mem, str.length * sizeof *utf16);
-    
+
     for (i32 i = 0; i < str.length; i++) {
         u32 c = (u32)str.data[i];
-        
+
         if (c & 0x80) {
             if (~c & (1 << 5)) {
                 if (i+1 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00011111) << 6 | 
+                c = (str.data[i] & 0b00011111) << 6 |
                     (str.data[i+1] & 0b00111111);
                 i += 1;
             } else if (~c & (1 << 4)) {
                 if (i+2 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00001111) << 12 | 
-                    (str.data[i+1] & 0b00111111) << 6 | 
+                c = (str.data[i] & 0b00001111) << 12 |
+                    (str.data[i+1] & 0b00111111) << 6 |
                     (str.data[i+2] & 0b00111111);
                 i += 2;
             } else if (~c & (1 << 3)) {
                 if (i+3 >= str.length) goto end;
 
-                c = (str.data[i] & 0b00000111) << 18 | 
-                    (str.data[i+1] & 0b00111111) << 12 | 
-                    (str.data[i+2] & 0b00111111) << 6 | 
+                c = (str.data[i] & 0b00000111) << 18 |
+                    (str.data[i+1] & 0b00111111) << 12 |
+                    (str.data[i+2] & 0b00111111) << 6 |
                     (str.data[i+3] & 0b00111111);
                 i += 3;
             }
         }
 
-        if ((c >= 0x0000 && c <= 0xD7FF) || 
-            (c >= 0xE000 && c <= 0xFFFF)) 
+        if ((c >= 0x0000 && c <= 0xD7FF) ||
+            (c >= 0xE000 && c <= 0xFFFF))
         {
             if (length+1 > capacity) {
                 i32 old_capacity = capacity;
                 capacity = length+1;
                 utf16 = (u16*)REALLOC(mem, utf16, old_capacity * sizeof *utf16, capacity * sizeof *utf16);
             }
-            
+
             utf16[length++] = (u16) c;
         } else {
             if (length+2 > capacity) {
@@ -558,7 +528,7 @@ i32 codepoint_index_from_byte_index(String str, i32 byte)
     for (i32 i = 0; i < str.length; i++) {
         if (i == byte) return ci;
         ci++;
-        
+
         char c = str[i];
         if (c & 0x80) {
             if (~c & (1 << 5))      i += 1;
@@ -584,7 +554,7 @@ i64 utf8_incr(char *str, i64 length, i64 i)
             if (~c & (1 << 5))      i += 1;
             else if (~c & (1 << 4)) i += 2;
             else if (~c & (1 << 3)) i += 3;
-        } 
+        }
     }
     return i;
 }
@@ -601,7 +571,7 @@ i32 utf8_incr(String str, i32 i)
 
 
 bool path_equals(String lhs, String rhs)
-{ 
+{
     if (lhs.length != rhs.length) return false;
 
     for (i32 i = 0; i < lhs.length; i++) {
@@ -621,7 +591,7 @@ String extension_of(String path)
     for (i32 i = path.length-1; i >= 0; i--) {
         if (path.data[i] == '.') {
             return String{ path.data+i, path.length-i };
-        } 
+        }
     }
 
     return {};
@@ -644,7 +614,7 @@ String path_relative_to(String path, String root)
     String proot = slice(path, 0, root.length);
     ASSERT(proot == root);
     String short_path = slice(path, root.length, path.length);
-    while (short_path.length > 0 && 
+    while (short_path.length > 0 &&
            (short_path.data[0] == '/' || short_path.data[0] == '\\'))
     {
         short_path.data++;
@@ -681,7 +651,7 @@ char* join_path(const char *sz_root, const char *sz_filename, Allocator mem)
 {
     i32 root_length = strlen(sz_root);
     i32 filename_length = strlen(sz_filename);
-    
+
     bool add_slash = false;
     i32 required_length = root_length + filename_length;
 
@@ -725,7 +695,7 @@ i32 utf8_from_utf32(u8 utf8[4], i32 utf32)
         utf8[3] = 0b10000000 | (utf32 & 0b00111111);
         return 4;
     }
-    
+
     return -1;
 }
 
@@ -738,23 +708,23 @@ i64 utf32_it_next(char *str, i64 length, i64 *offset)
         if (~c & (1 << 5)) {
             if ((*offset)+1 >= end) return 0;
 
-            c = (str[*offset] & 0b00011111) << 6 | 
+            c = (str[*offset] & 0b00011111) << 6 |
                 (str[(*offset)+1] & 0b00111111);
             (*offset) += 1;
         } else if (~c & (1 << 4)) {
             if ((*offset)+2 >= end) return 0;
 
-            c = (str[*offset] & 0b00001111) << 12 | 
-                (str[(*offset)+1] & 0b00111111) << 6 | 
+            c = (str[*offset] & 0b00001111) << 12 |
+                (str[(*offset)+1] & 0b00111111) << 6 |
                 (str[(*offset)+2] & 0b00111111);
 
             (*offset) += 2;
         } else if (~c & (1 << 3)) {
             if ((*offset)+3 >= end) return 0;
 
-            c = (str[*offset] & 0b00000111) << 18 | 
-                (str[(*offset)+1] & 0b00111111) << 12 | 
-                (str[(*offset)+2] & 0b00111111) << 6 | 
+            c = (str[*offset] & 0b00000111) << 18 |
+                (str[(*offset)+1] & 0b00111111) << 12 |
+                (str[(*offset)+2] & 0b00111111) << 6 |
                 (str[(*offset)+3] & 0b00111111);
 
             (*offset) += 3;
@@ -769,28 +739,28 @@ i32 utf32_it_next(String str, i32 *offset)
 {
     i32 c = str[*offset];
     i64 end = (i64)(str.data + str.length);
-    
+
     if (c & 0x80) {
         if (~c & (1 << 5)) {
             if ((*offset)+1 >= end) return 0;
 
-            c = (str.data[*offset] & 0b00011111) << 6 | 
+            c = (str.data[*offset] & 0b00011111) << 6 |
                 (str.data[(*offset)+1] & 0b00111111);
             (*offset) += 1;
         } else if (~c & (1 << 4)) {
             if ((*offset)+2 >= end) return 0;
 
-            c = (str.data[*offset] & 0b00001111) << 12 | 
-                (str.data[(*offset)+1] & 0b00111111) << 6 | 
+            c = (str.data[*offset] & 0b00001111) << 12 |
+                (str.data[(*offset)+1] & 0b00111111) << 6 |
                 (str.data[(*offset)+2] & 0b00111111);
 
             (*offset) += 2;
         } else if (~c & (1 << 3)) {
             if ((*offset)+3 >= end) return 0;
 
-            c = (str.data[*offset] & 0b00000111) << 18 | 
-                (str.data[(*offset)+1] & 0b00111111) << 12 | 
-                (str.data[(*offset)+2] & 0b00111111) << 6 | 
+            c = (str.data[*offset] & 0b00000111) << 18 |
+                (str.data[(*offset)+1] & 0b00111111) << 12 |
+                (str.data[(*offset)+2] & 0b00111111) << 6 |
                 (str.data[(*offset)+3] & 0b00111111);
 
             (*offset) += 3;
@@ -804,35 +774,35 @@ i32 utf32_it_next(String str, i32 *offset)
 i32 utf32_it_next(char **utf8, char *end)
 {
     i32 c = **utf8;
-    
+
     char *cur = *utf8;
     if (c & 0x80) {
         if (~c & (1 << 5)) {
             if ((*utf8)+1 >= end) return 0;
 
-            c = (cur[0] & 0b00011111) << 6 | 
+            c = (cur[0] & 0b00011111) << 6 |
                 (cur[1] & 0b00111111);
             (*utf8) += 1;
         } else if (~c & (1 << 4)) {
             if ((*utf8)+2 >= end) return 0;
 
-            c = (cur[0] & 0b00001111) << 12 | 
-                (cur[1] & 0b00111111) << 6 | 
+            c = (cur[0] & 0b00001111) << 12 |
+                (cur[1] & 0b00111111) << 6 |
                 (cur[2] & 0b00111111);
 
             (*utf8) += 2;
         } else if (~c & (1 << 3)) {
             if ((*utf8)+3 >= end) return 0;
 
-            c = (cur[0] & 0b00000111) << 18 | 
-                (cur[1] & 0b00111111) << 12 | 
-                (cur[2] & 0b00111111) << 6 | 
+            c = (cur[0] & 0b00000111) << 18 |
+                (cur[1] & 0b00111111) << 12 |
+                (cur[2] & 0b00111111) << 6 |
                 (cur[3] & 0b00111111);
 
             (*utf8) += 3;
         }
     }
-    
+
     (*utf8) += 1;
     return c;
 }
@@ -852,8 +822,8 @@ void append_string(StringBuilder *sb, String str)
             memset(block, 0, sizeof *block);
 
             sb->current->next = block;
-        } 
-        
+        }
+
         sb->current = sb->current->next;
         sb->current->written = 0;
 
@@ -877,11 +847,11 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
 
     if (length > available-1) {
         char *buffer = (char*)ALLOC(mem_tmp, length+1);
-        
+
         va_start(args, fmt);
         vsnprintf(buffer, length+1, fmt, args);
         va_end(args);
-        
+
         append_string(sb, String{ buffer, length });
     } else {
         sb->current->written += length;
@@ -905,6 +875,15 @@ String to_lower(String s, Allocator mem)
     return l;
 }
 
+i32 last_of(String str, char c)
+{
+	i32 p = -1;
+	for (i32 i = 0; i < str.length; i++) {
+		if (str[i] == c) p = i;
+	}
+	return p;
+}
+
 void to_lower(String *s)
 {
     for (i32 i = 0; i < s->length; i++) s->data[i] = to_lower(s->data[i]);
@@ -915,3 +894,45 @@ char to_lower(char c)
     return tolower(c);
 }
 
+char* last_of(char *str, char c)
+{
+	char *p = nullptr;
+	while (*str) {
+		if (*str == c) p = str;
+		str++;
+	}
+
+	return p;
+}
+
+
+#if defined(_WIN32)
+i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return utf8_from_utf16(dst, capacity, (const u16*)src, length);
+}
+
+String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return string_from_utf16((const u16*)in_str, length, mem);
+}
+
+i32 utf8_length(const wchar_t *str, i32 utf16_len)
+{
+    static_assert(sizeof(wchar_t) == sizeof(u16));
+    return utf8_length((const u16*)str, utf16_len);
+}
+
+wchar_t* wsz_string(String str, Allocator mem)
+{
+    i32 wl = utf16_length(str);
+    if (wl == 0) return nullptr;
+
+    wchar_t *wsz_str = ALLOC_ARR(mem, wchar_t, wl+1);
+    utf16_from_string((u16*)wsz_str, wl, str);
+    wsz_str[wl] = L'\0';
+    return wsz_str;
+}
+#endif
