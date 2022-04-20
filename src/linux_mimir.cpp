@@ -9,19 +9,6 @@
 #include "linux_thread.cpp"
 #include "linux_file.cpp"
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_malloc(x,u)  ((void)(u),malloc(x))
-#define STBTT_free(x,u)    ((void)(u),free(x))
-#define STBTT_assert(x)    ASSERT(x)
-#define STBTT_strlen(x)    strlen(x)
-#define STBTT_memcpy       memcpy
-#define STBTT_memset       memset
-#define STBTT_ifloor(x)   ((int) floor(x))
-#define STBTT_iceil(x)    ((int) ceil(x))
-#define STBTT_sqrt(x)      sqrt(x)
-#define STBTT_fabs(x)     fabs(x)
-#include "external/stb/stb_truetype.h"
-
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ASSERT(x) ASSERT(x)
 #include "external/stb/stb_image.h"
@@ -29,8 +16,6 @@
 #include "external/MurmurHash/MurmurHash3.cpp"
 
 Allocator mem_frame;
-thread_local Allocator mem_tmp;
-Allocator mem_dynamic;
 
 int main(int argc, char **argv)
 {

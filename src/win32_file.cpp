@@ -158,7 +158,7 @@ bool is_directory(String path)
     return attribs == FILE_ATTRIBUTE_DIRECTORY;
 }
                    
-Array<String> list_files(String dir, u32 flags, Allocator mem)
+DynamicArray<String> list_files(String dir, u32 flags, Allocator mem)
 {
     DynamicArray<String> files{ .alloc = mem };
     list_files(&files, dir, flags, mem);

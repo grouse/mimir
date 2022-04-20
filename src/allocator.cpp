@@ -1,6 +1,8 @@
 #include "allocator.h"
-
 #include "core.h"
+
+thread_local Allocator mem_tmp;
+Allocator mem_dynamic;
 
 struct LinearAllocatorState {
     u8 *start;
