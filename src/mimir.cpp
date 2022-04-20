@@ -1572,8 +1572,8 @@ void app_event(InputEvent event)
     case IE_KEY_PRESS:
         app.animating = true;
         if (app.mode == MODE_EDIT) {
-            switch (event.key.virtual_code) {
-            case VC_F5:
+            switch (event.key.keycode) {
+            case KC_F5:
                 if (app.process_commands.count > 0) {
                     ProcessCommand *cmd = &app.process_commands[app.selected_process];
                     if (!cmd->process || get_exit_code(cmd->process)) {
@@ -1582,49 +1582,49 @@ void app_event(InputEvent event)
                     }
                 }
                 break;
-            case VC_Q:
+            case KC_Q:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
                 view_seek_byte_offset(buffer_seek_beginning_of_line(view.buffer, view.lines, view.caret.wrapped_line));
                 break;
-            case VC_E:
+            case KC_E:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
                 view_seek_byte_offset(buffer_seek_end_of_line(view.buffer, view.lines, view.caret.wrapped_line));
                 break;
-            case VC_CLOSE_BRACKET:
+            case KC_RBRACKET:
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
                 view_seek_line(buffer_seek_next_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
                 break;
-            case VC_OPEN_BRACKET:
+            case KC_LBRACKET:
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
                 view_seek_line(buffer_seek_prev_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
                 break;
-            case VC_U:
+            case KC_U:
                 buffer_undo(view.buffer);
                 break;
-            case VC_R:
+            case KC_R:
                 buffer_redo(view.buffer);
                 break;
-            case VC_M:
+            case KC_M:
                 if (event.key.modifiers == MF_CTRL) SWAP(view.mark, view.caret);
                 else view.mark = view.caret;
                 break;
-            case VC_O:
+            case KC_O:
                 app.lister.active = true;
                 app.lister.selected_item = 0;
 
                 for (String s : app.lister.values) FREE(mem_dynamic, s.data);
                 app.lister.values.count = 0;
 
-                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE);
+                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
                 array_copy(&app.lister.filtered, app.lister.values);
 
                 app.mode = MODE_DIALOG;
                 break;
-            case VC_D: {
+            case KC_D: {
                     BufferHistoryScope h(view.buffer);
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
@@ -1636,7 +1636,7 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-            case VC_X: {
+            case KC_X: {
                     BufferHistoryScope h(view.buffer);
 
                     ASSERT(!view.lines_dirty);
@@ -1652,52 +1652,52 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-            case VC_Y: {
+            case KC_Y: {
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     set_clipboard_data(buffer_read(view.buffer, r.start, r.end));
                 } break;
-            case VC_P:
+            case KC_P:
                 write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
                 break;
-            case VC_W:
+            case KC_W:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_byte_offset(buffer_seek_next_word(view.buffer, view.caret.byte_offset));
                 break;
-            case VC_B:
+            case KC_B:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_byte_offset(buffer_seek_prev_word(view.buffer, view.caret.byte_offset));
                 break;
-            case VC_J:
+            case KC_J:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_line(view.caret.wrapped_line+1);
                 break;
-            case VC_K:
+            case KC_K:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_line(view.caret.wrapped_line-1);
                 break;
-            case VC_I:
+            case KC_I:
                 app.next_mode = MODE_INSERT;
                 view.mark = view.caret;
                 break;
-            case VC_L:
+            case KC_L:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_H:
+            case KC_H:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_S:
+            case KC_S:
                 if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
                 break;
-            case VC_TAB: {
+            case KC_TAB: {
                     Buffer *buffer = get_buffer(view.buffer);
                     if (!buffer) break;
 
@@ -1777,30 +1777,30 @@ void app_event(InputEvent event)
             default: break;
             }
         } else if (app.mode == MODE_INSERT) {
-            switch (event.key.virtual_code) {
-            case VC_ESC:
+            switch (event.key.keycode) {
+            case KC_ESC:
                 app.next_mode = MODE_EDIT;
                 break;
-            case VC_LEFT:
+            case KC_LEFT:
                 view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_RIGHT:
+            case KC_RIGHT:
                 view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
                 ASSERT(!view.lines_dirty);
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case VC_ENTER: {
+            case KC_ENTER: {
                     BufferHistoryScope h(view.buffer);
                     ASSERT(!view.lines_dirty);
                     String indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
                     write_string(view.buffer, buffer_newline_str(view.buffer));
                     write_string(view.buffer, indent);
                 } break;
-            case VC_TAB: {
+            case KC_TAB: {
                     Buffer *buffer = get_buffer(view.buffer);
                     if (!buffer) break;
 
@@ -1822,7 +1822,7 @@ void app_event(InputEvent event)
                     }
 
                 } break;
-            case VC_BACKSPACE:
+            case KC_BACKSPACE:
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
@@ -1834,7 +1834,7 @@ void app_event(InputEvent event)
                         move_view_to_caret();
                     }
                 } break;
-            case VC_DELETE:
+            case KC_DELETE:
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
@@ -1851,14 +1851,14 @@ void app_event(InputEvent event)
         }
 
         if (app.mode == MODE_EDIT || app.mode == MODE_INSERT) {
-            switch (event.key.virtual_code) {
-            case VC_PAGE_DOWN:
+            switch (event.key.keycode) {
+            case KC_PAGE_DOWN:
                 // TODO(jesper: page up/down should take current caret line into account when moving
                 // view to caret, so that it remains where it was proportionally
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
                 view_seek_line(view.caret.wrapped_line+view.lines_visible-1);
                 break;
-            case VC_PAGE_UP:
+            case KC_PAGE_UP:
                 // TODO(jesper: page up/down should take current caret line into account when moving
                 // view to caret, so that it remains where it was proportionally
                 if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
@@ -2081,6 +2081,7 @@ void update_and_render(f32 /*dt*/)
 next_node:;
                 }
 
+                LOG_INFO("num items: %d, filtered: %d", app.lister.values.count, app.lister.filtered.count);
                 sort(scores, app.lister.filtered);
             }
         }

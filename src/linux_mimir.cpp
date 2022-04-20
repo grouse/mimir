@@ -42,6 +42,9 @@ int main(int argc, char **argv)
     init_app(args);
 
     timespec last_time = monotonic_time();
+    
+    DynamicArray<InputEvent> input_stream{};
+    array_reserve(&input_stream, 2);
 
     while (true) {
         timespec current_time = monotonic_time();
@@ -55,9 +58,6 @@ int main(int argc, char **argv)
 
         g_mouse.left_was_pressed = g_mouse.left_pressed;
         g_mouse.dwheel = 0;
-
-		DynamicArray<InputEvent> input_stream{};
-		array_reserve(&input_stream, 2);
 
         XEvent event;
         while (XPending(wnd.dsp)) {

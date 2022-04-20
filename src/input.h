@@ -10,65 +10,97 @@ enum InputEventType : u8 {
     IE_TEXT
 };
 
-enum VirtualCode : u8 {
-    VC_LEFT = 1,
-    VC_RIGHT,
-    VC_UP,
-    VC_DOWN,
-    VC_BACKSPACE,
-    VC_DELETE,
-    VC_ENTER,
-    VC_TAB,
-    VC_PAGE_UP,
-    VC_PAGE_DOWN,
-    VC_ESC,
-    VC_SPACE,
+enum KeyCode : u8 {
+    KC_UNKNOWN = 0,
     
-    VC_OPEN_BRACKET,  // [{ on US/UK
-    VC_CLOSE_BRACKET, // ]} on US/UK
+    KC_BACKSPACE,
+    KC_ENTER,
+    KC_TAB,
+    
+    KC_INSERT,
+    KC_DELETE,
+    KC_HOME,
+    KC_END,
+    KC_PAGE_UP,
+    KC_PAGE_DOWN,
+    
+    KC_SPACE,
+    
+    KC_LSHIFT,
+    KC_RSHIFT,
+    KC_CTRL,
+    KC_ALT,
+    
+    KC_LBRACKET,  // [{ on US/UK
+    KC_RBRACKET, // ]} on US/UK
+    KC_BACKSLASH,
+    KC_COLON,
+    KC_TICK,
+    KC_COMMA,
+    KC_PERIOD,
+    KC_SLASH,
+    
+    KC_1,
+    KC_2,
+    KC_3,
+    KC_4,
+    KC_5,
+    KC_6,
+    KC_7,
+    KC_8,
+    KC_9,
+    KC_0,
 
-    VC_F1,
-    VC_F2,
-    VC_F3,
-    VC_F4,
-    VC_F5,
-    VC_F6,
-    VC_F7,
-    VC_F8,
-    VC_F9,
-    VC_F10,
-    VC_F11,
-    VC_F12,
+    KC_GRAVE,
+    KC_MINUS,
+    KC_PLUS,
+    
+    KC_ESC,
 
-    VC_A,
-    VC_B,
-    VC_C,
-    VC_D,
-    VC_E,
-    VC_F,
-    VC_G,
-    VC_H,
-    VC_I,
-    VC_J,
-    VC_K,
-    VC_L,
-    VC_M,
-    VC_N,
-    VC_O,
-    VC_P,
-    VC_Q,
-    VC_R,
-    VC_S,
-    VC_T,
-    VC_U,
-    VC_V,
-    VC_W,
-    VC_X,
-    VC_Y,
-    VC_Z
-};
+    KC_F1,
+    KC_F2,
+    KC_F3,
+    KC_F4,
+    KC_F5,
+    KC_F6,
+    KC_F7,
+    KC_F8,
+    KC_F9,
+    KC_F10,
+    KC_F11,
+    KC_F12,
 
-enum ScanCode : u8 {
+    KC_A,
+    KC_B,
+    KC_C,
+    KC_D,
+    KC_E,
+    KC_F,
+    KC_G,
+    KC_H,
+    KC_I,
+    KC_J,
+    KC_K,
+    KC_L,
+    KC_M,
+    KC_N,
+    KC_O,
+    KC_P,
+    KC_Q,
+    KC_R,
+    KC_S,
+    KC_T,
+    KC_U,
+    KC_V,
+    KC_W,
+    KC_X,
+    KC_Y,
+    KC_Z,
+
+    KC_LEFT,
+    KC_UP,
+    KC_DOWN,
+    KC_RIGHT,
 };
 
 enum ModifierFlags : u8 {
@@ -90,11 +122,10 @@ struct InputEvent {
             i16 x, y;
         } mouse;
         struct {
-            u32 virtual_code : 8;
-            u32 scan_code    : 8;
-            u32 modifiers    : 8;
-            u32 prev_state   : 1;
-            u32 unused       : 7;
+            u32 keycode    : 8;
+            u32 modifiers  : 8;
+            u32 prev_state : 1;
+            u32 unused     : 15;
         } key;
         struct {
             u8 c[4];

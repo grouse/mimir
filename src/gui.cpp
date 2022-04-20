@@ -921,22 +921,22 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_LEFT:
+                switch (e.key.keycode) {
+                case KC_LEFT:
                     gui.edit.cursor = utf8_decr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
                     gui.edit.cursor = MAX(0, gui.edit.cursor);
                     gui.edit.selection = gui.edit.cursor;
                     break;
-                case VC_RIGHT:
+                case KC_RIGHT:
                     gui.edit.cursor = utf8_incr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
                     gui.edit.selection = gui.edit.cursor;
                     break;
-                case VC_A:
+                case KC_A:
                     if (e.key.modifiers == MF_CTRL) {
                         gui.edit.selection = 0;
                         gui.edit.cursor = gui.edit.length;
                     } break;
-                case VC_C:
+                case KC_C:
                     if (e.key.modifiers == MF_CTRL &&
                         gui.edit.cursor != gui.edit.selection)
                     {
@@ -946,7 +946,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                         String selected = slice({ gui.edit.buffer, gui.edit.length }, start, end);
                         set_clipboard_data(selected);
                     } break;
-                case VC_V:
+                case KC_V:
                     if (e.key.modifiers == MF_CTRL) {
                         i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                         i32 end = MAX(gui.edit.cursor, gui.edit.selection);
@@ -976,7 +976,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                         gui.edit.length = gui.edit.length - (end-start) + str.length;
                         action |= GUI_EDITBOX_CHANGE;
                     } break;
-                case VC_DELETE:
+                case KC_DELETE:
                     if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor < gui.edit.length) {
                         i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                         i32 end = MAX(gui.edit.cursor, gui.edit.selection);
@@ -991,7 +991,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                         gui.edit.offset = MIN(gui.edit.offset, new_offset);
                         action |= GUI_EDITBOX_CHANGE;
                     } break;
-                case VC_BACKSPACE:
+                case KC_BACKSPACE:
                     if (gui.edit.cursor != gui.edit.selection || gui.edit.cursor > 0) {
                         i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                         i32 end = MAX(gui.edit.cursor, gui.edit.selection);
@@ -1003,11 +1003,11 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                         gui.edit.offset = MIN(gui.edit.offset, codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length}, gui.edit.cursor));
                         action |= GUI_EDITBOX_CHANGE;
                     }  break;
-                case VC_ENTER:
+                case KC_ENTER:
                     action |= GUI_EDITBOX_FINISH;
                     gui.focused = GUI_ID_INVALID;
                     break;
-                case VC_ESC:
+                case KC_ESC:
                     action |= GUI_EDITBOX_CANCEL;
                     gui.focused = GUI_ID_INVALID;
                     break;
@@ -1403,8 +1403,8 @@ bool gui_begin_window_id(
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_Q:
+                switch (e.key.keycode) {
+                case KC_Q:
                     if (e.key.modifiers == MF_CTRL) {
                         gui.focused_window = GUI_ID_INVALID;
 
@@ -1526,8 +1526,8 @@ void gui_end_window()
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_ESC:
+                switch (e.key.keycode) {
+                case KC_ESC:
                     gui.focused_window = GUI_ID_INVALID;
                     break;
                 default: break;
@@ -2273,8 +2273,8 @@ void gui_end_menu()
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_ESC: menu->active = false; break;
+                switch (e.key.keycode) {
+                case KC_ESC: menu->active = false; break;
                 }
                 break;
             default: break;
@@ -2571,16 +2571,16 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
         for (InputEvent e : gui.events) {
             switch (e.type) {
             case IE_KEY_PRESS:
-                switch (e.key.virtual_code) {
-                case VC_DOWN:
+                switch (e.key.keycode) {
+                case KC_DOWN:
                     next_selected_item = MIN((*selected_item)+1, items.count-1);
                     break;
-                case VC_UP:
+                case KC_UP:
                     next_selected_item = MAX((*selected_item)-1, 0);
                     break;
-                case VC_ESC:
+                case KC_ESC:
                     return GUI_LISTER_CANCEL;
-                case VC_ENTER:
+                case KC_ENTER:
                     *selected_item = next_selected_item;
                     return GUI_LISTER_FINISH;
                 default: break;

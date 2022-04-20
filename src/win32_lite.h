@@ -98,6 +98,10 @@
 #define WM_CLOSE                        0x0010
 #define WM_KEYDOWN                      0x0100
 #define WM_KEYUP                        0x0101
+
+#define WM_SYSKEYDOWN                   0x0104
+#define WM_SYSKEYUP                     0x0105
+
 #define WM_MOUSEMOVE                    0x0200
 #define WM_MOUSEWHEEL                   0x020A
 #define WM_LBUTTONDOWN                  0x0201

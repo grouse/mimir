@@ -73,10 +73,16 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
         g_mouse.middle_pressed = false;
         app.animating = true;
         break;
+        
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
     case WM_SIZING:
     case WM_ENTERSIZEMOVE:
     case WM_EXITSIZEMOVE:
-        break;
+        return 0;
+        
     case WM_SIZE: {
             // NOTE(jesper): we end up here as soon as the window is created
             if (!has_init) break;
