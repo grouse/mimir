@@ -2455,4 +2455,6 @@ next_node:;
     // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
     // be deferred.
     app.mode = app.next_mode;
+    if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
+    else disable_text_input();
 }

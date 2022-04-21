@@ -110,7 +110,6 @@ enum ModifierFlags : u8 {
     MF_SHIFT = 1 << 2,
 };
 
-
 struct InputEvent {
     InputEventType type;
     union {
@@ -135,5 +134,9 @@ struct InputEvent {
     };
 };
 
+String string_from_enum(KeyCode kc);
+
+void enable_text_input();
+void disable_text_input();
 
 #endif //INPUT_H
