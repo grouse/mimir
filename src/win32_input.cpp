@@ -111,27 +111,35 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
             event.type = IE_MOUSE_WHEEL;
             event.mouse_wheel.delta = delta;
         } break;
+    case WM_MOUSEMOVE:
+        event.type = IE_MOUSE_MOVE;
+        event.mouse.x = lparam & 0xFFFF;
+        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        if (wparam & MK_LBUTTON) event.mouse.button |= MB_PRIMARY;
+        if (wparam & MK_RBUTTON) event.mouse.button |= MB_SECONDARY;
+        if (wparam & MK_MBUTTON) event.mouse.button |= MB_MIDDLE;
+        break;
     case WM_LBUTTONDOWN:
         event.type = IE_MOUSE_PRESS;
-        event.mouse.button = 1;
+        event.mouse.button = MB_PRIMARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_LBUTTONUP:
         event.type = IE_MOUSE_RELEASE;
-        event.mouse.button = 1;
+        event.mouse.button = MB_PRIMARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_RBUTTONDOWN:
         event.type = IE_MOUSE_PRESS;
-        event.mouse.button = 2;
+        event.mouse.button = MB_SECONDARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_RBUTTONUP:
         event.type = IE_MOUSE_RELEASE;
-        event.mouse.button = 2;
+        event.mouse.button = MB_SECONDARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;

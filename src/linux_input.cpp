@@ -5,10 +5,8 @@ struct {
 struct MouseState {
     i16 x, y;
     i16 dx, dy;
-    f32 dwheel;
     bool left_pressed;
     bool left_was_pressed;
-    bool middle_pressed;
 };
 
 MouseState g_mouse{};

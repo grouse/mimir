@@ -21,10 +21,8 @@ Allocator mem_frame;
 struct MouseState {
     i16 x, y;
     i16 dx, dy;
-    f32 dwheel;
     bool left_pressed;
     bool left_was_pressed;
-    bool middle_pressed;
 };
 
 MouseState g_mouse{};
@@ -46,10 +44,6 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     case WM_CLOSE:
         exit(0);
         break;
-    case WM_MOUSEWHEEL:
-        g_mouse.dwheel = (i16)((wparam >> 16) & 0xFFFF) / 120;
-        app.animating = true;
-        break;
     case WM_MOUSEMOVE:
         g_mouse.x = lparam & 0xFFFF;
         g_mouse.y = (lparam >> 16) & 0xFFFF;
@@ -66,14 +60,15 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
         app.animating = true;
         break;
     case WM_MBUTTONDOWN:
-        g_mouse.middle_pressed = true;
         app.animating = true;
         break;
     case WM_MBUTTONUP:
-        g_mouse.middle_pressed = false;
         app.animating = true;
         break;
         
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MOUSEWHEEL:
     case WM_KEYDOWN:
     case WM_KEYUP:
     case WM_SYSKEYDOWN:
@@ -205,7 +200,6 @@ int WINAPI wWinMain(
         u16 old_x = g_mouse.x;
         u16 old_y = g_mouse.y;
         g_mouse.left_was_pressed = g_mouse.left_pressed;
-        g_mouse.dwheel = 0;
 
         MSG msg;
         while (!app_needs_render() && GetMessageA(&msg, nullptr, 0, 0)) {
@@ -227,7 +221,6 @@ int WINAPI wWinMain(
         gui.mouse.dy = g_mouse.dy;
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
-        gui.mouse.middle_pressed = g_mouse.middle_pressed;
 
         update_and_render(dt);
         SwapBuffers(wnd.hdc);

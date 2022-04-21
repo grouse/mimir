@@ -1548,6 +1548,32 @@ void write_string(BufferId buffer_id, String str, u32 flags = 0)
     app.animating = true;
 }
 
+void set_caret_xy(i64 x, i64 y)
+{
+    Buffer *buffer = get_buffer(view.buffer);
+    if (!buffer) return;
+
+    ASSERT(!view.lines_dirty);
+    i64 wrapped_line = view.line_offset + (y - view.rect.pos.y + view.voffset) / app.mono.line_height;
+    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
+
+    while (view.caret.wrapped_line > wrapped_line) {
+        if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
+        view.caret.wrapped_line--;
+    }
+
+    while (view.caret.wrapped_line < wrapped_line) {
+        if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
+        view.caret.wrapped_line++;
+    }
+
+    i64 wrapped_column = (x - view.rect.pos.x) / app.mono.space_width;
+    view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, wrapped_column, view.lines, buffer);
+    view.caret.preferred_column = view.caret.wrapped_column;
+    view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
+    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+}
+
 void app_event(InputEvent event)
 {
     if (gui_input(event)) {
@@ -1868,37 +1894,26 @@ void app_event(InputEvent event)
             }
         }
         break;
-    case IE_KEY_RELEASE: break;
+    case IE_MOUSE_MOVE:
+        if (gui.hot == view.gui_id && event.mouse.button == MB_PRIMARY) {
+            if (event.mouse.x >= view.rect.pos.x &&
+                event.mouse.x <= view.rect.pos.x + view.rect.size.x &&
+                event.mouse.y >= view.rect.pos.y &&
+                event.mouse.y <= view.rect.pos.y + view.rect.size.y) 
+            {
+                set_caret_xy(event.mouse.x, event.mouse.y);
+                app.animating = true;
+            }
+        } break;
     case IE_MOUSE_PRESS:
-        if (gui.hot == view.gui_id && event.mouse.button == 1) {
+        if (gui.hot == view.gui_id && event.mouse.button == MB_PRIMARY) {
             if (event.mouse.x >= view.rect.pos.x &&
                 event.mouse.x <= view.rect.pos.x + view.rect.size.x &&
                 event.mouse.y >= view.rect.pos.y &&
                 event.mouse.y <= view.rect.pos.y + view.rect.size.y)
             {
-                Buffer *buffer = get_buffer(view.buffer);
-                if (!buffer) break;
-
-                ASSERT(!view.lines_dirty);
-                i64 wrapped_line = view.line_offset + (event.mouse.y - view.rect.pos.y + view.voffset) / app.mono.line_height;
-                wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
-
-                while (view.caret.wrapped_line > wrapped_line) {
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
-                    view.caret.wrapped_line--;
-                }
-
-                while (view.caret.wrapped_line < wrapped_line) {
-                    if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-                    view.caret.wrapped_line++;
-                }
-
-                i64 wrapped_column = (event.mouse.x - view.rect.pos.x) / app.mono.space_width;
-                view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, wrapped_column, view.lines, buffer);
-                view.caret.preferred_column = view.caret.wrapped_column;
-                view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-                view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
-
+                set_caret_xy(event.mouse.x, event.mouse.y);
+                view.mark = view.caret;
                 app.animating = true;
             }
         } break;

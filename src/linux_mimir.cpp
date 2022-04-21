@@ -57,7 +57,6 @@ int main(int argc, char **argv)
         RESET_ALLOC(mem_frame);
 
         g_mouse.left_was_pressed = g_mouse.left_pressed;
-        g_mouse.dwheel = 0;
 
         XEvent event;
         while (XPending(wnd.dsp)) {
@@ -104,7 +103,6 @@ int main(int argc, char **argv)
         gui.mouse.dy = g_mouse.dy;
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
-        gui.mouse.middle_pressed = g_mouse.middle_pressed;
 
         update_and_render(dt);
         glXSwapBuffers(wnd.dsp, wnd.handle);

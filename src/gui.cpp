@@ -314,7 +314,7 @@ void gui_end_frame()
     gui.events.count = 0;
     gui.capture_text[0] = gui.capture_text[1];
     gui.capture_text[1] = false;
-
+    
     gui.capture_keyboard[0] = gui.capture_keyboard[1];
     gui.capture_keyboard[1] = false;
 
@@ -916,7 +916,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
         gui.edit.offset = gui.edit.cursor = gui.edit.selection = 0;
     }
-
+    
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
@@ -2673,9 +2673,6 @@ bool gui_input(InputEvent event)
             array_add(&gui.events, event);
             return true;
         }
-        break;
-    case IE_MOUSE_PRESS:
-    case IE_MOUSE_RELEASE:
         break;
     case IE_KEY_RELEASE:
     case IE_KEY_PRESS:

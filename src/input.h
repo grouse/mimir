@@ -5,9 +5,10 @@ enum InputEventType : u8 {
     IE_MOUSE_WHEEL = 1,
     IE_MOUSE_PRESS,
     IE_MOUSE_RELEASE,
+    IE_MOUSE_MOVE,
     IE_KEY_PRESS,
     IE_KEY_RELEASE,
-    IE_TEXT
+    IE_TEXT,
 };
 
 enum KeyCode : u8 {
@@ -110,8 +111,14 @@ enum ModifierFlags : u8 {
     MF_SHIFT = 1 << 2,
 };
 
+enum MouseButton : u8 {
+    MB_PRIMARY = 1 << 0,
+    MB_SECONDARY = 1 << 1,
+    MB_MIDDLE = 1 << 2,
+};
+
 struct InputEvent {
-    InputEventType type;
+    u8 type;
     union {
         struct {
             i32 delta;
