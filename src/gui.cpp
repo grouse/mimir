@@ -2460,7 +2460,6 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
 
     f32 scroll_to_total = total_height/scroll_size.y;
     f32 total_to_scroll = scroll_size.y/total_height;
-    f32 yh = total_size.y*total_to_scroll;
 
     f32 max_c = total_height > total_size.y ? total_height - total_size.y : 0;
 
@@ -2492,8 +2491,16 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
 
     //if (total_height > total_size.y)
     {
+        f32 min_h = 4.0f;
+        
+        f32 yh = total_size.y*total_to_scroll;
         f32 y0 = *current*total_to_scroll;
-        f32 y1 = y0 + yh;
+        f32 y1 = MIN(y0 + yh, scroll_size.y);
+        
+        if (yh < min_h) {
+            y0 = MAX(0, y0-min_h/2);
+            y1 = MIN(scroll_size.y, y0+min_h);
+        }
 
         Vector2 scroll_handle_p{ scroll_pos.x, scroll_pos.y + y0 };
         Vector2 scroll_handle_s{ gui.style.scrollbar.thickness, y1 - y0 };
