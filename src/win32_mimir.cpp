@@ -3,10 +3,8 @@
 
 #include "mimir.cpp"
 
-#include "win32_core.cpp"
 #include "win32_opengl.cpp"
 #include "win32_file.cpp"
-#include "input.cpp"
 #include "win32_process.cpp"
 #include "win32_thread.cpp"
 
@@ -132,6 +130,7 @@ int WINAPI wWinMain(
 {
     init_default_allocators();
     mem_frame = linear_allocator(100*1024*1024);
+    init_core(0, NULL);
 
     Vector2 resolution{ 1280, 720 };
 
@@ -145,7 +144,7 @@ int WINAPI wWinMain(
     win32_root_window = wnd.hwnd;
 
     init_gfx(resolution);
-
+    
     Array<String> args{};
 
     // NOTE(jesper): CommandLineToArgvW sets the first argument string to the executable
@@ -193,9 +192,10 @@ int WINAPI wWinMain(
 
         f32 dt = (f32)elapsed / frequency.QuadPart;
         if (debugger_attached()) dt = MIN(dt, 0.1f);
-
+        
         RESET_ALLOC(mem_tmp);
         RESET_ALLOC(mem_frame);
+        
 
         u16 old_x = g_mouse.x;
         u16 old_y = g_mouse.y;
@@ -221,9 +221,12 @@ int WINAPI wWinMain(
         gui.mouse.dy = g_mouse.dy;
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
-
+        
         update_and_render(dt);
         SwapBuffers(wnd.hdc);
+        
+        SetCursor(cursors[current_cursor]);
+        set_cursor(CURSOR_NORMAL);
     }
 
     return 0;

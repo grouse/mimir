@@ -10,6 +10,7 @@
 #include "string.cpp"
 #include "allocator.cpp"
 #include "core.cpp"
+#include "input.cpp"
 #include "gfx_opengl.cpp"
 #include "assets.cpp"
 #include "font.cpp"

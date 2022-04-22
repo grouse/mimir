@@ -3,6 +3,12 @@
 
 #include "win32_lite.h"
 
+#define MAKEINTRESOURCEA(i) ((LPSTR)((ULONG_PTR)((WORD)(i))))
+#define MAKEINTRESOURCE MAKEINTRESOURCEA
+
+#define IDC_SIZENWSE MAKEINTRESOURCE(32642)
+#define IDC_ARROW MAKEINTRESOURCE(32512)
+
 extern "C" {
     BOOL OpenClipboard(HWND hWndNewOwner);
     BOOL CloseClipboard();
@@ -50,7 +56,8 @@ extern "C" {
     HWND SetCapture(HWND hWnd);
     BOOL ReleaseCapture();
     
-
+    HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName);
+    HCURSOR SetCursor(HCURSOR hCursor);
 }
 
 #endif // WIN32_USER32_H

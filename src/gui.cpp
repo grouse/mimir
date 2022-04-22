@@ -1424,7 +1424,7 @@ bool gui_begin_window_id(
 
     Vector3 title_bg = gui.focused_window != id
         ? gui.style.bg_dark0
-        : gui.pressed == title_id ? gui.style.accent_bg_press : gui.hot == title_id ? gui.style.accent_bg_hot : gui.style.accent_bg;
+        : gui.hot == title_id ? gui.style.accent_bg_hot : gui.style.accent_bg;
 
     Vector2 title_pos = wnd->pos + window_border + Vector2{ 2.0f, 2.0f };
 
@@ -1489,6 +1489,8 @@ void gui_end_window()
         Vector2 resize_bl{ br.x - 10.0f, br.y };
 
         if (gui.hot == resize_id) {
+            set_cursor(CURSOR_SIZE_NW_SE);
+            
             if (gui.pressed != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 gui.pressed = resize_id;
                 gui_drag_start(wnd->size);

@@ -1,8 +1,22 @@
+#include "core.h"
+
 #include "win32_core.h"
 #include "win32_user32.h"
 
-#include "core.h"
+Cursor current_cursor;
+HCURSOR cursors[CURSOR_MAX];
 
+void init_core(int /*argc*/, char ** /*argv*/)
+{
+    cursors[CURSOR_NORMAL] = LoadCursorA(NULL, IDC_ARROW);
+    cursors[CURSOR_SIZE_NW_SE] = LoadCursorA(NULL, IDC_SIZENWSE);
+}
+
+void set_cursor(Cursor c)
+{
+    if (c != current_cursor) LOG_INFO("new cursor: %d, handle: %p", c, cursors[c]);
+    current_cursor = c;
+}
 
 bool debugger_attached()
 {
@@ -197,3 +211,4 @@ void win32_client_rect(HWND hwnd, f32 *x, f32 *y)
         *y = (f32)(client_rect.bottom - client_rect.top);
     }
 }
+               

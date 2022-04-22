@@ -92,8 +92,6 @@
 
 #define SW_SHOW 5
 
-#define IDC_ARROW           MAKEINTRESOURCEA(32512)
-
 #define MK_LBUTTON 0x0001
 #define MK_RBUTTON 0x0002
 #define MK_SHIFT 0x0004
@@ -125,6 +123,7 @@
 #define WM_SIZING                       0x0214
 #define WM_ENTERSIZEMOVE                0x0231
 #define WM_EXITSIZEMOVE                 0x0232
+#define WM_SETCURSOR                    0x0020
 
 #define SIZE_MAXHIDE 4
 #define SIZE_MAXIMIZED 2
