@@ -82,6 +82,10 @@ struct Application {
     Vector3 caret_fg = rgb_unpack(0xFFEF5F0A);
     Vector3 caret_bg = rgb_unpack(0xFF8a523f);
     Vector3 line_bg = rgb_unpack(0xFF264041);
+    
+    struct {
+        GLuint build;
+    } icons;
 };
 
 struct BufferHistory {
@@ -456,6 +460,8 @@ void init_app(Array<String> args)
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
 
     init_gui();
+    
+    if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
 
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
 
@@ -1575,6 +1581,17 @@ void set_caret_xy(i64 x, i64 y)
     view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
 }
 
+void exec_process_command()
+{
+    if (app.process_commands.count > 0) {
+        ProcessCommand *cmd = &app.process_commands[app.selected_process];
+        if (!cmd->process || get_exit_code(cmd->process)) {
+            release_process(cmd->process);
+            cmd->process = create_process(cmd->exe, cmd->args, [](String s) { LOG_INFO("%.*s", STRFMT(s)); });
+        }
+    }
+}
+
 void app_event(InputEvent event)
 {
     if (gui_input(event)) {
@@ -1600,15 +1617,7 @@ void app_event(InputEvent event)
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.keycode) {
-            case KC_F5:
-                if (app.process_commands.count > 0) {
-                    ProcessCommand *cmd = &app.process_commands[app.selected_process];
-                    if (!cmd->process || get_exit_code(cmd->process)) {
-                        release_process(cmd->process);
-                        cmd->process = create_process(cmd->exe, cmd->args, [](String s) { LOG_INFO("%.*s", STRFMT(s)); });
-                    }
-                }
-                break;
+            case KC_F5: exec_process_command(); break;
             case KC_Q:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                 ASSERT(!view.lines_dirty);
@@ -1629,12 +1638,8 @@ void app_event(InputEvent event)
                 ASSERT(!view.lines_dirty);
                 view_seek_line(buffer_seek_prev_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
                 break;
-            case KC_U:
-                buffer_undo(view.buffer);
-                break;
-            case KC_R:
-                buffer_redo(view.buffer);
-                break;
+            case KC_U: buffer_undo(view.buffer); break;
+            case KC_R: buffer_redo(view.buffer); break;
             case KC_M:
                 if (event.key.modifiers == MF_CTRL) SWAP(view.mark, view.caret);
                 else view.mark = view.caret;
@@ -1724,10 +1729,8 @@ void app_event(InputEvent event)
             case KC_S:
                 if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
                 break;
-            case KC_TAB: {
-                    Buffer *buffer = get_buffer(view.buffer);
-                    if (!buffer) break;
-
+            case KC_TAB:
+                if (auto buffer = get_buffer(view.buffer); buffer) {
                     if (event.key.modifiers & MF_SHIFT) {
                         Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
                         if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
@@ -1896,27 +1899,21 @@ void app_event(InputEvent event)
         }
         break;
     case IE_MOUSE_MOVE:
-        if (gui.hot == view.gui_id && event.mouse.button == MB_PRIMARY) {
-            if (event.mouse.x >= view.rect.pos.x &&
-                event.mouse.x <= view.rect.pos.x + view.rect.size.x &&
-                event.mouse.y >= view.rect.pos.y &&
-                event.mouse.y <= view.rect.pos.y + view.rect.size.y) 
-            {
-                set_caret_xy(event.mouse.x, event.mouse.y);
-                app.animating = true;
-            }
+        if (gui.hot == view.gui_id && 
+            event.mouse.button == MB_PRIMARY && 
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect)) 
+        {
+            set_caret_xy(event.mouse.x, event.mouse.y);
+            app.animating = true;
         } break;
     case IE_MOUSE_PRESS:
-        if (gui.hot == view.gui_id && event.mouse.button == MB_PRIMARY) {
-            if (event.mouse.x >= view.rect.pos.x &&
-                event.mouse.x <= view.rect.pos.x + view.rect.size.x &&
-                event.mouse.y >= view.rect.pos.y &&
-                event.mouse.y <= view.rect.pos.y + view.rect.size.y)
-            {
-                set_caret_xy(event.mouse.x, event.mouse.y);
-                view.mark = view.caret;
-                app.animating = true;
-            }
+        if (gui.hot == view.gui_id && 
+            event.mouse.button == MB_PRIMARY && 
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect)) 
+        {
+            set_caret_xy(event.mouse.x, event.mouse.y);
+            view.mark = view.caret;
+            app.animating = true;
         } break;
     case IE_MOUSE_WHEEL:
         // TODO(jesper): make a decision/option whether this should be moving
@@ -1979,6 +1976,7 @@ void update_and_render(f32 /*dt*/)
 
         if (app.process_commands.count > 0) {
             app.selected_process = gui_dropdown(app.process_command_names, app.selected_process);
+            if (gui_button(16, app.icons.build)) exec_process_command();
         }
     }
 

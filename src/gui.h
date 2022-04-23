@@ -199,7 +199,7 @@ struct GuiContext {
 
     GuiId active_menu = GUI_ID_INVALID;
 
-    i32 current_window;
+    i32 current_window = GUI_BACKGROUND;
     DynamicArray<GuiWindow> windows;
     DynamicArray<GuiLister> listers;
     DynamicArray<GuiMenu> menus;
@@ -221,8 +221,6 @@ struct GuiContext {
     Vector2 drag_start_mouse;
     Vector2 drag_start_data;
     Vector2 drag_start_data1;
-
-    Camera camera;
 
     struct {
         i16 x, y;
@@ -293,10 +291,13 @@ extern GuiContext gui;
 void init_gui();
 void gui_begin_frame();
 bool gui_input(InputEvent event);
-void gui_render(Camera camera);
+void gui_render();
 
 void gui_begin_layout(GuiLayout layout);
 void gui_end_layout();
+Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
+Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
+Rect gui_layout_widget_fill();
 
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool visible, u32 flags = GUI_WINDOW_DEFAULT);
 bool gui_begin_window_id(GuiId id, String title, Vector2 pos, Vector2 size, bool *visible, u32 flags = GUI_WINDOW_DEFAULT);
@@ -310,19 +311,17 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_str);
 GuiEditboxAction gui_editbox_id(GuiId id, String initial_str, f32 width);
 GuiEditboxAction gui_editbox_id(GuiId id, f32 *value, f32 width);
 
-Vector2 gui_layout_widget(Vector2 preferred_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
-Vector2 gui_layout_widget(Vector2 *required_size, GuiAnchor anchor = GUI_ANCHOR_TOP);
-Rect gui_layout_widget_fill();
-
 bool gui_button_id(GuiId id, String text);
 bool gui_button_id(GuiId id, String text, Vector2 size);
 bool gui_button_id(GuiId id, FontAtlas *font, TextQuadsAndBounds td, Vector2 size);
+bool gui_button_id(GuiId id, f32 icon_width, GLuint icon);
+bool gui_button_id(GuiId id, Vector2 pos, Vector2 size);
+bool gui_button_id(GuiId id, Vector2 pos, Vector2 size, GLuint icon);
 
 bool gui_checkbox_id(GuiId id, String label, bool *checked);
 
 i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index);
 i32 gui_dropdown_id(GuiId id, String* labels, i32 count, i32 current_index);
-
 template<typename T> i32 gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value = nullptr);
 template<typename T> i32 gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value = nullptr);
 template<typename T> T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value);

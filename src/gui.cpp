@@ -33,14 +33,6 @@ void init_gui()
     };
     array_add(&gui.windows, overlay);
     
-    gui.current_window = GUI_BACKGROUND;
-
-    gui.camera.projection = matrix4_identity();
-    gui.camera.projection[0][0] = 2.0f / gfx.resolution.x;
-    gui.camera.projection[1][1] = 2.0f / gfx.resolution.y;
-    gui.camera.projection[3][1] = -1.0f;
-    gui.camera.projection[3][0] = -1.0f;
-    
     if (auto a = find_asset("textures/close.png"); a) gui.icons.close = gfx_load_texture(a->data, a->size);
     if (auto a = find_asset("textures/check.png"); a) gui.icons.check = gfx_load_texture(a->data, a->size);
     if (auto a = find_asset("textures/down.png"); a) gui.icons.down = gfx_load_texture(a->data, a->size);
@@ -238,16 +230,7 @@ bool apply_clip_rect(Vector2 *pos, Vector2 *size, Rect clip_rect)
 
 bool gui_mouse_over_rect(Vector2 pos, Vector2 size)
 {
-    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 rel = mouse - pos;
-
-    if ((rel.x >= 0.0f && rel.x < size.x &&
-         rel.y >= 0.0f && rel.y < size.y))
-    {
-        return true;
-    }
-
-    return false;
+    return point_in_rect( { (f32)gui.mouse.x, (f32)gui.mouse.y }, Rect{ pos, size });
 }
 
 Rect gui_layout_rect(GuiLayout *cl)
@@ -276,6 +259,7 @@ void gui_begin_frame()
 
     array_reset(&gui.vertices, mem_frame, gui.vertices.count);
     array_reset(&gui.layout_stack, mem_frame, gui.layout_stack.count);
+    array_reset(&gui.overlay_rects, mem_frame, gui.overlay_rects.count);
 
     // NOTE(jesper): when resolution changes the root and overlay "windows" have to adjust their
     // clip rects as well
@@ -336,7 +320,6 @@ void gui_end_frame()
             break;
         }
     }
-    gui.overlay_rects.count = 0;
 
     if (gui.hot_window == GUI_ID_INVALID) {
         for (i32 i = gui.windows.count-1; i > GUI_OVERLAY; i--) {
@@ -358,9 +341,7 @@ void gui_end_frame()
 void gui_render()
 {
     gfx_submit_commands(gui.windows[GUI_BACKGROUND].command_buffer);
-    for (i32 i = 2; i < gui.windows.count; i++) {
-        gfx_submit_commands(gui.windows[i].command_buffer);
-    }
+    for (auto &wnd : slice(gui.windows, 2)) gfx_submit_commands(wnd.command_buffer);
     gfx_submit_commands(gui.windows[GUI_OVERLAY].command_buffer);
 }
 
@@ -806,12 +787,21 @@ void gui_draw_accent_button(GuiId id, Vector2 pos, Vector2 size)
     gui_draw_rect(pos + Vector2{ 1.0f, 1.0f }, size - Vector2{ 2.0f, 2.0f }, wnd->clip_rect, btn_bg);
 }
 
-
-bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
+bool gui_button_id(GuiId id, f32 icon_width, GLuint icon)
 {
+    f32 margin = 6;
+    Vector2 total_size{ icon_width+margin, icon_width+margin };
+    Vector2 pos = gui_layout_widget(&total_size);
+    
+    Vector2 size{ icon_width+margin, icon_width+margin };
+    pos.y = floorf(pos.y + (total_size.y-size.y)/2);
+    
     gui_hot_rect(id, pos, size);
     bool clicked = gui_clicked(id);
+    
     gui_draw_button(id, pos, size);
+    gui_draw_rect({ pos.x+margin/2, pos.y+margin/2 }, { icon_width, icon_width }, icon);
+    
     return clicked;
 }
 
@@ -826,6 +816,13 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size, GLuint icon)
     return clicked;
 }
 
+bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
+{
+    gui_hot_rect(id, pos, size);
+    bool clicked = gui_clicked(id);
+    gui_draw_button(id, pos, size);
+    return clicked;
+}
 
 bool gui_button_id(GuiId id, FontAtlas *font, TextQuadsAndBounds td, Vector2 size)
 {
@@ -2193,7 +2190,8 @@ bool gui_begin_menu_id(GuiId id)
         .type = GUI_LAYOUT_COLUMN,
         .pos = pos,
         .size = size,
-        .column.spacing = 1.0f,
+        .margin = 5,
+        .column.spacing = 5.0f,
     };
     gui_begin_layout(layout);
 
@@ -2216,7 +2214,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     menu->draw_index = gui.windows[GUI_OVERLAY].command_buffer.commands.count;
 
     TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
-    Vector2 text_offset{ 5.0f, 5.0f };
+    Vector2 text_offset{ 0.0f, 5.0f };
 
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);

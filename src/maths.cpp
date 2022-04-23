@@ -330,6 +330,13 @@ bool point_in_rect(Vector2 p, Vector2 center, Vector2 size)
     return point_in_rect(p, tl, tr, br, bl);
 }
 
+bool point_in_rect(Vector2 p, Rect r)
+{
+    return 
+        p.x >= r.pos.x && p.x <= r.pos.x + r.size.x &&
+        p.y >= r.pos.y && p.y <= r.pos.y + r.size.y;
+}
+
 bool line_intersect_line(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 *intersect_point)
 {
     Vector2 s1 = p1 - p0;
