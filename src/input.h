@@ -24,6 +24,8 @@ enum KeyCode : u8 {
     KC_END,
     KC_PAGE_UP,
     KC_PAGE_DOWN,
+    KC_SCLK,
+    KC_BREAK,
     
     KC_SPACE,
     
@@ -31,6 +33,9 @@ enum KeyCode : u8 {
     KC_RSHIFT,
     KC_CTRL,
     KC_ALT,
+    KC_LSUPER,
+    KC_RSUPER,
+    KC_APP,
     
     KC_LBRACKET,  // [{ on US/UK
     KC_RBRACKET, // ]} on US/UK

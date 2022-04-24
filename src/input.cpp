@@ -9,6 +9,11 @@
 String string_from_enum(KeyCode kc)
 {
     switch (kc) {
+    case KC_LSUPER: return "KC_LSUPER";
+    case KC_RSUPER: return "KC_RSUPER";
+    case KC_APP: return "KC_APP";
+    case KC_SCLK: return "KC_SCLK";
+    case KC_BREAK: return "KC_BREAK";
     case KC_UNKNOWN: return "KC_UNKNOWN";
     case KC_BACKSPACE: return "KC_BACKSPACE";
     case KC_ENTER: return "KC_ENTER";

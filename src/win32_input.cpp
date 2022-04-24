@@ -17,6 +17,7 @@ void disable_text_input()
 KeyCode keycode_from_scancode(u8 scancode)
 {
     switch (scancode) {
+    case 0x01: return KC_ESC;
     case 0x02: return KC_1;
     case 0x03: return KC_2;
     case 0x04: return KC_3;
@@ -44,6 +45,7 @@ KeyCode keycode_from_scancode(u8 scancode)
     case 0x1A: return KC_LBRACKET;
     case 0x1B: return KC_RBRACKET;
     case 0x1C: return KC_ENTER;
+    case 0x1D: return KC_CTRL;
     case 0x1E: return KC_A;
     case 0x1F: return KC_S;
     case 0x20: return KC_D;
@@ -69,10 +71,8 @@ KeyCode keycode_from_scancode(u8 scancode)
     case 0x34: return KC_PERIOD;
     case 0x35: return KC_SLASH;
     case 0x36: return KC_RSHIFT;
-    case 0x1D: return KC_CTRL;
     case 0x38: return KC_ALT;
     case 0x39: return KC_SPACE;
-    case 0x01: return KC_ESC;
     case 0x3B: return KC_F1;
     case 0x3C: return KC_F2;
     case 0x3D: return KC_F3;
@@ -83,18 +83,23 @@ KeyCode keycode_from_scancode(u8 scancode)
     case 0x42: return KC_F8;
     case 0x43: return KC_F9;
     case 0x44: return KC_F10;
+    case 0x45: return KC_BREAK;
+    case 0x46: return KC_SCLK;
+    case 0x47: return KC_HOME;
+    case 0x48: return KC_UP;
+    case 0x4B: return KC_LEFT;
+    case 0x49: return KC_PAGE_UP;
+    case 0x4D: return KC_RIGHT;
+    case 0x4F: return KC_END;
+    case 0x50: return KC_DOWN;
+    case 0x51: return KC_PAGE_DOWN;
     case 0x52: return KC_INSERT;
     case 0x53: return KC_DELETE;
-    case 0x4B: return KC_LEFT;
-    case 0x47: return KC_HOME;
-    case 0x4F: return KC_END;
-    case 0x48: return KC_UP;
-    case 0x50: return KC_DOWN;
-    case 0x49: return KC_PAGE_UP;
-    case 0x51: return KC_PAGE_DOWN;
-    case 0x4D: return KC_RIGHT;
     case 0x57: return KC_F11;
     case 0x58: return KC_F12;
+    case 0x5B: return KC_LSUPER;
+    case 0x5C: return KC_APP;
+    case 0x5D: return KC_RSUPER;
     }
     
     return KC_UNKNOWN;
