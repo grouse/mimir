@@ -2573,7 +2573,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x + 1, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
     defer { gui_end_layout(); };
 
-    i32 next_selected_item = MIN(*selected_item, items.count-1);
+    i32 next_selected_item = CLAMP(*selected_item, 0, items.count-1);
     if (gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {

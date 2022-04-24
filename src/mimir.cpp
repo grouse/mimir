@@ -815,6 +815,28 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
     return offset;
 }
 
+i64 calc_unwrapped_line(i32 wrapped_line, Array<BufferLine> lines)
+{
+    i32 line = wrapped_line;
+    while (line > 0 && lines[line].wrapped) line--;
+    return line;
+}
+
+i32 next_unwrapped_line(i32 line, Array<BufferLine> lines)
+{
+    i32 l = line;
+    while (l < lines.count-1 && lines[l+1].wrapped) l++;
+    return ++l;
+}
+
+i32 prev_unwrapped_line(i32 line, Array<BufferLine> lines)
+{
+    i32 l = line-1;
+    while (l > 0 && lines[l].wrapped) l--;
+    return l;
+}
+
+
 void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<BufferLine> lines)
 {
     if (new_wrapped_line == 0) {
@@ -993,6 +1015,11 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
         buffer->flat.size -= num_bytes;
 
         if (view.buffer == buffer_id) {
+#if 1
+            // TODO(jesper): shit is broken and I fucking despise the procedure at this point
+            view.lines.count = 0;
+            recalculate_line_wrap(0, &view.lines, view.buffer);
+#else
             i32 line = wrapped_line_from_offset(byte_start, view.caret.wrapped_line, view.lines);
 
 #if DEBUG_LINE_WRAP_RECALC && 0
@@ -1008,8 +1035,9 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 if (view.lines[i].offset <= start_offset)
                     array_remove_sorted(&view.lines, i--);
             }
-
+            
             recalculate_line_wrap(line, &view.lines, view.buffer);
+#endif
         }
 
         return true;
@@ -1135,12 +1163,18 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
 
     // TODO(jesper): multi-view support
     if (view.buffer == buffer_id) {
+#if 1
+        // TODO(jesper): shit is broken and I fucking despise the procedure at this point
+        view.lines.count = 0;
+        recalculate_line_wrap(0, &view.lines, view.buffer);
+#else
         i32 line = wrapped_line_from_offset(offset, view.caret.wrapped_line, view.lines);
         for (i32 i = line+1; i < view.lines.count; i++) {
             view.lines[i].offset += required_extra_space;
         }
 
         recalculate_line_wrap(line, &view.lines, view.buffer);
+#endif
     }
 
     if (record_history) {
@@ -1455,11 +1489,15 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
         caret.wrapped_line = MIN(caret.wrapped_line, lines.count-1);
         caret.wrapped_line = MAX(0, caret.wrapped_line);
 
-        while (caret.byte_offset < lines[caret.wrapped_line].offset) {
+        while (caret.wrapped_line > 0 && 
+               caret.byte_offset < lines[caret.wrapped_line].offset) 
+        {
             if (!lines[caret.wrapped_line--].wrapped) caret.line--;
         }
 
-        while (caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) {
+        while (caret.wrapped_line < lines.count-1 && 
+               caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) 
+        {
             if (!lines[++caret.wrapped_line].wrapped) caret.line++;
         }
     }
@@ -1732,11 +1770,19 @@ void app_event(InputEvent event)
             case KC_TAB:
                 if (auto buffer = get_buffer(view.buffer); buffer) {
                     if (event.key.modifiers & MF_SHIFT) {
-                        Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
-                        if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
+                        i32 line = calc_unwrapped_line(view.caret.wrapped_line, view.lines);
+                        Range_i32 r{ line, line };
+                        if (event.key.modifiers & MF_CTRL) {
+                            r = range_i32(line, calc_unwrapped_line(view.mark.wrapped_line, view.lines));
+                        }
 
                         BufferHistoryScope h(view.buffer);
-                        for (i32 l = r.start; l <= r.end; l++) {
+                        
+                        struct Edit { i64 offset; i32 bytes_to_remove; };
+                        DynamicArray<Edit> edits{ .alloc = mem_tmp };
+                        for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view.lines)) {
+                            i64 line_start = line_start_offset(l, view.lines);
+                            
                             String current_indent = get_indent_for_line(view.buffer, view.lines, l);
 
                             i32 vcol = 0;
@@ -1745,35 +1791,48 @@ void app_event(InputEvent event)
                                 if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
                                 else vcol += 1;
                             }
+                            i32 bytes_to_remove = i;
+                            
+                            if (i > 0) array_add(&edits, { line_start, bytes_to_remove });
+                        }
+                        
+                        bool recalc_caret = false, recalc_mark = false;
+                        for (i32 i = edits.count-1; i >= 0; i--) {
+                            Edit edit = edits[i];
+                            
+                            if (buffer_remove(view.buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
+                                if (view.caret.byte_offset >= edit.offset) {
+                                    view.caret.byte_offset -= edit.bytes_to_remove;
+                                    recalc_caret = true;
+                                }
 
-                            if (i > 0) {
-                                i64 line_start = line_start_offset(l, view.lines);
-
-                                if (buffer_remove(view.buffer, line_start, line_start+i)) {
-                                    if (view.caret.byte_offset >= line_start) {
-                                        view.caret.byte_offset -= i;
-                                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                                        move_view_to_caret();
-                                    }
-
-                                    if (view.mark.byte_offset > line_start) {
-                                        view.mark.byte_offset -= i;
-                                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
-                                        move_view_to_caret();
-                                    }
+                                if (view.mark.byte_offset > edit.offset) {
+                                    view.mark.byte_offset -= edit.bytes_to_remove;
+                                    recalc_mark = true;
                                 }
                             }
                         }
+                        
+                        if (recalc_caret) {
+                            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                            move_view_to_caret();
+                        }
+                        
+                        if (recalc_mark) {
+                            view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                        }
                     } else {
-                        Range_i32 r{ view.caret.wrapped_line, view.caret.wrapped_line };
-                        if (event.key.modifiers & MF_CTRL) r = range_i32(view.caret.wrapped_line, view.mark.wrapped_line);
-
+                        i32 line = calc_unwrapped_line(view.caret.wrapped_line, view.lines);
+                        Range_i32 r{ line, line };
+                        if (event.key.modifiers & MF_CTRL) {
+                            r = range_i32(line, calc_unwrapped_line(view.mark.wrapped_line, view.lines));
+                        }
+                        
                         BufferHistoryScope h(view.buffer);
-                        for (i32 l = r.start; l <= r.end; l++) {
+                        for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view.lines)) {
                             i64 line_start = line_start_offset(l, view.lines);
-
+                            
                             i64 new_offset;
-
                             if (buffer->indent_with_tabs) new_offset = buffer_insert(view.buffer, line_start, "\t");
                             else {
                                 String current_indent = get_indent_for_line(view.buffer, view.lines, l);
@@ -1783,8 +1842,7 @@ void app_event(InputEvent event)
                                     if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
                                     else vcol += 1;
                                 }
-
-
+                                
                                 i32 w = buffer->tab_width - vcol % buffer->tab_width;
                                 char *spaces = ALLOC_ARR(mem_tmp, char, w);
                                 memset(spaces, ' ', w);
