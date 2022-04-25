@@ -6,7 +6,7 @@
 #include "linux_input.cpp"
 #endif
 
-String string_from_enum(KeyCode kc)
+String string_from_enum(KeyCode_ kc)
 {
     switch (kc) {
     case KC_LSUPER: return "KC_LSUPER";

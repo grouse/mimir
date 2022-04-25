@@ -1,10 +1,7 @@
 #include "linux_opengl.h"
 #include "mimir.cpp"
 
-#include "linux_core.cpp"
 #include "linux_opengl.cpp"
-#include "linux_clipboard.cpp"
-#include "linux_input.cpp"
 #include "linux_process.cpp"
 #include "linux_thread.cpp"
 #include "linux_file.cpp"
@@ -30,6 +27,9 @@ int main(int argc, char **argv)
     load_opengl_procs();
     init_clipboard(wnd.dsp, wnd.handle);
 
+	core.cursors[MC_NORMAL] = XCreateFontCursor(wnd.dsp, XC_left_ptr);
+	core.cursors[MC_SIZE_NW_SE] = XCreateFontCursor(wnd.dsp, XC_bottom_right_corner);
+
 	Array<String> args{};
 	if (argc > 1) {
 		array_create(&args, argc-1);
@@ -42,7 +42,7 @@ int main(int argc, char **argv)
     init_app(args);
 
     timespec last_time = monotonic_time();
-    
+
     DynamicArray<InputEvent> input_stream{};
     array_reserve(&input_stream, 2);
 
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
             XNextEvent(wnd.dsp, &event);
 
 			input_stream.count = 0;
-			linux_input_event(&input_stream, &wnd, event);
+			linux_input_event(&input_stream, wnd.ic, event);
 			for (InputEvent e : input_stream) app_event(e);
 
             switch (event.type) {
@@ -107,6 +107,8 @@ int main(int argc, char **argv)
         update_and_render(dt);
         glXSwapBuffers(wnd.dsp, wnd.handle);
 
+        XDefineCursor(wnd.dsp, wnd.handle, core.cursors[core.current_cursor]);
+        set_cursor(MC_NORMAL);
     }
 
     return 0;

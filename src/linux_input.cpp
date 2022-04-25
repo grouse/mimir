@@ -1,5 +1,5 @@
 struct {
-	bool text;
+	bool text_input_enabled;
 } input;
 
 struct MouseState {
@@ -11,8 +11,22 @@ struct MouseState {
 
 MouseState g_mouse{};
 
-void linux_input_event(DynamicArray<InputEvent> *stream, LinuxWindow *wnd, XEvent xevent)
+#include "linux_clipboard.cpp"
+
+void enable_text_input()
 {
+	input.text_input_enabled = true;
+}
+
+void disable_text_input()
+{
+	input.text_input_enabled = false;
+}
+
+void linux_input_event(DynamicArray<InputEvent> *stream, XIC ic, XEvent xevent)
+{
+	static u16 key_state[256] = {0};
+
 	InputEvent event{};
 
 	switch (xevent.type) {
@@ -34,12 +48,12 @@ void linux_input_event(DynamicArray<InputEvent> *stream, LinuxWindow *wnd, XEven
         handle_clipboard_events(xevent);
         break;
 	case KeyPress:
-		if (false) log_key_event(xevent.xkey);
+		if (true) log_key_event(xevent.xkey);
 
-		if (input.text) {
+		if (input.text_input_enabled) {
 			InputEvent t{ .type = IE_TEXT };
 			t.text.length = Xutf8LookupString(
-				wnd->ic, &xevent.xkey,
+				ic, &xevent.xkey,
 				(char*)t.text.c, sizeof t.text.c,
 				nullptr, nullptr);
 

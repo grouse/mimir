@@ -11,13 +11,13 @@ enum InputEventType : u8 {
     IE_TEXT,
 };
 
-enum KeyCode : u8 {
+enum KeyCode_ : u8 {
     KC_UNKNOWN = 0,
-    
+
     KC_BACKSPACE,
     KC_ENTER,
     KC_TAB,
-    
+
     KC_INSERT,
     KC_DELETE,
     KC_HOME,
@@ -26,9 +26,9 @@ enum KeyCode : u8 {
     KC_PAGE_DOWN,
     KC_SCLK,
     KC_BREAK,
-    
+
     KC_SPACE,
-    
+
     KC_LSHIFT,
     KC_RSHIFT,
     KC_CTRL,
@@ -36,7 +36,7 @@ enum KeyCode : u8 {
     KC_LSUPER,
     KC_RSUPER,
     KC_APP,
-    
+
     KC_LBRACKET,  // [{ on US/UK
     KC_RBRACKET, // ]} on US/UK
     KC_BACKSLASH,
@@ -45,7 +45,7 @@ enum KeyCode : u8 {
     KC_COMMA,
     KC_PERIOD,
     KC_SLASH,
-    
+
     KC_1,
     KC_2,
     KC_3,
@@ -60,7 +60,7 @@ enum KeyCode : u8 {
     KC_GRAVE,
     KC_MINUS,
     KC_PLUS,
-    
+
     KC_ESC,
 
     KC_F1,
@@ -146,7 +146,7 @@ struct InputEvent {
     };
 };
 
-String string_from_enum(KeyCode kc);
+String string_from_enum(KeyCode_ kc);
 
 void enable_text_input();
 void disable_text_input();

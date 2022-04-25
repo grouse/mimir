@@ -16,7 +16,7 @@ GuiContext gui;
 void init_gui()
 {
     glGenBuffers(1, &gui.vbo);
-    
+
     GuiWindow background{
         .id = GUI_ID(0),
         .clip_rect = Rect{ { 0.0f, 0.0f }, { gfx.resolution.x, gfx.resolution.y } },
@@ -24,7 +24,7 @@ void init_gui()
         .size = gfx.resolution,
     };
     array_add(&gui.windows, background);
-    
+
     GuiWindow overlay{
         .id = GUI_ID(0),
         .clip_rect = Rect{ { 0.0f, 0.0f }, { gfx.resolution.x, gfx.resolution.y } },
@@ -32,7 +32,7 @@ void init_gui()
         .size = gfx.resolution,
     };
     array_add(&gui.windows, overlay);
-    
+
     if (auto a = find_asset("textures/close.png"); a) gui.icons.close = gfx_load_texture(a->data, a->size);
     if (auto a = find_asset("textures/check.png"); a) gui.icons.check = gfx_load_texture(a->data, a->size);
     if (auto a = find_asset("textures/down.png"); a) gui.icons.down = gfx_load_texture(a->data, a->size);
@@ -54,7 +54,7 @@ GuiWindow* gui_current_window()
     return &gui.windows[gui.current_window];
 }
 
-bool gui_capture(bool capture_var[2]) 
+bool gui_capture(bool capture_var[2])
 {
     // TODO(jesper): this GUI capture strategy is rather coarse. I'm thinking the widgets
     // need an API to signal exactly which events they want to grab, which can then be
@@ -62,7 +62,7 @@ bool gui_capture(bool capture_var[2])
     // to hierarchy, and pass any unhandled events back to the application for
     // a fall-through type thing
     capture_var[1] = true;
-    
+
     GuiWindow *wnd = &gui.windows[gui.current_window];
     return capture_var[0] && gui.focused_window == wnd->id;
 }
@@ -82,9 +82,9 @@ void gui_drag_start(Vector2 data, Vector2 data1)
 
 void gui_hot(GuiId id)
 {
-    if (gui.pressed == id || 
-        (gui.pressed == GUI_ID_INVALID && 
-         gui.hot_window == gui.windows[gui.current_window].id)) 
+    if (gui.pressed == id ||
+        (gui.pressed == GUI_ID_INVALID &&
+         gui.hot_window == gui.windows[gui.current_window].id))
     {
         gui.next_hot = id;
     }
@@ -99,7 +99,7 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
          rel.y >= 0.0f && rel.y < size.y))
     {
         gui_hot(id);
-    } 
+    }
 
     return gui.hot == id;
 }
@@ -126,7 +126,7 @@ bool gui_pressed(GuiId id)
     if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
         gui.pressed = id;
         return true;
-    } 
+    }
     return false;
 }
 
@@ -140,7 +140,7 @@ bool gui_drag(GuiId id, Vector2 data)
             gui.pressed = GUI_ID_INVALID;
         }
     }
-    
+
     if (gui.pressed == id) {
         gui_hot(id);
         gui.focused_window = gui_current_window()->id;
@@ -298,7 +298,7 @@ void gui_end_frame()
     gui.events.count = 0;
     gui.capture_text[0] = gui.capture_text[1];
     gui.capture_text[1] = false;
-    
+
     gui.capture_keyboard[0] = gui.capture_keyboard[1];
     gui.capture_keyboard[1] = false;
 
@@ -792,16 +792,16 @@ bool gui_button_id(GuiId id, f32 icon_width, GLuint icon)
     f32 margin = 6;
     Vector2 total_size{ icon_width+margin, icon_width+margin };
     Vector2 pos = gui_layout_widget(&total_size);
-    
+
     Vector2 size{ icon_width+margin, icon_width+margin };
     pos.y = floorf(pos.y + (total_size.y-size.y)/2);
-    
+
     gui_hot_rect(id, pos, size);
     bool clicked = gui_clicked(id);
-    
+
     gui_draw_button(id, pos, size);
     gui_draw_rect({ pos.x+margin/2, pos.y+margin/2 }, { icon_width, icon_width }, icon);
-    
+
     return clicked;
 }
 
@@ -913,7 +913,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
         gui.edit.offset = gui.edit.cursor = gui.edit.selection = 0;
     }
-    
+
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
         for (InputEvent e : gui.events) {
             switch (e.type) {
@@ -1486,8 +1486,8 @@ void gui_end_window()
         Vector2 resize_bl{ br.x - 10.0f, br.y };
 
         if (gui.hot == resize_id) {
-            set_cursor(CURSOR_SIZE_NW_SE);
-            
+            set_cursor(MC_SIZE_NW_SE);
+
             if (gui.pressed != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 gui.pressed = resize_id;
                 gui_drag_start(wnd->size);
@@ -2492,11 +2492,11 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     //if (total_height > total_size.y)
     {
         f32 min_h = 4.0f;
-        
+
         f32 yh = total_size.y*total_to_scroll;
         f32 y0 = *current*total_to_scroll;
         f32 y1 = MIN(y0 + yh, scroll_size.y);
-        
+
         if (yh < min_h) {
             y0 = MAX(0, y0-min_h/2);
             y1 = MIN(scroll_size.y, y0+min_h);

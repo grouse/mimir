@@ -82,7 +82,7 @@ struct Application {
     Vector3 caret_fg = rgb_unpack(0xFFEF5F0A);
     Vector3 caret_bg = rgb_unpack(0xFF8a523f);
     Vector3 line_bg = rgb_unpack(0xFF264041);
-    
+
     struct {
         GLuint build;
     } icons;
@@ -460,7 +460,7 @@ void init_app(Array<String> args)
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
 
     init_gui();
-    
+
     if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
 
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
@@ -1035,7 +1035,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 if (view.lines[i].offset <= start_offset)
                     array_remove_sorted(&view.lines, i--);
             }
-            
+
             recalculate_line_wrap(line, &view.lines, view.buffer);
 #endif
         }
@@ -1489,14 +1489,14 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
         caret.wrapped_line = MIN(caret.wrapped_line, lines.count-1);
         caret.wrapped_line = MAX(0, caret.wrapped_line);
 
-        while (caret.wrapped_line > 0 && 
-               caret.byte_offset < lines[caret.wrapped_line].offset) 
+        while (caret.wrapped_line > 0 &&
+               caret.byte_offset < lines[caret.wrapped_line].offset)
         {
             if (!lines[caret.wrapped_line--].wrapped) caret.line--;
         }
 
-        while (caret.wrapped_line < lines.count-1 && 
-               caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer)) 
+        while (caret.wrapped_line < lines.count-1 &&
+               caret.byte_offset >= line_end_offset(caret.wrapped_line, lines, buffer))
         {
             if (!lines[++caret.wrapped_line].wrapped) caret.line++;
         }
@@ -1777,12 +1777,12 @@ void app_event(InputEvent event)
                         }
 
                         BufferHistoryScope h(view.buffer);
-                        
+
                         struct Edit { i64 offset; i32 bytes_to_remove; };
                         DynamicArray<Edit> edits{ .alloc = mem_tmp };
                         for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view.lines)) {
                             i64 line_start = line_start_offset(l, view.lines);
-                            
+
                             String current_indent = get_indent_for_line(view.buffer, view.lines, l);
 
                             i32 vcol = 0;
@@ -1792,14 +1792,14 @@ void app_event(InputEvent event)
                                 else vcol += 1;
                             }
                             i32 bytes_to_remove = i;
-                            
+
                             if (i > 0) array_add(&edits, { line_start, bytes_to_remove });
                         }
-                        
+
                         bool recalc_caret = false, recalc_mark = false;
                         for (i32 i = edits.count-1; i >= 0; i--) {
                             Edit edit = edits[i];
-                            
+
                             if (buffer_remove(view.buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
                                 if (view.caret.byte_offset >= edit.offset) {
                                     view.caret.byte_offset -= edit.bytes_to_remove;
@@ -1812,12 +1812,12 @@ void app_event(InputEvent event)
                                 }
                             }
                         }
-                        
+
                         if (recalc_caret) {
                             view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                             move_view_to_caret();
                         }
-                        
+
                         if (recalc_mark) {
                             view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
                         }
@@ -1827,11 +1827,11 @@ void app_event(InputEvent event)
                         if (event.key.modifiers & MF_CTRL) {
                             r = range_i32(line, calc_unwrapped_line(view.mark.wrapped_line, view.lines));
                         }
-                        
+
                         BufferHistoryScope h(view.buffer);
                         for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view.lines)) {
                             i64 line_start = line_start_offset(l, view.lines);
-                            
+
                             i64 new_offset;
                             if (buffer->indent_with_tabs) new_offset = buffer_insert(view.buffer, line_start, "\t");
                             else {
@@ -1842,7 +1842,7 @@ void app_event(InputEvent event)
                                     if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
                                     else vcol += 1;
                                 }
-                                
+
                                 i32 w = buffer->tab_width - vcol % buffer->tab_width;
                                 char *spaces = ALLOC_ARR(mem_tmp, char, w);
                                 memset(spaces, ' ', w);
@@ -1957,17 +1957,17 @@ void app_event(InputEvent event)
         }
         break;
     case IE_MOUSE_MOVE:
-        if (gui.hot == view.gui_id && 
-            event.mouse.button == MB_PRIMARY && 
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect)) 
+        if (gui.hot == view.gui_id &&
+            event.mouse.button == MB_PRIMARY &&
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
         {
             set_caret_xy(event.mouse.x, event.mouse.y);
             app.animating = true;
         } break;
     case IE_MOUSE_PRESS:
-        if (gui.hot == view.gui_id && 
-            event.mouse.button == MB_PRIMARY && 
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect)) 
+        if (gui.hot == view.gui_id &&
+            event.mouse.button == MB_PRIMARY &&
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
         {
             set_caret_xy(event.mouse.x, event.mouse.y);
             view.mark = view.caret;
@@ -2041,25 +2041,26 @@ void update_and_render(f32 /*dt*/)
     gui_window("buffer history", &debug.buffer_history.wnd) {
         char str[256];
 
-        Buffer *buffer = &buffers[view.buffer.index];
-        for (auto h : buffer->history) {
-            switch (h.type) {
-            case BUFFER_INSERT:
-                gui_textbox(stringf(str, sizeof str, "INSERT (%lld): '%.*s'", h.offset, STRFMT(h.text)));
-                break;
-            case BUFFER_REMOVE:
-                gui_textbox(stringf(str, sizeof str, "REMOVE (%lld): '%.*s'", h.offset, STRFMT(h.text)));
-                break;
-            case BUFFER_CURSOR_POS:
-                gui_textbox(stringf(str, sizeof str, "CURSOR: %lld", h.offset));
-                break;
-            case BUFFER_HISTORY_GROUP_START:
-                gui_textbox("GROUP_START");
-                break;
-            case BUFFER_HISTORY_GROUP_END:
-                gui_textbox("GROUP_END");
-                break;
-            }
+		if (auto buffer = get_buffer(view.buffer); buffer) {
+			for (auto h : buffer->history) {
+				switch (h.type) {
+				case BUFFER_INSERT:
+					gui_textbox(stringf(str, sizeof str, "INSERT (%lld): '%.*s'", h.offset, STRFMT(h.text)));
+					break;
+				case BUFFER_REMOVE:
+					gui_textbox(stringf(str, sizeof str, "REMOVE (%lld): '%.*s'", h.offset, STRFMT(h.text)));
+					break;
+				case BUFFER_CURSOR_POS:
+					gui_textbox(stringf(str, sizeof str, "CURSOR: %lld", h.offset));
+					break;
+				case BUFFER_HISTORY_GROUP_START:
+					gui_textbox("GROUP_START");
+					break;
+				case BUFFER_HISTORY_GROUP_END:
+					gui_textbox("GROUP_END");
+					break;
+				}
+			}
         }
     }
 

@@ -1,5 +1,36 @@
-static u16 key_state[256] = {0};
+#include <X11/cursorfont.h>
 
+struct {
+	String exe_path;
+
+	MouseCursor current_cursor;
+	Cursor cursors[MC_MAX];
+} core;
+
+void init_core(int argc, char **argv)
+{
+	ASSERT(argc > 0);
+
+	char *p = last_of(argv[0], '/');
+	if (argv[0][0] == '/') {
+		core.exe_path = { argv[0], (i32)(p-argv[0]) };
+	} else {
+		char buffer[PATH_MAX];
+		char *wd = getcwd(buffer, sizeof buffer);
+		PANIC_IF(wd == nullptr, "current working dir exceeds PATH_MAX");
+
+		core.exe_path = join_path(
+			{ wd, (i32)strlen(wd) },
+			{ argv[0], (i32)(p-argv[0]) },
+			mem_dynamic);
+	}
+
+}
+
+void set_cursor(MouseCursor c)
+{
+	core.current_cursor = c;
+}
 
 bool debugger_attached()
 {
@@ -9,7 +40,7 @@ bool debugger_attached()
 void log_key_event(XKeyEvent event)
 {
     LOG_INFO(
-        "keyrelease: 0x%x, shift: %d, ctrl: %d, lock: %d, mod1: %d, mod2: %d, mod3: %d, mod4: %d, mod5: %d",
+        "keycode: 0x%x, shift: %d, ctrl: %d, lock: %d, mod1: %d, mod2: %d, mod3: %d, mod4: %d, mod5: %d",
         event.keycode,
         event.state & ShiftMask ? 1 : 0,
         event.state & ControlMask ? 1 : 0,
@@ -113,25 +144,3 @@ f32 app_time_s()
     return (f32)(current-start_time);
 }
 
-struct {
-	String exe_path;
-} core;
-
-void init_core(int argc, char **argv)
-{
-	ASSERT(argc > 0);
-
-	char *p = last_of(argv[0], '/');
-	if (argv[0][0] == '/') {
-		core.exe_path = { argv[0], (i32)(p-argv[0]) };
-	} else {
-		char buffer[PATH_MAX];
-		char *wd = getcwd(buffer, sizeof buffer);
-		PANIC_IF(wd == nullptr, "current working dir exceeds PATH_MAX");
-
-		core.exe_path = join_path(
-			{ wd, (i32)strlen(wd) },
-			{ argv[0], (i32)(p-argv[0]) },
-			mem_dynamic);
-	}
-}
