@@ -982,7 +982,7 @@ void recalculate_line_wrap(i32 wrapped_line, DynamicArray<BufferLine> *existing_
             for (i32 i = 0; i < lines.count; i++) LOG_RAW("\tnew line[%d]: %lld\n", i, lines[i].offset);
             for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\texisting line[%d]: %lld\n", i, existing_lines->at(i).offset);
 #endif
-            array_replace_range(existing_lines, wrapped_line, end_line, lines);
+            array_replace(existing_lines, wrapped_line, end_line, lines);
 
 #if DEBUG_LINE_WRAP_RECALC
             for (i32 i = 0; i < existing_lines->count; i++) LOG_RAW("\tresulting line[%d]: %lld\n", i, existing_lines->at(i).offset);

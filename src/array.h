@@ -4,11 +4,13 @@
 #include "core.h"
 #include "allocator.h"
 
+#include <initializer_list>
+
 template<typename T>
 struct Array {
     T *data;
     i32 count;
-
+    
     T& operator[](i32 i) 
     { 
         ASSERT(i < count && i >= 0);
@@ -87,6 +89,14 @@ void array_copy(DynamicArray<T> *dst, Array<T> src)
 }
 
 template<typename T>
+DynamicArray<T> array_duplicate(Array<T> arr, Allocator mem)
+{
+    DynamicArray<T> result{ .alloc = mem };
+    array_copy(&result, arr);
+    return result;
+}
+
+template<typename T>
 void array_reset(DynamicArray<T> *arr, Allocator alloc)
 {
     arr->alloc = alloc;
@@ -157,6 +167,13 @@ i32 array_add(DynamicArray<T> *arr, Array<T> es)
     return arr->count;
 }
 
+template<typename T>
+i32 array_add(DynamicArray<T> *arr, std::initializer_list<T> list)
+{
+    Array<T> l{ .data = (T*)list.begin(), .count = (i32)list.size() };
+    return array_add(arr, l);
+}
+
 
 template<typename T>
 i32 array_insert(DynamicArray<T> *arr, i32 insert_at, T e)
@@ -218,11 +235,10 @@ i32 array_insert(DynamicArray<T> *arr, i32 insert_at, Array<T> es)
 
 
 template<typename T>
-i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
+i32 array_replace(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
 {
     ASSERT(start >= 0);
     ASSERT(end >= 0);
-    ASSERT(start < end);
     
     i32 remove_count = end-start;
 
@@ -237,20 +253,25 @@ i32 array_replace_range(DynamicArray<T> *arr, i32 start, i32 end, Array<T> value
         arr->data = REALLOC_ARR(arr->alloc, T, arr->data, old_capacity, arr->capacity);
     }
     
-    if (values.count > remove_count) {
-        i32 move_count = new_count-1-end;
-        for (i32 i = 0; i < move_count; i++) arr->data[new_count-i-1] = arr->data[old_count-1-i];
+    if (remove_count > 0 && values.count > remove_count) {
+        i32 move_count = new_count-end-1;
+        for (i32 i = 0; i < move_count; i++) arr->data[new_count-i-1] = arr->data[old_count-i-1];
     }
     
     for (i32 i = 0; i < values.count; i++) arr->data[start+i] = values.data[i];
     
     if (remove_count > values.count) {
-        i32 move_count = remove_count - values.count;
-        for (i32 i = 0; i < move_count; i++) arr->data[end-move_count+i] = arr->data[end+i];
+        for (i32 i = start+values.count; i < new_count; i++) arr->data[i] = arr->data[i+1];
     }
          
     arr->count = new_count;
     return new_count;
+}
+
+template<typename T>
+i32 array_replace(DynamicArray<T> *arr, i32 start, i32 end, std::initializer_list<T> values)
+{
+    return array_replace(arr, start, end, { .data = (T*)values.begin(), .count = (i32)values.size() });
 }
 
 template<typename T>
@@ -303,6 +324,22 @@ i32 array_find_index(Array<T> arr, T value)
 {
     for (i32 i = 0; i < arr.count; i++) if (arr[i] == value) return i;
     return -1;
+}
+
+template<typename T>
+bool array_equals(Array<T> lhs, Array<T> rhs)
+{
+    if (lhs.count != rhs.count) return false;
+    for (i32 i = 0; i < lhs.count; i++) {
+        if (lhs[i] != rhs[i]) return false;
+    }
+    return true;
+}
+
+template<typename T>
+bool array_equals(Array<T> lhs, std::initializer_list<T> rhs)
+{
+    return array_equals(lhs, { .data = (T*)rhs.begin(), .count = (i32)rhs.size() });
 }
 
 #endif // ARRAY_H
