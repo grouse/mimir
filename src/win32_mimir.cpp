@@ -30,8 +30,11 @@ bool has_init = false;
 
 LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-    InputEvent e = win32_input_event(hwnd, message, wparam, lparam);
-    if (e.type != 0) app_event(e);
+    DynamicArray<InputEvent> events{ .alloc = mem_tmp };
+    array_reserve(&events, 2);
+              
+    win32_input_event(&events, hwnd, message, wparam, lparam);
+    for (auto e : events) app_event(e);
 
     // TODO(jesper): this event loop needs to have a better way to check if the event
     // results in a side effect that requires an update and/or render refresh of the app
@@ -108,7 +111,7 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
                 RESET_ALLOC(mem_tmp);
                 RESET_ALLOC(mem_frame);
 
-                update_and_render(0.0f);
+                update_and_render();
                 SwapBuffers(GetDC(hwnd));
             }
         } break;
@@ -183,7 +186,7 @@ int WINAPI wWinMain(
     LARGE_INTEGER frequency, last_time;
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&last_time);
-
+    
     while (true) {
         LARGE_INTEGER current_time;
         QueryPerformanceCounter(&current_time);
@@ -196,7 +199,7 @@ int WINAPI wWinMain(
         RESET_ALLOC(mem_tmp);
         RESET_ALLOC(mem_frame);
         
-
+        
         u16 old_x = g_mouse.x;
         u16 old_y = g_mouse.y;
         g_mouse.left_was_pressed = g_mouse.left_pressed;
@@ -210,6 +213,11 @@ int WINAPI wWinMain(
         while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
+            
+            if (app_needs_render()) {
+                update_and_render();
+                SwapBuffers(wnd.hdc);
+            }
         }
 
         g_mouse.dx = (i32)g_mouse.x - (i32)old_x;
@@ -222,8 +230,10 @@ int WINAPI wWinMain(
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
         
-        update_and_render(dt);
-        SwapBuffers(wnd.hdc);
+        if (app_needs_render()) {
+            update_and_render();
+            SwapBuffers(wnd.hdc);
+        }
         
         SetCursor(cursors[current_cursor]);
         set_cursor(CURSOR_NORMAL);

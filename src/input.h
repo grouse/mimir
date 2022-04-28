@@ -129,17 +129,19 @@ struct InputEvent {
             i32 delta;
         } mouse_wheel;
         struct {
-            u8 button;
             i16 x, y;
+            u8 button;
         } mouse;
         struct {
             u32 keycode    : 8;
             u32 modifiers  : 8;
             u32 prev_state : 1;
-            u32 unused     : 15;
+            u32 repeat     : 1;
+            u32 unused     : 14;
         } key;
         struct {
-            u8 c[4];
+            // NOTE(jesper): key-repeat fills this buffer with repeated utf8 sequences
+            u8 c[12];
             u8 length;
             u8 modifiers;
         } text;

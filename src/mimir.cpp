@@ -1978,7 +1978,7 @@ struct {
 } debug{};
 
 
-void update_and_render(f32 /*dt*/)
+void update_and_render()
 {
     gfx_begin_frame();
     gui_begin_frame();

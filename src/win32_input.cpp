@@ -105,7 +105,7 @@ KeyCode keycode_from_scancode(u8 scancode)
     return KC_UNKNOWN;
 }
 
-InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
     static u32 modifier_state = MF_NONE;
     InputEvent event{};
@@ -163,9 +163,25 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
                 utf32 = (((utf16_high - 0xD800) << 10) | c) + 0x1000000;
             }
 
+            u8 utf8[4];
+            i32 length = utf8_from_utf32(utf8, utf32);
+            
             event.type = IE_TEXT;
-            event.text.length = utf8_from_utf32(event.text.c, utf32);
-            event.text.modifiers = (ModifierFlags)modifier_state;
+            event.text.modifiers = modifier_state;
+            event.text.length = 0;
+            u16 repeat_count = lparam & 0xff;
+            
+            i32 count = 0;
+            for (i32 r = repeat_count; r > 0; ) {
+                for (; r > 0 && (event.text.length + length < (i32)sizeof event.text.c); r--) {
+                    memcpy(&event.text.c[event.text.length], utf8, length);
+                    event.text.length += length;
+                    count++;
+                }
+                array_add(queue, event);
+                event.text.length = 0;
+            }
+            ASSERT(count == repeat_count);
         } break;
     case WM_SYSKEYDOWN:
     case WM_KEYDOWN: {
@@ -173,11 +189,27 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
             else if (wparam == VK_SHIFT) modifier_state |= MF_SHIFT;
 
             u8 scancode = (lparam >> 16) & 0xff;
-
-            event.type = IE_KEY_PRESS;
+            u16 repeat_count = lparam & 0xff;
+            
             event.key.keycode = keycode_from_scancode(scancode);
             event.key.modifiers = modifier_state;
             event.key.prev_state = (lparam >> 30) & 0x1;
+            
+            if (event.key.keycode != KC_UNKNOWN) {
+                event.type = IE_KEY_PRESS;
+                array_add(queue, event);
+                
+                event.key.repeat = 1;
+                for (; repeat_count > 1; repeat_count--) {
+                    event.type = IE_KEY_RELEASE;
+                    array_add(queue, event);
+                    
+                    event.type = IE_KEY_PRESS;
+                    array_add(queue, event);
+                }
+                
+                event.type = 0;
+            }
             
             if (event.key.keycode == KC_UNKNOWN) LOG_ERROR("unknown keycode from scancode: 0x%X", scancode);
             else if (false) LOG_INFO("keycode: 0x%X (%.*s), scancode: 0x%X, prev_state: %d", event.key.keycode, STRFMT(string_from_enum((KeyCode)event.key.keycode)), scancode, event.key.prev_state);
@@ -196,5 +228,5 @@ InputEvent win32_input_event(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpar
         } break;
     }
     
-    return event;
+    if (event.type != 0) array_add(queue, event);
 }
