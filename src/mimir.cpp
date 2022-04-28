@@ -952,11 +952,13 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
 
         vcolumn++;
     }
-
+    
     if (new_lines != lines) {
+        if (new_lines->at(new_lines->count-1).offset == end) new_lines->count--;
+        
 #if DEBUG_LINE_WRAP_RECALC
         LOG_INFO("start line: %d, end line: %d, start offset: %lld, end offset: %lld", start_line, end_line, start, end);
-        for (i32 i = 0; i < lines->count; i++) {
+        for (i32 i = MAX(0, start_line-5); i < MIN(end_line+5, lines->count); i++) {
             LOG_RAW("\t existing line[%d]: %lld, wrapped: %d\n", i, lines->at(i).offset, lines->at(i).wrapped);
         }
 
@@ -969,8 +971,8 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
         array_replace(lines, start_line, end_line, *new_lines);
 
 #if DEBUG_LINE_WRAP_RECALC
-        for (i32 i = 0; i < lines->count; i++) {
-            LOG_RAW("resulting line[%d]: %lld, wrapped: %d\n", i, lines->at(i).offset, lines->at(i).wrapped);
+        for (i32 i = MAX(0, start_line-5); i < MIN(end_line+5, lines->count); i++) {
+                LOG_RAW("resulting line[%d]: %lld, wrapped: %d\n", i, lines->at(i).offset, lines->at(i).wrapped);
         }
 #endif
     }
