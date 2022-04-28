@@ -655,6 +655,10 @@ Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buff
 
         r.start = line_start_offset(start_line, lines);
         r.end = line_end_offset(end_line, lines, buffer);
+        
+        if (end_line < lines.count-1 && lines[end_line].wrapped && !lines[end_line+1].wrapped) {
+            r.end = buffer_prev_offset(buffer, r.end);
+        }
     } else {
         r.start = MIN(c0.byte_offset, c1.byte_offset);
         r.end = MAX(c0.byte_offset, c1.byte_offset);
@@ -1128,11 +1132,8 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                 buffer->flat.data = (char*)REALLOC(mem_dynamic, buffer->flat.data, buffer->flat.capacity, new_capacity);
                 buffer->flat.capacity = new_capacity;
             }
-
-            for (i64 i = buffer->flat.size+text.length-1; i > offset; i--) {
-                buffer->flat.data[i] = buffer->flat.data[i-text.length];
-            }
-
+            
+            memmove(buffer->flat.data+offset+text.length, buffer->flat.data+offset, buffer->flat.size-offset);
             memcpy(buffer->flat.data+offset, text.data, text.length);
             buffer->flat.size += required_extra_space;
             end_offset += required_extra_space;
@@ -1367,7 +1368,7 @@ i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 lin
     if (!buffer) return 0;
 
     i64 end = line_end_offset(line, lines, buffer);
-    return buffer_prev_offset(buffer, end);
+    return end == buffer_end(buffer) ? end : buffer_prev_offset(buffer, end);
 }
 
 i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
@@ -1511,16 +1512,16 @@ struct BufferHistoryScope {
 void view_seek_line(i32 wrapped_line)
 {
     ASSERT(!view.lines_dirty);
-    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
     Buffer *buffer = get_buffer(view.buffer);
-
+    
+    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
     if (buffer && wrapped_line != view.caret.wrapped_line) {
-        i32 l = view.caret.wrapped_line;
-        while (l > wrapped_line) {
+        i32 l = CLAMP(view.caret.wrapped_line, 0, view.lines.count-1);
+        while (l > 0 && l > wrapped_line) {
             if (!view.lines[l--].wrapped) view.caret.line--;
         }
 
-        while (l < wrapped_line) {
+        while (l < view.lines.count-1 && l < wrapped_line) {
             if (!view.lines[++l].wrapped) view.caret.line++;
         }
 
@@ -1624,6 +1625,7 @@ void app_event(InputEvent event)
     case IE_TEXT:
         if (app.mode == MODE_INSERT) {
             write_string(view.buffer, String{ (char*)&event.text.c[0], event.text.length });
+            app.animating = true;
         }
         break;
     case IE_KEY_PRESS:
@@ -1670,14 +1672,13 @@ void app_event(InputEvent event)
                 app.mode = MODE_DIALOG;
                 break;
             case KC_D: {
-                    BufferHistoryScope h(view.buffer);
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
+                    if (r.end == r.start) break;
+                    
+                    BufferHistoryScope h(view.buffer);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view.caret.byte_offset = r.start;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.mark;
-
+                        view_seek_line(MIN(view.caret.wrapped_line, view.mark.wrapped_line));
                         move_view_to_caret();
                     }
                 } break;

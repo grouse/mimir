@@ -26,6 +26,7 @@ extern "C" void* memmove(void *destination, const void *source, size_t num) NOTH
 #define MAX4(a, b, c, d) MAX(MAX(a, b), MAX(c, d))
 
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
+#define MIN3(a, b, c) MIN(MIN(a, b), c)
 #define MIN4(a, b, c, d) MIN(MIN(a, b), MIN(c, d))
 
 #define CLAMP(v, min, max) ((v) < (min) ? (min) : (v) > (max) ? (max) : (v))
