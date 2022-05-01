@@ -16,6 +16,7 @@ enum GfxCommandType {
     GFX_COMMAND_GUI_PRIM_COLOR,
     GFX_COMMAND_GUI_PRIM_TEXTURE,
     GFX_COMMAND_GUI_TEXT,
+    GFX_COMMAND_MONO_TEXT,
 };
 
 struct GfxCommand {
@@ -50,6 +51,17 @@ struct GfxCommand {
             i32 vertex_count;
             Vector3 color;
         } gui_text;
+        struct {
+            GLuint vbo;
+            i32 vbo_offset;
+            GLuint glyph_ssbo;
+            GLuint glyph_atlas;
+            Vector2 cell_size;
+            Vector2 pos;
+            f32 offset;
+            i32 line_offset;
+            i32 columns;
+        } mono_text;
     };
 };
 
@@ -86,6 +98,12 @@ struct GfxContext {
         } text;
         struct {
             GLuint program;
+            GLuint resolution;
+            GLuint cell_size;
+            GLuint pos, offset, line_offset, columns;
+        } mono_text;
+        struct {
+            GLuint program;
             GLint resolution;
         } gui_prim;
         struct {
@@ -95,12 +113,10 @@ struct GfxContext {
     } shaders;
 
     struct {
-        GLuint square;
         GLuint frame;
     } vaos;
     
     struct {
-        GLuint square;
         GLuint frame;
     } vbos;
 

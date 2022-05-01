@@ -19,6 +19,7 @@ void gfx_push_command(GfxCommandBuffer *cmdbuf, GfxCommand cmd)
             case GFX_COMMAND_TEXTURED_PRIM:
                 last->textured_prim.vertex_count += cmd.textured_prim.vertex_count;
                 return;
+            case GFX_COMMAND_MONO_TEXT:
             case GFX_COMMAND_GUI_PRIM_COLOR:
             case GFX_COMMAND_GUI_PRIM_TEXTURE:
             case GFX_COMMAND_GUI_TEXT:
@@ -134,9 +135,16 @@ void gl_debug_proc(
 }
 
 #define SHADER_HEADER \
-    "#version 330 core\n" \
+    "#version 430 core\n" \
     "#extension GL_ARB_explicit_uniform_location : enable\n"\
-    "layout(location = 0) uniform mat4 cs_from_ws;\n"
+    "layout(location = 0) uniform mat4 cs_from_ws;\n"\
+    "vec3 unpack_rgb(uint rgb)\n"\
+    "{\n"\
+    "	uint r = rgb & 0xff;\n"\
+    "	uint g = (rgb >> 8) & 0xff;\n"\
+    "	uint b = (rgb >> 16) & 0xff;\n"\
+    "	return vec3(r, g, b) / 255.0;\n"\
+    "}\n"\
 
 void init_gfx(Vector2 resolution)
 {
@@ -287,28 +295,61 @@ void init_gfx(Vector2 resolution)
         gfx.shaders.text.resolution = glGetUniformLocation(gfx.shaders.text.program, "resolution");
         gfx.shaders.text.color = glGetUniformLocation(gfx.shaders.text.program, "color");
     }
-
-    f32 square_vertices[] = {
-        0.5f, -0.5f, 0.0f, 
-        -0.5f, -0.5f, 0.0f, 
-        -0.5f, 0.5f, 0.0f, 
-
-        -0.5f, 0.5f, 0.0f, 
-        0.5f, 0.5f, 0.0f, 
-        0.5f, -0.5f, 0.0f
-    };
     
-    glGenBuffers(1, &gfx.vbos.square);
-    glGenVertexArrays(1, &gfx.vaos.square);
+    {
+        const char *vert = SHADER_HEADER
+            "layout(location = 0) in vec2 v_pos;\n"
+            "uniform vec2 resolution;\n"
+            "uniform vec2 pos;\n"
+            "uniform float voffset;\n"
+            "out vec2 vs_pos;\n"
+            "void main()\n"
+            "{\n"
+            "    gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
+            "    gl_Position.y = -gl_Position.y;\n"
+            "	vs_pos = v_pos - pos + vec2(0.0, voffset);\n"
+            "}\0";
 
-    glBindVertexArray(gfx.vaos.square);
+        const char *frag = SHADER_HEADER
+            "in vec2 vs_pos;\n"
+            "uniform sampler2D glyph_atlas;\n"
+            "uniform vec2 cell_size;\n"
+            "uniform int columns;\n"
+            "uniform int line_offset;\n"
+            "uniform vec2 pos;\n"
+            "struct GlyphData {\n"
+            "	uint glyph_index;\n"
+            "	uint fg;\n"
+            "};\n"
+            "layout(std430, binding = 3) buffer cells\n"
+            "{\n"
+            "	GlyphData glyph_data[];\n"
+            "};\n"
+            "out vec4 out_color;\n"
+            "void main()\n"
+            "{\n"
+            "	ivec2 cell_index = ivec2(vec2(vs_pos / cell_size));\n"
+            "	vec2 cell_pos = vec2(mod(vs_pos, cell_size));\n"
+            "	GlyphData cell = glyph_data[cell_index.y*columns + cell_index.x];\n"
+            "	vec4 color = vec4(0.0, 0.0, 0.0, 0.0);\n"
+            "	if (cell.glyph_index != 0xFFFFFFFF)\n"
+            "	{\n"
+            "		ivec2 glyph_pos = ivec2(cell.glyph_index & 0xFFFF, cell.glyph_index >> 16);\n"
+            "		vec2 uv = (glyph_pos + cell_pos) / textureSize(glyph_atlas, 0);\n"
+            "		color = vec4(unpack_rgb(cell.fg), texture(glyph_atlas, uv).r);\n"
+            "	}\n"
+            "	out_color = color;\n"
+            "}\0";
 
-    glBindBuffer(GL_ARRAY_BUFFER, gfx.vbos.square);
-    glBufferData(GL_ARRAY_BUFFER, sizeof square_vertices, square_vertices, GL_STATIC_DRAW);
+        gfx.shaders.mono_text.program = gfx_create_shader(vert, frag);
+        gfx.shaders.mono_text.resolution = glGetUniformLocation(gfx.shaders.mono_text.program, "resolution");
+        gfx.shaders.mono_text.cell_size = glGetUniformLocation(gfx.shaders.mono_text.program, "cell_size");
+        gfx.shaders.mono_text.pos = glGetUniformLocation(gfx.shaders.mono_text.program, "pos");
+        gfx.shaders.mono_text.offset = glGetUniformLocation(gfx.shaders.mono_text.program, "voffset");
+        gfx.shaders.mono_text.line_offset = glGetUniformLocation(gfx.shaders.mono_text.program, "line_offset");
+        gfx.shaders.mono_text.columns = glGetUniformLocation(gfx.shaders.mono_text.program, "columns");
+    }
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3*sizeof square_vertices[0], (void*)0);
-    glEnableVertexAttribArray(0);
-    
     glGenBuffers(1, &gfx.vbos.frame);
     glGenVertexArrays(1, &gfx.vaos.frame);
 }
@@ -580,6 +621,30 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
 
     for (GfxCommand cmd : cmdbuf.commands) {
         switch (cmd.type) {
+        case GFX_COMMAND_MONO_TEXT:
+            glBindBuffer(GL_ARRAY_BUFFER, cmd.mono_text.vbo);
+            
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            glUseProgram(gfx.shaders.mono_text.program);
+            
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2*sizeof(f32), (void*)(i64)((cmd.mono_text.vbo_offset+0)*sizeof(f32)));
+            glEnableVertexAttribArray(0);
+            
+            glBindTexture(GL_TEXTURE_2D, cmd.mono_text.glyph_atlas);
+            
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, cmd.mono_text.glyph_ssbo);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, cmd.mono_text.glyph_ssbo);
+            //glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+            glUniform2f(gfx.shaders.mono_text.resolution, gfx.resolution.x, gfx.resolution.y);
+            glUniform2f(gfx.shaders.mono_text.cell_size, cmd.mono_text.cell_size.x, cmd.mono_text.cell_size.y);
+            glUniform2f(gfx.shaders.mono_text.pos, cmd.mono_text.pos.x, cmd.mono_text.pos.y);
+            glUniform1f(gfx.shaders.mono_text.offset, cmd.mono_text.offset);
+            glUniform1i(gfx.shaders.mono_text.line_offset, cmd.mono_text.line_offset);
+            glUniform1i(gfx.shaders.mono_text.columns, cmd.mono_text.columns);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            break;
         case GFX_COMMAND_TEXTURED_PRIM:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.textured_prim.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

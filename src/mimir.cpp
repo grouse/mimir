@@ -177,6 +177,7 @@ struct View {
     BufferId buffer;
     Caret caret, mark;
 
+    GLuint glyph_data_ssbo;
 
     struct {
         u64 lines_dirty : 1;
@@ -463,10 +464,11 @@ void init_app(Array<String> args)
 
     if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
 
-    app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18);
+    app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18, true);
 
     calculate_num_visible_lines();
-
+    glGenBuffers(1, &view.glyph_data_ssbo);
+    
     if (true) {
         array_add(&app.process_command_names, { "build.bat" });
         array_add(&app.process_commands, { .exe = "D:\\projects\\plumber\\build.bat" });
@@ -2399,9 +2401,104 @@ next_node:;
         gui_draw_rect(p0, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
         gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
     }
+    
+#define NEW_GLYPH_RENDER 0
 
     Buffer *buffer = get_buffer(view.buffer);
-    if (buffer && true) {
+    struct GlyphData {
+        u32 glyph_index;
+        u32 fg;
+    };
+
+    Array<GlyphData> glyphs{};
+    if (buffer && NEW_GLYPH_RENDER) {
+        FontAtlas *font = &app.mono;
+        
+        Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
+        Vector2 size{ view.rect.size.x, view.rect.size.y };
+        
+        i32 columns = (view.rect.size.x / font->space_width) + 1;
+        i32 rows = (view.rect.size.y / font->line_height) + 2;
+        
+        array_create(&glyphs, columns*rows, mem_frame);
+        
+        Vector3 fg = linear_from_sRGB(app.fg);
+        
+        for (auto &g : glyphs) {
+            g.glyph_index = 0xFFFFFFFF;
+            g.fg = RGB_pack(fg);
+        }
+        
+        for (i32 i = 0; i < rows; i++) {
+            i32 line_index = i + view.line_offset;
+            i64 p = view.lines[line_index].offset;
+            i64 end = line_end_offset(line_index, view.lines, buffer);
+
+            i64 vcolumn = 0;
+            while (p < end) {
+                i32 c = utf32_it_next(buffer, &p);
+                if (c == 0) break;
+
+                if (c == '\n' || c == '\r') {
+                    if (p < end && c == '\n' && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
+                    if (p < end && c == '\r' && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
+                    vcolumn = 0;
+                    continue;
+                }
+
+                if (c == ' ') {
+                    vcolumn++;
+                    continue;
+                }
+
+                if (c == '\t') {
+                    i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
+                    vcolumn += w;
+                    continue;
+                }
+                
+                // TODO(jesper): this is broken if a glyph is larger than the cell whatever unicode esque reason
+                Glyph glyph = find_or_create_glyph(font, c);
+                u32 index = (u32(glyph.x0) & 0xFFFF) | (u32(glyph.y0) << 16);
+                glyphs[i*columns + vcolumn].glyph_index = index;
+
+                vcolumn++;
+            }
+        }
+        
+        GfxCommand cmd{ 
+            .type = GFX_COMMAND_MONO_TEXT,
+            .mono_text = {
+                .vbo = gfx.vbos.frame,
+                .vbo_offset = gfx.frame_vertices.count,
+                .glyph_ssbo = view.glyph_data_ssbo,
+                .glyph_atlas = font->texture,
+                .cell_size = { app.mono.space_width, app.mono.line_height },
+                .pos = pos, 
+                .offset = view.voffset,
+                .line_offset = view.line_offset,
+                .columns = columns,
+            }
+        };
+
+        array_add(
+            &gfx.frame_vertices, 
+            {
+                pos.x+size.x, pos.y,
+                pos.x       , pos.y,
+                pos.x       , pos.y+size.y,
+                pos.x       , pos.y+size.y,
+                pos.x+size.x, pos.y+size.y,
+                pos.x+size.x, pos.y,
+            });
+        
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, glyphs.count*sizeof glyphs[0], glyphs.data, GL_STREAM_DRAW);
+        
+        gfx_push_command(&gfx.frame_cmdbuf, cmd);
+    }
+    
+    if (buffer && !NEW_GLYPH_RENDER) {
         GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
         cmd.gui_text.font_atlas = app.mono.texture;
         cmd.gui_text.color = linear_from_sRGB(app.fg);
@@ -2422,14 +2519,9 @@ next_node:;
                 i32 c = utf32_it_next(buffer, &p);
                 if (c == 0) break;
 
-                if (c == '\n') {
-                    if (p < end && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
-                    vcolumn = 0;
-                    continue;
-                }
-
-                if (c == '\r') {
-                    if (p < end && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
+                if (c == '\n' || c == '\r') {
+                    if (p < end && c == '\n' && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
+                    if (p < end && c == '\r' && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
                     vcolumn = 0;
                     continue;
                 }

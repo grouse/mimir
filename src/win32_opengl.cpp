@@ -58,11 +58,13 @@ void load_opengl_procs(HANDLE gl_dll)
     LOAD_GL_PROC(glGenVertexArrays, gl_dll);
     LOAD_GL_PROC(glBindVertexArray, gl_dll);
     LOAD_GL_PROC(glBindBuffer, gl_dll);
+    LOAD_GL_PROC(glBindBufferBase, gl_dll);
     LOAD_GL_PROC(glBufferData, gl_dll);
     LOAD_GL_PROC(glVertexAttribPointer, gl_dll);
     LOAD_GL_PROC(glEnableVertexAttribArray, gl_dll);
     LOAD_GL_PROC(glDisableVertexAttribArray, gl_dll);
     LOAD_GL_PROC(glUseProgram, gl_dll);
+    LOAD_GL_PROC(glUniform1i, gl_dll);
     LOAD_GL_PROC(glUniform1f, gl_dll);
     LOAD_GL_PROC(glUniform2f, gl_dll);
     LOAD_GL_PROC(glUniform3f, gl_dll);
@@ -91,6 +93,9 @@ void load_opengl_procs(HANDLE gl_dll)
     LOAD_GL_PROC(glTexImage2D, gl_dll);
     LOAD_GL_PROC(glTexSubImage2D, gl_dll);
     LOAD_GL_PROC(glTextureSubImage2D, gl_dll);
+    
+    LOAD_GL_PROC(glMemoryBarrier, gl_dll);
+
 }
 
 Win32Window create_opengl_window(

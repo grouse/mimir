@@ -10,6 +10,7 @@
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_SHADER_STORAGE_BUFFER          0x90D2
 
 #define GL_STREAM_DRAW                    0x88E0
 #define GL_STREAM_READ                    0x88E1
@@ -53,7 +54,6 @@
 #define GL_RGB                            0x1907
 #define GL_RGBA                           0x1908
 #define GL_RGBA8                          0x8058
-
 #define GL_DEBUG_SEVERITY_HIGH            0x9146
 #define GL_DEBUG_SEVERITY_MEDIUM          0x9147
 #define GL_DEBUG_SEVERITY_LOW             0x9148
@@ -84,6 +84,20 @@
 #define GL_MAX_DEBUG_LOGGED_MESSAGES      0x9144
 #define GL_DEBUG_LOGGED_MESSAGES          0x9145
 #define GL_SCISSOR_TEST                   0x0C11
+
+#define GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT 0x00000001
+#define GL_ELEMENT_ARRAY_BARRIER_BIT      0x00000002
+#define GL_UNIFORM_BARRIER_BIT            0x00000004
+#define GL_TEXTURE_FETCH_BARRIER_BIT      0x00000008
+#define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+#define GL_COMMAND_BARRIER_BIT            0x00000040
+#define GL_PIXEL_BUFFER_BARRIER_BIT       0x00000080
+#define GL_TEXTURE_UPDATE_BARRIER_BIT     0x00000100
+#define GL_BUFFER_UPDATE_BARRIER_BIT      0x00000200
+#define GL_FRAMEBUFFER_BARRIER_BIT        0x00000400
+#define GL_TRANSFORM_FEEDBACK_BARRIER_BIT 0x00000800
+#define GL_ATOMIC_COUNTER_BARRIER_BIT     0x00001000
+#define GL_ALL_BARRIER_BITS               0xFFFFFFFF
 
 typedef char GLchar;
 typedef int GLsizei;
@@ -145,12 +159,14 @@ DECL_GL_PROC(void, glGenBuffers, GLsizei n, GLuint *buffers);
 DECL_GL_PROC(void, glGenVertexArrays, GLsizei n, GLuint *arrays);
 DECL_GL_PROC(void, glBindVertexArray, GLuint array);
 DECL_GL_PROC(void, glBindBuffer, GLenum target, GLuint buffer);
-DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+DECL_GL_PROC(void, glBindBufferBase, GLenum target, GLuint index, GLuint buffer);
+DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage); 
 DECL_GL_PROC(void, glBufferSubData, GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
 DECL_GL_PROC(void, glVertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 DECL_GL_PROC(void, glEnableVertexAttribArray, GLuint index);
 DECL_GL_PROC(void, glDisableVertexAttribArray, GLuint index);
 DECL_GL_PROC(void, glUseProgram, GLuint program);
+DECL_GL_PROC(void, glUniform1i, GLint location, GLint v0);
 DECL_GL_PROC(void, glUniform1f, GLint location, GLfloat v0);
 DECL_GL_PROC(void, glUniform2f, GLint location, GLfloat v0, GLfloat v1);
 DECL_GL_PROC(void, glUniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
@@ -177,5 +193,6 @@ DECL_GL_PROC(void, glTexStorage2D, GLenum target, GLsizei levels, GLenum interna
 DECL_GL_PROC(void, glTexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * data);
 DECL_GL_PROC(void, glTexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels);
 DECL_GL_PROC(void, glTextureSubImage2D, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
+DECL_GL_PROC(void, glMemoryBarrier, GLbitfield barriers);
 
 #endif // WIN32_OPENGL_H

@@ -743,7 +743,13 @@ f32 ray_hit_sphere(Vector3 ray_o, Vector3 ray_d, Vector3 sphere_p, f32 sphere_r)
 
 u32 BGRA_pack(f32 r, f32 g, f32 b, f32 a)
 {
-    return u32(b*255.0) | u32(g*255.0f) << 8 | u32(r*255.0f) << 16 | u32(a*255.0f) << 24;
+    return u32(b*255.0f) | u32(g*255.0f) << 8 | u32(r*255.0f) << 16 | u32(a*255.0f) << 24;
+}
+
+u32 RGB_pack(Vector3 c)
+{
+    return u32(c.r*255.0f) | u32(c.g*255.0f) << 8 | u32(c.b*255.0f) << 16;
+    
 }
 
 f32 sRGB_from_linear(f32 l)

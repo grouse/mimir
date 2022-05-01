@@ -368,6 +368,7 @@ GfxCommand gui_command(GfxCommandType type)
     case GFX_COMMAND_COLORED_LINE:
     case GFX_COMMAND_COLORED_PRIM:
     case GFX_COMMAND_TEXTURED_PRIM:
+    case GFX_COMMAND_MONO_TEXT:
         LOG_ERROR("don't use this API for these");
         break;
     }
@@ -405,6 +406,7 @@ void gui_push_command(GfxCommandBuffer *cmdbuf, GfxCommand cmd, i32 draw_index =
                     return;
                 }
                 break;
+            case GFX_COMMAND_MONO_TEXT:
             case GFX_COMMAND_COLORED_LINE:
             case GFX_COMMAND_COLORED_PRIM:
             case GFX_COMMAND_TEXTURED_PRIM:

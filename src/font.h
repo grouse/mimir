@@ -35,6 +35,8 @@ struct FontAtlas {
     f32 scale;
     f32 line_height;
     f32 space_width;
+    
+    bool mono_space;
 
     stbtt_fontinfo info;
     Vector2 size;
@@ -45,7 +47,7 @@ struct FontAtlas {
     //DynamicArray<Glyph> glyphs;
 };
 
-FontAtlas create_font(String path, f32 pixel_height);
+FontAtlas create_font(String path, f32 pixel_height, bool mono_space = false);
 f32 glyph_advance(FontAtlas *font, u32 codepoint);
 GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen);
 
