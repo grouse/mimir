@@ -14,7 +14,7 @@ void disable_text_input()
     input.text_input_enabled = false;
 }
 
-KeyCode keycode_from_scancode(u8 scancode)
+KeyCode_ keycode_from_scancode(u8 scancode)
 {
     switch (scancode) {
     case 0x01: return KC_ESC;
@@ -212,7 +212,7 @@ void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message,
             }
             
             if (event.key.keycode == KC_UNKNOWN) LOG_ERROR("unknown keycode from scancode: 0x%X", scancode);
-            else if (false) LOG_INFO("keycode: 0x%X (%.*s), scancode: 0x%X, prev_state: %d", event.key.keycode, STRFMT(string_from_enum((KeyCode)event.key.keycode)), scancode, event.key.prev_state);
+            else if (false) LOG_INFO("keycode: 0x%X (%.*s), scancode: 0x%X, prev_state: %d", event.key.keycode, STRFMT(string_from_enum((KeyCode_)event.key.keycode)), scancode, event.key.prev_state);
         } break;
     case WM_SYSKEYUP:
     case WM_KEYUP: {

@@ -236,7 +236,7 @@ int WINAPI wWinMain(
         }
         
         SetCursor(cursors[current_cursor]);
-        set_cursor(CURSOR_NORMAL);
+        set_cursor(MC_NORMAL);
     }
 
     return 0;
