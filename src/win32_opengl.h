@@ -22,6 +22,13 @@
 #define GL_DYNAMIC_READ                   0x88E9
 #define GL_DYNAMIC_COPY                   0x88EA
 
+#define GL_MAP_READ_BIT                   0x0001
+#define GL_MAP_WRITE_BIT                  0x0002
+#define GL_MAP_INVALIDATE_RANGE_BIT       0x0004
+#define GL_MAP_INVALIDATE_BUFFER_BIT      0x0008
+#define GL_MAP_FLUSH_EXPLICIT_BIT         0x0010
+#define GL_MAP_UNSYNCHRONIZED_BIT         0x0020
+
 #define GL_PIXEL_UNPACK_BUFFER            0x88EC
 
 #define GL_UNPACK_ALIGNMENT               0x0CF5
@@ -161,6 +168,10 @@ DECL_GL_PROC(void, glBindVertexArray, GLuint array);
 DECL_GL_PROC(void, glBindBuffer, GLenum target, GLuint buffer);
 DECL_GL_PROC(void, glBindBufferBase, GLenum target, GLuint index, GLuint buffer);
 DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage); 
+DECL_GL_PROC(void*, glMapBufferRange, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+DECL_GL_PROC(void*, glMapNamedBufferRange, GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
+DECL_GL_PROC(GLboolean, glUnmapBuffer, GLenum target);
+DECL_GL_PROC(GLboolean, glUnmapNamedBuffer, GLuint buffer);
 DECL_GL_PROC(void, glBufferSubData, GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
 DECL_GL_PROC(void, glVertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 DECL_GL_PROC(void, glEnableVertexAttribArray, GLuint index);

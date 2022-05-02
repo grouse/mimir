@@ -187,6 +187,15 @@ int WINAPI wWinMain(
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&last_time);
     
+#if 0
+    for (i32 i = 0; i < 50000; i++) {
+        RESET_ALLOC(mem_tmp);
+        RESET_ALLOC(mem_frame);
+        update_and_render();
+    }
+    exit(0);
+#endif
+    
     while (true) {
         LARGE_INTEGER current_time;
         QueryPerformanceCounter(&current_time);

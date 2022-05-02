@@ -2402,16 +2402,9 @@ next_node:;
         gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
     }
     
-#define NEW_GLYPH_RENDER 0
-
     Buffer *buffer = get_buffer(view.buffer);
-    struct GlyphData {
-        u32 glyph_index;
-        u32 fg;
-    };
-
-    Array<GlyphData> glyphs{};
-    if (buffer && NEW_GLYPH_RENDER) {
+    
+    if (buffer) {
         FontAtlas *font = &app.mono;
         
         Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
@@ -2420,7 +2413,27 @@ next_node:;
         i32 columns = (view.rect.size.x / font->space_width) + 1;
         i32 rows = (view.rect.size.y / font->line_height) + 2;
         
-        array_create(&glyphs, columns*rows, mem_frame);
+        struct GlyphData {
+            u32 glyph_index;
+            u32 fg;
+        };
+        Array<GlyphData> glyphs{};
+        
+        static void *mapped = nullptr;
+        static i32 buffer_size = 0;
+        if (columns*rows*(i32)sizeof(GlyphData) > buffer_size) {
+            if (mapped) {
+                glUnmapNamedBuffer(view.glyph_data_ssbo);
+                mapped = nullptr;
+            }
+            
+            buffer_size = columns*rows*sizeof(GlyphData);
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
+            glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
+        }
+        
+        if (!mapped) mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
+        glyphs = { .data = (GlyphData*)mapped, .count = columns*rows };
         
         Vector3 fg = linear_from_sRGB(app.fg);
         
@@ -2492,85 +2505,9 @@ next_node:;
                 pos.x+size.x, pos.y,
             });
         
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, glyphs.count*sizeof glyphs[0], glyphs.data, GL_STREAM_DRAW);
-        
         gfx_push_command(&gfx.frame_cmdbuf, cmd);
     }
     
-    if (buffer && !NEW_GLYPH_RENDER) {
-        GfxCommand cmd = gui_command(GFX_COMMAND_GUI_TEXT);
-        cmd.gui_text.font_atlas = app.mono.texture;
-        cmd.gui_text.color = linear_from_sRGB(app.fg);
-
-        f32 voffset = view.voffset;
-        i32 line_offset = view.line_offset;
-
-        for (i32 i = 0; i < MIN(view.lines.count - line_offset, view.lines_visible); i++) {
-            i32 line_index = i + line_offset;
-
-            Vector2 baseline{ view.rect.pos.x, view.rect.pos.y + i*app.mono.line_height + (f32)app.mono.baseline - voffset };
-
-            i64 p = view.lines[line_index].offset;
-            i64 end = line_end_offset(line_index, view.lines, buffer);
-
-            i64 vcolumn = 0;
-            while (p < end) {
-                i32 c = utf32_it_next(buffer, &p);
-                if (c == 0) break;
-
-                if (c == '\n' || c == '\r') {
-                    if (p < end && c == '\n' && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
-                    if (p < end && c == '\r' && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
-                    vcolumn = 0;
-                    continue;
-                }
-
-                if (c == ' ') {
-                    vcolumn++;
-                    continue;
-                }
-
-                if (c == '\t') {
-                    i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
-                    vcolumn += w;
-                    continue;
-                }
-
-                Vector2 pen{ baseline.x + vcolumn*app.mono.space_width, baseline.y };
-                GlyphRect g = get_glyph_rect(&app.mono, c, &pen);
-
-                // NOTE(jesper): if this fires then we haven't done line reflowing correctly
-                ASSERT(g.x1 < view.rect.pos.x + view.rect.size.x);
-
-                // TODO(jesper): the way this text rendering works it'd probably be far cheaper for us to just
-                // overdraw a background outside the view rect
-                if (apply_clip_rect(&g, view.rect)) {
-                    f32 vertices[] = {
-                        g.x0, g.y0, g.s0, g.t0,
-                        g.x0, g.y1, g.s0, g.t1,
-                        g.x1, g.y1, g.s1, g.t1,
-
-                        g.x1, g.y1, g.s1, g.t1,
-                        g.x1, g.y0, g.s1, g.t0,
-                        g.x0, g.y0, g.s0, g.t0,
-                    };
-
-                    array_add(&gui.vertices, vertices, ARRAY_COUNT(vertices));
-                    cmd.gui_text.vertex_count += ARRAY_COUNT(vertices);
-                }
-                vcolumn++;
-            }
-        }
-
-        // TODO(jesper): I'm lazy and re-using the GUI's vertex buffer here, which is why this is using
-        // gui draw procedures and being kind of weird as hell about it. This also makes some causes
-        // some error-prone weirdness because we need to end the gui frame, submit the standard command buffers
-        // and only then submit the gui draw commands. I don't much like having gui_end_frame separate from
-        // gui_render, and this interaction is just weird.
-        gui_push_command(&gfx.frame_cmdbuf, cmd);
-    }
-
     Vector3 clear_color = linear_from_sRGB(app.bg);
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
