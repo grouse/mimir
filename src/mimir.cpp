@@ -2419,9 +2419,10 @@ next_node:;
         };
         Array<GlyphData> glyphs{};
         
-        static void *mapped = nullptr;
-        static i32 buffer_size = 0;
-        if (columns*rows*(i32)sizeof(GlyphData) > buffer_size) {
+        void *mapped = nullptr;
+        i32 buffer_size = 0;
+        //if (columns*rows*(i32)sizeof(GlyphData) > buffer_size) 
+        {
             if (mapped) {
                 glUnmapNamedBuffer(view.glyph_data_ssbo);
                 mapped = nullptr;
@@ -2432,8 +2433,9 @@ next_node:;
             glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
         }
         
-        if (!mapped) mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
+        mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
         glyphs = { .data = (GlyphData*)mapped, .count = columns*rows };
+        defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
         
         Vector3 fg = linear_from_sRGB(app.fg);
         
