@@ -38,5 +38,6 @@ extern Allocator mem_dynamic;
 void init_default_allocators();
 Allocator linear_allocator(i64 size);
 Allocator malloc_allocator();
+Allocator vm_freelist_allocator(i64 max_size);
 
 #endif // ALLOCATOR_H

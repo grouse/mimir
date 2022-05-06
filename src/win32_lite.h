@@ -602,7 +602,26 @@ extern "C" {
         LPARAM            lParam;
         int               iImage;
     } BROWSEINFOW, *PBROWSEINFOW, *LPBROWSEINFOW;
-
+    
+    typedef struct _SYSTEM_INFO {
+        union {
+            DWORD dwOemId;
+            struct {
+                WORD wProcessorArchitecture;
+                WORD wReserved;
+            } DUMMYSTRUCTNAME;
+        } DUMMYUNIONNAME;
+        DWORD     dwPageSize;
+        LPVOID    lpMinimumApplicationAddress;
+        LPVOID    lpMaximumApplicationAddress;
+        DWORD_PTR dwActiveProcessorMask;
+        DWORD     dwNumberOfProcessors;
+        DWORD     dwProcessorType;
+        DWORD     dwAllocationGranularity;
+        WORD      wProcessorLevel;
+        WORD      wProcessorRevision;
+    } SYSTEM_INFO, *LPSYSTEM_INFO;
+    
     LPWSTR* CommandLineToArgvW(
         LPCWSTR lpCmdLine,
         int *pNumArgs);
@@ -618,6 +637,14 @@ extern "C" {
     // kernel32.lib
     HMODULE LoadLibraryA(LPCSTR lpLibFileName);
     FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
+    
+    LPVOID VirtualAlloc(
+        LPVOID lpAddress,
+        SIZE_T dwSize,
+        DWORD  flAllocationType,
+        DWORD  flProtect);
+    
+    void GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
     
     HANDLE CreateThread(
         LPSECURITY_ATTRIBUTES   lpThreadAttributes,
