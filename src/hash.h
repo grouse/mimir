@@ -12,4 +12,11 @@ u32 hash32(u32 value)
     return hashed;
 }
 
+u32 hash32(String str)
+{
+    u32 hashed;
+    MurmurHash3_x86_32(str.data, str.length, MURMUR3_SEED, &hashed);
+    return hashed;
+}
+
 #endif // HASH_H

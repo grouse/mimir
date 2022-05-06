@@ -92,4 +92,27 @@ void set(HashTable<K, V> *table, K key, V value)
 }
 
 
+template<typename V>
+void set(HashTable<String, V> *table, String key, V value)
+{
+    i32 i = find_slot(table, key);
+    if (i >= 0 && table->slots[i].occupied) {
+        table->slots[i].value = value;
+        return;
+    }
+
+    if (table->count >= table->capacity*HASH_TABLE_LOAD_FACTOR) {
+        i32 new_capacity = table->capacity == 0 ? HASH_TABLE_INITIAL_CAPACITY : table->capacity*2;
+        grow_table(table, new_capacity);
+    }
+
+    i = find_slot(table, key);
+    ASSERT(i >= 0);
+
+    table->slots[i] = { .key = duplicate_string(key, table->alloc), .value = value, .occupied = true };
+    table->count++;
+}
+
+
+
 #endif // HASH_TABLE_H

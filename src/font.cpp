@@ -64,8 +64,8 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
 
     // NOTE(jesper): need to align to 4 for the glTexSubImage2D. The alignment
     // probably needs to be queries from the API somehow, I don't know
-    i32 wa = ALIGN(dst_w, 4);
-    i32 ha = ALIGN(dst_h, 4);
+    i32 wa = ROUND_TO(dst_w, 4);
+    i32 ha = ROUND_TO(dst_h, 4);
 
     u8 *pixels = (u8*)ALLOC(mem_tmp, wa*ha);
     memset(pixels, 0, wa*ha);
@@ -113,9 +113,11 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     int advance, lsb;
     stbtt_GetCodepointHMetrics(&font->info, codepoint, &advance, &lsb);
     
+#if 0
     if (font->mono_space) {
         LOG_INFO("c: %c, x0: %d, y0: %d, x1: %d, y1: %d", (char)codepoint, x, y, x+dst_w, y+dst_h);
     }
+#endif
 
     Glyph glyph{
         .codepoint = codepoint,

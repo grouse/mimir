@@ -16,7 +16,11 @@
 #include "font.cpp"
 #include "fzy.cpp"
 
+#include "tree_sitter/api.h"
+extern "C" const TSLanguage* tree_sitter_cpp();
+
 #define DEBUG_LINE_WRAP_RECALC 0
+#define DEBUG_TREE_SITTER_QUERY 0
 
 enum EditMode {
     MODE_EDIT,
@@ -31,6 +35,12 @@ enum BufferHistoryType {
     BUFFER_CURSOR_POS,
     BUFFER_HISTORY_GROUP_START,
     BUFFER_HISTORY_GROUP_END
+};
+
+enum Language {
+    LANGUAGE_NONE,
+    LANGUAGE_CPP,
+    LANGUAGE_COUNT,
 };
 
 enum ViewFlags : u32 {
@@ -70,6 +80,8 @@ struct Application {
         i32 selected_item;
     } lister;
 
+    const TSLanguage *languages[LANGUAGE_COUNT];
+    TSQuery *queries[LANGUAGE_COUNT];
     EditMode mode, next_mode;
 
     DynamicArray<String> process_command_names;
@@ -82,6 +94,8 @@ struct Application {
     Vector3 caret_fg = bgr_unpack(0xFFEF5F0A);
     Vector3 caret_bg = bgr_unpack(0xFF8a523f);
     Vector3 line_bg = bgr_unpack(0xFF264041);
+    
+    HashTable<String, u32> syntax_colors;
 
     struct {
         GLuint build;
@@ -128,6 +142,9 @@ struct Buffer {
 
     String name;
     String file_path;
+    
+    Language language;
+    TSTree *syntax_tree;
 
     DynamicArray<BufferHistory> history;
     i32 history_index;
@@ -361,8 +378,18 @@ BufferId create_buffer(String file)
     b.flat.data = (char*)f.data;
     b.flat.size = f.size;
     b.flat.capacity = f.size;
-
+    
+    String ext = extension_of(b.file_path);
+    if (ext == ".cpp" || ext == ".c" ||
+        ext == ".h" || ext == ".hpp" ||
+        ext == ".cxx" || ext == ".cc")
+    {
+        b.language = LANGUAGE_CPP;
+    }
+    
     if (f.data) {
+        // TODO(jesper): guess tabs/spaces based on file content?
+        
         char *start = (char*)f.data;
         char *p = start+f.size-1;
         while (p >= start) {
@@ -379,7 +406,12 @@ BufferId create_buffer(String file)
             p--;
         }
 
-        // TODO(jesper): guess tabs/spaces based on file content?
+        if (auto lang = app.languages[b.language]; lang) {
+            TSParser *parser = ts_parser_new();
+            ts_parser_set_language(parser, lang);
+            b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
+            ts_parser_delete(parser);
+        }
     }
 
     String newline_str = string_from_enum(b.newline_mode);
@@ -446,8 +478,57 @@ void view_set_buffer(BufferId buffer)
     view.lines_dirty = true;
 }
 
+Allocator ts_custom_alloc;
+
+struct ts_alloc_header {
+    size_t size;
+    size_t pad;
+};
+
+void* ts_custom_malloc(size_t size)
+{
+    if (size == 0) return nullptr;
+    
+    void *ptr = ALLOC(ts_custom_alloc, size+sizeof(ts_alloc_header));
+    auto header = (ts_alloc_header*)ptr;
+    header->size = size;
+    return (u8*)header + sizeof *header;
+}
+
+void* ts_custom_calloc(size_t count, size_t size)
+{
+    if (size == 0) return nullptr;
+    
+    void *ptr = ts_custom_malloc(count*size);
+    memset(ptr, 0, count*size);
+    return ptr;
+}
+
+void* ts_custom_realloc(void *ptr, size_t size)
+{
+    if (size == 0) return nullptr;
+    if (ptr == nullptr) return ts_custom_malloc(size);
+    
+    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
+    void *nptr = REALLOC(ts_custom_alloc, header, header->size+sizeof(ts_alloc_header), size+sizeof(ts_alloc_header));
+    
+    header = (ts_alloc_header*)nptr;
+    header->size = size;
+    return (u8*)header + sizeof *header;
+
+}
+
+void ts_custom_free(void *ptr)
+{
+    if (!ptr) return;
+    
+    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
+    FREE(ts_custom_alloc, header);
+}
+
 void init_app(Array<String> args)
 {
+    
     fzy_init_table();
 
     String exe_folder = get_exe_folder();
@@ -461,6 +542,46 @@ void init_app(Array<String> args)
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
 
     init_gui();
+    
+    app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
+    ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
+    ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
+    
+    if (auto a = find_asset("highlighting/cpp.scm"); a) {
+        u32 error_loc;
+        TSQueryError error;
+        app.queries[LANGUAGE_CPP] = ts_query_new(app.languages[LANGUAGE_CPP], (char*)a->data, a->size, &error_loc, &error);
+        
+        if (error != TSQueryErrorNone) {
+            String s = "";
+            switch (error) {
+            case TSQueryErrorNone: s = "none"; break;
+            case TSQueryErrorSyntax: s = "syntax"; break;
+            case TSQueryErrorNodeType: s = "node_type"; break;
+            case TSQueryErrorField: s = "field"; break;
+            case TSQueryErrorCapture: s = "capture"; break;
+            case TSQueryErrorStructure: s = "structure"; break;
+            case TSQueryErrorLanguage: s = "language"; break;
+            }
+            
+            String file = "highlighting/cpp.scm";
+            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(file), error_loc);
+        }
+    }
+    
+    set(&app.syntax_colors, "preproc", 0xFFFE8019);
+    set(&app.syntax_colors, "keyword", 0xFFD65D0E);
+    set(&app.syntax_colors, "string", 0xFF689D6A);
+    set(&app.syntax_colors, "operator", 0xFFfcedcf);
+    set(&app.syntax_colors, "constant", 0xFFECE6D6);
+    set(&app.syntax_colors, "comment", 0xFF8EC07C);
+    
+    // TODO(jesper): I definitely need to figure this shit out
+    for (i32 i = 0; i < app.syntax_colors.capacity; i++) {
+        if (!app.syntax_colors.slots[i].occupied) continue;
+        Vector3 c = bgr_unpack(app.syntax_colors.slots[i].value);
+        app.syntax_colors.slots[i].value = bgr_pack(linear_from_sRGB(c));
+    }
 
     if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
 
@@ -677,12 +798,25 @@ i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
     return offset;
 }
 
-i32 wrapped_line_from_offset(i64 offset, i32 guessed_line, Array<BufferLine> lines)
+i32 calc_unwrapped_line(i32 wrapped_line, Array<BufferLine> lines)
+{
+    i32 line = wrapped_line;
+    while (line > 0 && lines[line].wrapped) line--;
+    return line;
+}
+
+i32 wrapped_line_from_offset(i64 offset, Array<BufferLine> lines, i32 guessed_line = 0)
 {
     i32 line = guessed_line;
     while (line > 0 && offset < lines[line].offset) line--;
     while (line < (lines.count-2) && offset > lines[line+1].offset) line++;
     return line;
+}
+
+i32 unwrapped_line_from_offset(i64 offset, Array<BufferLine> lines, u32 guessed_line = 0)
+{
+    i32 line = wrapped_line_from_offset(offset, lines, guessed_line);
+    return calc_unwrapped_line(line, lines);
 }
 
 i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
@@ -806,6 +940,15 @@ i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<BufferLine
     return column;
 }
 
+i64 unwrapped_column_from_offset(i64 offset, Array<BufferLine> lines, i32 wrapped_line)
+{
+    i32 line = calc_unwrapped_line(wrapped_line, lines);
+    i64 column = 0;
+    for (i64 i = lines[line].offset; i < offset; i++, column++);
+    return column;
+}
+       
+
 
 i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
 {
@@ -821,12 +964,6 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
     return offset;
 }
 
-i64 calc_unwrapped_line(i32 wrapped_line, Array<BufferLine> lines)
-{
-    i32 line = wrapped_line;
-    while (line > 0 && lines[line].wrapped) line--;
-    return line;
-}
 
 // NOTE(jesper): returns >= lines.count if line >= lines.count-1
 i32 next_unwrapped_line(i32 line, Array<BufferLine> lines)
@@ -988,6 +1125,16 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
+    
+    i32 start_line, old_end_line;
+    i64 start_column, old_end_column;
+    if (view.buffer == buffer_id) {
+        start_line = unwrapped_line_from_offset(byte_start, view.lines, view.caret.line);
+        start_column = unwrapped_column_from_offset(byte_start, view.lines, start_line);
+        
+        old_end_line = unwrapped_line_from_offset(byte_end, view.lines, view.caret.line);
+        old_end_column = unwrapped_column_from_offset(byte_end, view.lines, old_end_line);
+    }
 
     switch (buffer->type) {
     case BUFFER_FLAT:
@@ -1008,7 +1155,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
         buffer->flat.size -= num_bytes;
 
         if (view.buffer == buffer_id) {
-            i32 line = wrapped_line_from_offset(byte_start, view.caret.wrapped_line, view.lines);
+            i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
             i64 start_offset = view.lines[line].offset;
             for (i32 i = line+1; i < view.lines.count; i++) {
                 view.lines[i].offset -= num_bytes;
@@ -1022,8 +1169,36 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 prev_unwrapped_line(line, view.lines),
                 next_unwrapped_line(line, view.lines),
                 view.buffer);
+            
+            
+            if (auto lang = app.languages[buffer->language]; lang) {
+                if (buffer->syntax_tree) {
+                    i32 new_end_line = unwrapped_line_from_offset(byte_start, view.lines, start_line);
+                    i64 new_end_column = unwrapped_column_from_offset(byte_start, view.lines, new_end_line);
+                    
+                    TSInputEdit edit{
+                        .start_byte = (u32)byte_start, 
+                        .old_end_byte = (u32)byte_end,
+                        .new_end_byte = (u32)byte_start,
+                        .start_point = { .row = (u32)start_line, .column = (u32)start_column},
+                        .old_end_point = { .row = (u32)old_end_line, .column = (u32)old_end_column},
+                        .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
+                    };
+                    
+                    ts_tree_edit(buffer->syntax_tree, &edit);
+                }
+                
+                TSParser *parser = ts_parser_new();
+                defer { ts_parser_delete(parser); };
+                
+                ts_parser_set_language(parser, lang);
+                buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+            }
+        } else {
+            if (buffer->syntax_tree) ts_tree_delete(buffer->syntax_tree);
+            buffer->syntax_tree = nullptr;
         }
-
+        
         return true;
     }
 
@@ -1093,6 +1268,13 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return offset;
 
+    i32 at_line;
+    i64 at_column;
+    if (view.buffer == buffer_id) {
+        at_line = unwrapped_line_from_offset(offset, view.lines, view.caret.line);
+        at_column = unwrapped_column_from_offset(offset, view.lines, at_line);
+    }
+
     i64 end_offset = offset;
 
     String nl = buffer_newline_str(buffer);
@@ -1144,23 +1326,48 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
 
     // TODO(jesper): multi-view support
     if (view.buffer == buffer_id) {
-        i32 line = wrapped_line_from_offset(offset, view.caret.wrapped_line, view.lines);
+        i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
         for (i32 i = line+1; i < view.lines.count; i++) {
             view.lines[i].offset += required_extra_space;
         }
-
         
         recalc_line_wrap(
             &view.lines, 
             calc_unwrapped_line(line, view.lines), 
             next_unwrapped_line(line, view.lines), 
             view.buffer);
+        
+        i32 new_end_line = unwrapped_line_from_offset(offset+required_extra_space, view.lines, view.caret.line);
+        i64 new_end_column = unwrapped_column_from_offset(offset+required_extra_space, view.lines, new_end_line);
+
+        if (auto lang = app.languages[buffer->language]; lang) {
+            if (buffer->syntax_tree) {
+                TSInputEdit edit{
+                    .start_byte = (u32)offset, 
+                    .old_end_byte = (u32)offset,
+                    .new_end_byte = (u32)(offset+required_extra_space),
+                    .start_point = { .row = (u32)at_line, .column = (u32)at_column },
+                    .old_end_point = { .row = (u32)at_line, .column = (u32)at_column },
+                    .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
+                };
+                
+                ts_tree_edit(buffer->syntax_tree, &edit);
+            }
+            
+            TSParser *parser = ts_parser_new();
+            defer { ts_parser_delete(parser); };
+            ts_parser_set_language(parser, lang);
+            buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+        }
+    } else {
+        if (buffer->syntax_tree) ts_tree_delete(buffer->syntax_tree);
+        buffer->syntax_tree = nullptr;
     }
 
     if (record_history) {
         buffer_history(buffer_id, { .type = BUFFER_INSERT, .offset = offset, .text = text });
     }
-
+    
     return end_offset;
 }
 
@@ -2220,7 +2427,7 @@ next_node:;
                         pos + Vector2{ size.x-4-1, 1 },
                         { 4, 4 },
                         wnd->clip_rect,
-                        rgb_unpack(0xFF990000));
+                        bgr_unpack(0xFF990000));
                 }
             }
 
@@ -2252,9 +2459,9 @@ next_node:;
 
                     GuiWindow *overlay = &gui.windows[GUI_OVERLAY];
 
-                    Vector3 border_col = rgb_unpack(0xFFCCCCCC);
-                    Vector3 bg = rgb_unpack(0xFF1d2021);
-                    Vector3 bg_hot = rgb_unpack(0xFF3A3A3A);
+                    Vector3 border_col = bgr_unpack(0xFFCCCCCC);
+                    Vector3 bg = bgr_unpack(0xFF1d2021);
+                    Vector3 bg_hot = bgr_unpack(0xFF3A3A3A);
 
                     i32 bg_index = overlay->command_buffer.commands.count;
 
@@ -2406,35 +2613,72 @@ next_node:;
     
     if (buffer) {
         FontAtlas *font = &app.mono;
-        
+
         Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
         Vector2 size{ view.rect.size.x, view.rect.size.y };
-        
+
         i32 columns = (view.rect.size.x / font->space_width) + 1;
         i32 rows = (view.rect.size.y / font->line_height) + 2;
-        
-        struct GlyphData {
-            u32 glyph_index;
-            u32 fg;
+
+        struct RangeColor {
+            i64 start, end;
+            u32 color;
         };
-        Array<GlyphData> glyphs{};
+        DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
+        if (auto query = app.queries[buffer->language]; query && buffer->syntax_tree) {
+            i64 start = line_start_offset(view.line_offset, view.lines);
+            i64 end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
+
+            TSNode root = ts_tree_root_node(buffer->syntax_tree);
+
+            TSQueryCursor *cursor = ts_query_cursor_new();
+            defer { ts_query_cursor_delete(cursor); };
+
+            ts_query_cursor_set_byte_range(cursor, (u32)start, (u32)end);
+            ts_query_cursor_exec(cursor, query, root);
+
+            TSQueryMatch match;
+            u32 capture_index;
+
+            if (DEBUG_TREE_SITTER_QUERY) LOG_INFO("\n\nquery matches---------");
+            while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+                auto *capture = &match.captures[capture_index];
+                u32 start_byte = ts_node_start_byte(capture->node);
+                u32 end_byte = ts_node_end_byte(capture->node);
+
+                u32 capture_name_length;
+                const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
+                String capture_name{ (char*)tmp, (i32)capture_name_length };
+
+                if (u32 *c = find(&app.syntax_colors, capture_name); c) array_add(&colors, { start_byte, end_byte, *c });
+
+#if DEBUG_TREE_SITTER_QUERY
+                const char *node_type = ts_node_type(capture->node);
+                LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
+                LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
+                LOG_INFO("capture name: %.*s", STRFMT(capture_name));
+#endif
+            }
+        }
         
+        ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
+
         void *mapped = nullptr;
         i32 buffer_size = 0;
-        //if (columns*rows*(i32)sizeof(GlyphData) > buffer_size) 
+        //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size) 
         {
             if (mapped) {
                 glUnmapNamedBuffer(view.glyph_data_ssbo);
                 mapped = nullptr;
             }
             
-            buffer_size = columns*rows*sizeof(GlyphData);
+            buffer_size = columns*rows*sizeof glyphs[0];
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
             glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
         }
         
         mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
-        glyphs = { .data = (GlyphData*)mapped, .count = columns*rows };
+        glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows };
         defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
         
         Vector3 fg = linear_from_sRGB(app.fg);
@@ -2444,13 +2688,15 @@ next_node:;
             g.fg = bgr_pack(fg);
         }
         
-        for (i32 i = 0; i < rows; i++) {
-            i32 line_index = i + view.line_offset;
+        i32 current_color = 0;
+        for (i32 line_index = view.line_offset; line_index < MIN(view.lines.count, view.line_offset+rows); line_index++) {
+            i32 i = line_index-view.line_offset;
             i64 p = view.lines[line_index].offset;
             i64 end = line_end_offset(line_index, view.lines, buffer);
 
             i64 vcolumn = 0;
             while (p < end) {
+                i64 pc = p;
                 i32 c = utf32_it_next(buffer, &p);
                 if (c == 0) break;
 
@@ -2476,6 +2722,11 @@ next_node:;
                 Glyph glyph = find_or_create_glyph(font, c);
                 u32 index = (u32(glyph.x0) & 0xFFFF) | (u32(glyph.y0) << 16);
                 glyphs[i*columns + vcolumn].glyph_index = index;
+                
+                while (current_color < colors.count && colors[current_color].end <= pc) current_color++;
+                if (current_color < colors.count && pc >= colors[current_color].start) {
+                    glyphs[i*columns+vcolumn].fg = colors[current_color].color;
+                }
 
                 vcolumn++;
             }

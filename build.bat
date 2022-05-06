@@ -6,19 +6,25 @@ SET ROOT=%~dp0
 SET BUILD_DIR=%ROOT%\build
 
 SET DEFINITIONS=-D_CRT_SECURE_NO_WARNINGS
-
 SET WARNINGS=-Wall -Wextra -Wno-missing-braces -Wno-logical-op-parentheses -Wno-c99-designator -Wno-unused-parameter -Wno-initializer-overrides -Wno-c++20-extensions -Wno-char-subscripts -Wno-unneeded-internal-declaration
 SET FLAGS=%DEFINITIONS% %WARNINGS% -ferror-limit=0 -g -fno-exceptions -fno-rtti -std=c++17 -fno-color-diagnostics
 
 if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
-SET INCLUDE_DIR=-I%ROOT%
+SET TS_DIR=%ROOT%\external\tree-sitter-0.20.6
+SET TS_CPP_DIR=%ROOT%\external\tree-sitter-cpp-master
+
+SET INCLUDE_DIR=-I%ROOT% -I%TS_DIR%\lib\include
 SET LIBS=-luser32.lib -lShell32.lib -lopengl32.lib -lgdi32.lib -lshlwapi.lib
 SET LLVM=D:\apps\LLVM
 
 PUSHD %BUILD_DIR%
 echo compiling...
-clang++ -O0 %FLAGS% %INCLUDE_DIR% %LIBS% -o mimir.exe %ROOT%\src\win32_mimir.cpp
+REM clang -O3 -g -gcodeview -w -c -I%TS_DIR%\src -I%TS_DIR%\lib\include -o tree_sitter.obj %TS_DIR%\lib\src\lib.c 
+REM clang -O3 -g -gcodeview -w -c -I%TS_CPP_DIR%\src -o tree_sitter_cpp_parser.obj %TS_CPP_DIR%\src\parser.c 
+REM clang -O3 -g -gcodeview -w -c -I%TS_CPP_DIR%\src -o tree_sitter_cpp_scanner.obj %TS_CPP_DIR%\src\scanner.cc 
+
+clang -O0 %FLAGS% %INCLUDE_DIR% %LIBS% -o mimir.exe %ROOT%\src\win32_mimir.cpp tree_sitter.obj tree_sitter_cpp_parser.obj tree_sitter_cpp_scanner.obj
 POPD
 
 set end_time=%time%

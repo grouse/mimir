@@ -6,10 +6,14 @@
 
 #include <initializer_list>
 
+// In honour of Dirk
+#define ANON_ARRAY(fields) struct anon_##__LINE__ { fields; }; Array<anon_##__LINE__>
+
 template<typename T>
 struct Array {
     T *data;
     i32 count;
+    
     
     T& operator[](i32 i) 
     { 
