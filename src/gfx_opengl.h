@@ -139,8 +139,6 @@ struct Camera {
 Matrix4 transform(Camera *camera);
 Vector2 ws_from_ss(Vector2 ss_pos);
 
-Vector3 rgb_unpack(u32 argb);
-Vector4 argb_unpack(u32 argb);
 f32 linear_from_sRGB(f32 s);
 Vector3 linear_from_sRGB(Vector3 sRGB);
 Vector4 linear_from_sRGB(Vector4 sRGB);

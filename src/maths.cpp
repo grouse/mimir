@@ -741,17 +741,6 @@ f32 ray_hit_sphere(Vector3 ray_o, Vector3 ray_d, Vector3 sphere_p, f32 sphere_r)
     return (-half_b - sqrtf(disc)) / a;
 }
 
-u32 BGRA_pack(f32 r, f32 g, f32 b, f32 a)
-{
-    return u32(b*255.0f) | u32(g*255.0f) << 8 | u32(r*255.0f) << 16 | u32(a*255.0f) << 24;
-}
-
-u32 RGB_pack(Vector3 c)
-{
-    return u32(c.r*255.0f) | u32(c.g*255.0f) << 8 | u32(c.b*255.0f) << 16;
-    
-}
-
 f32 sRGB_from_linear(f32 l)
 {
     if (l > 1.0f) return 1.0f;
@@ -814,4 +803,40 @@ Vector3 rgb_mul(Vector3 rgb, f32 v)
         CLAMP(rgb.y * v, 0, 1), 
         CLAMP(rgb.z * v, 0, 1) 
    };
+}
+
+u32 bgra_pack(f32 r, f32 g, f32 b, f32 a)
+{
+    return u32(b*255.0f) | u32(g*255.0f) << 8 | u32(r*255.0f) << 16 | u32(a*255.0f) << 24;
+}
+
+u32 rgb_pack(Vector3 c)
+{
+    return u32(c.r*255.0f) | u32(c.g*255.0f) << 8 | u32(c.b*255.0f) << 16;
+
+}
+
+u32 bgr_pack(Vector3 c)
+{
+    return u32(c.b*255.0f) | u32(c.g*255.0f) << 8 | u32(c.r*255.0f) << 16;
+
+}
+
+Vector3 bgr_unpack(u32 argb)
+{
+    Vector3 rgb;
+    rgb.b = ((argb >> 0) & 0xFF) / 255.0f;
+    rgb.g = ((argb >> 8) & 0xFF) / 255.0f;
+    rgb.r = ((argb >> 16) & 0xFF) / 255.0f;
+    return rgb;
+}
+
+Vector4 bgra_unpack(u32 argb)
+{
+    Vector4 v;
+    v.b = ((argb >> 0) & 0xFF) / 255.0f;
+    v.g = ((argb >> 8) & 0xFF) / 255.0f;
+    v.r = ((argb >> 16) & 0xFF) / 255.0f;
+    v.a = ((argb >> 24) & 0xFF) / 255.0f;
+    return v;
 }

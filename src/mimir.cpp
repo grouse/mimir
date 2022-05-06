@@ -76,12 +76,12 @@ struct Application {
     DynamicArray<ProcessCommand> process_commands;
     i32 selected_process;
 
-    Vector3 bg = rgb_unpack(0x00142825);
-    Vector3 fg = rgb_unpack(0x00D5C4A1);
-    Vector3 mark_fg = rgb_unpack(0xFFEF5F0A);
-    Vector3 caret_fg = rgb_unpack(0xFFEF5F0A);
-    Vector3 caret_bg = rgb_unpack(0xFF8a523f);
-    Vector3 line_bg = rgb_unpack(0xFF264041);
+    Vector3 bg = bgr_unpack(0x00142825);
+    Vector3 fg = bgr_unpack(0x00D5C4A1);
+    Vector3 mark_fg = bgr_unpack(0xFFEF5F0A);
+    Vector3 caret_fg = bgr_unpack(0xFFEF5F0A);
+    Vector3 caret_bg = bgr_unpack(0xFF8a523f);
+    Vector3 line_bg = bgr_unpack(0xFF264041);
 
     struct {
         GLuint build;
@@ -2441,7 +2441,7 @@ next_node:;
         
         for (auto &g : glyphs) {
             g.glyph_index = 0xFFFFFFFF;
-            g.fg = RGB_pack(fg);
+            g.fg = bgr_pack(fg);
         }
         
         for (i32 i = 0; i < rows; i++) {

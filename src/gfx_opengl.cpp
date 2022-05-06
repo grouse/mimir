@@ -138,13 +138,20 @@ void gl_debug_proc(
     "#version 430 core\n" \
     "#extension GL_ARB_explicit_uniform_location : enable\n"\
     "layout(location = 0) uniform mat4 cs_from_ws;\n"\
-    "vec3 unpack_rgb(uint rgb)\n"\
+    "vec3 rgb_unpack(uint rgb)\n"\
     "{\n"\
     "	uint r = rgb & 0xff;\n"\
     "	uint g = (rgb >> 8) & 0xff;\n"\
     "	uint b = (rgb >> 16) & 0xff;\n"\
     "	return vec3(r, g, b) / 255.0;\n"\
     "}\n"\
+    "vec3 bgr_unpack(uint rgb)\n"\
+    "{\n"\
+    "	uint b = rgb & 0xff;\n"\
+    "	uint g = (rgb >> 8) & 0xff;\n"\
+    "	uint r = (rgb >> 16) & 0xff;\n"\
+    "	return vec3(r, g, b) / 255.0;\n"\
+    "}\n"
 
 void init_gfx(Vector2 resolution)
 {
@@ -336,7 +343,7 @@ void init_gfx(Vector2 resolution)
             "	{\n"
             "		ivec2 glyph_pos = ivec2(cell.glyph_index & 0xFFFF, cell.glyph_index >> 16);\n"
             "		vec2 uv = (glyph_pos + cell_pos) / textureSize(glyph_atlas, 0);\n"
-            "		color = vec4(unpack_rgb(cell.fg), texture(glyph_atlas, uv).r);\n"
+            "		color = vec4(bgr_unpack(cell.fg), texture(glyph_atlas, uv).r);\n"
             "	}\n"
             "	out_color = color;\n"
             "}\0";
@@ -744,24 +751,6 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
     }
 }
 
-Vector3 rgb_unpack(u32 argb)
-{
-    Vector3 rgb;
-    rgb.r = ((argb >> 16) & 0xFF) / 255.0f;
-    rgb.g = ((argb >> 8) & 0xFF) / 255.0f;
-    rgb.b = ((argb >> 0) & 0xFF) / 255.0f;
-    return rgb;
-}
-
-Vector4 argb_unpack(u32 argb)
-{
-    Vector4 v;
-    v.r = ((argb >> 16) & 0xFF) / 255.0f;
-    v.g = ((argb >> 8) & 0xFF) / 255.0f;
-    v.b = ((argb >> 0) & 0xFF) / 255.0f;
-    v.a = ((argb >> 24) & 0xFF) / 255.0f;
-    return v;
-}
 
 f32 linear_from_sRGB(f32 s)
 {

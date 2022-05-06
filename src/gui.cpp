@@ -883,10 +883,10 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
         toggled = true;
     }
 
-    Vector3 border_col = rgb_unpack(0xFFCCCCCC);
-    Vector3 bg_col = gui.pressed == id ? rgb_unpack(0xFF2C2C2C) : gui.hot == id ? rgb_unpack(0xFF3A3A3A) : rgb_unpack(0xFF1d2021);
-    Vector3 checked_col = rgb_unpack(0xFFCCCCCC); (void)checked_col;
-    Vector3 label_col = rgb_unpack(0xFFFFFFFF);
+    Vector3 border_col = bgr_unpack(0xFFCCCCCC);
+    Vector3 bg_col = gui.pressed == id ? bgr_unpack(0xFF2C2C2C) : gui.hot == id ? bgr_unpack(0xFF3A3A3A) : bgr_unpack(0xFF1d2021);
+    Vector3 checked_col = bgr_unpack(0xFFCCCCCC); (void)checked_col;
+    Vector3 label_col = bgr_unpack(0xFFFFFFFF);
 
     gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
     gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
@@ -1515,7 +1515,7 @@ void gui_end_window()
             }
         }
 
-        Vector3 resize_bg = gui.hot == resize_id ? rgb_unpack(0xFFFFFFFF) : rgb_unpack(0xFF5B5B5B);
+        Vector3 resize_bg = gui.hot == resize_id ? bgr_unpack(0xFFFFFFFF) : bgr_unpack(0xFF5B5B5B);
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
     }
     //gui_hot_rect(wnd->id, wnd->pos, wnd->size);
@@ -2197,7 +2197,7 @@ bool gui_begin_menu_id(GuiId id)
     };
     gui_begin_layout(layout);
 
-    Vector3 bg = rgb_unpack(0xFF212121);
+    Vector3 bg = bgr_unpack(0xFF212121);
     gui_draw_rect(layout.pos, layout.size, wnd->clip_rect, bg);
 
     gui_push_id(id);
@@ -2234,8 +2234,8 @@ bool gui_begin_menu_id(GuiId id, String label)
         gui.active_menu = id;
     }
 
-    Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
-    Vector3 btn_bg = gui.hot == id ? rgb_unpack(0xFF282828) : rgb_unpack(0xFF212121);
+    Vector3 btn_fg = bgr_unpack(0xFFFFFFFF);
+    Vector3 btn_bg = gui.hot == id ? bgr_unpack(0xFF282828) : bgr_unpack(0xFF212121);
     gui_draw_rect(pos, size, wnd->clip_rect, btn_bg);
     gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, &gui.style.text.font);
 
@@ -2288,7 +2288,7 @@ void gui_end_menu()
 
     menu->size = layout->size;
     if (layout->type == GUI_LAYOUT_ROW && menu->active) {
-        Vector3 bg = rgb_unpack(0xFF212121);
+        Vector3 bg = bgr_unpack(0xFF212121);
         gui_draw_rect(layout->pos, menu->size, bg, &gui.windows[GUI_OVERLAY].command_buffer, menu->draw_index);
     }
 
@@ -2323,8 +2323,8 @@ bool gui_menu_button_id(GuiId id, String label)
         menu->active = false;
     }
 
-    Vector3 btn_fg = rgb_unpack(0xFFFFFFFF);
-    if (gui.hot == id) gui_draw_rect(pos, size, wnd->clip_rect, rgb_unpack(0xFF282828) );
+    Vector3 btn_fg = bgr_unpack(0xFFFFFFFF);
+    if (gui.hot == id) gui_draw_rect(pos, size, wnd->clip_rect, bgr_unpack(0xFF282828) );
     gui_draw_text(td.glyphs, pos + text_offset, wnd->clip_rect, btn_fg, font);
     return clicked;
 }

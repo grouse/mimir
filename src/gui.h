@@ -230,21 +230,21 @@ struct GuiContext {
     } mouse;
 
     struct {
-        Vector3 fg = rgb_unpack(0xFFFFFFFF);
+        Vector3 fg = bgr_unpack(0xFFFFFFFF);
         //Vector3 fg_hot = rgb_unpack(0xFFFD8433);
 
-        Vector3 bg = rgb_unpack(0xFF333333);
-        Vector3 bg_hot = rgb_unpack(0xFF3F3F3F);
-        Vector3 bg_press = rgb_unpack(0xFF2A2A2A);
+        Vector3 bg = bgr_unpack(0xFF333333);
+        Vector3 bg_hot = bgr_unpack(0xFF3F3F3F);
+        Vector3 bg_press = bgr_unpack(0xFF2A2A2A);
 
-        Vector3 bg_dark0 = rgb_unpack(0xFF212121);
-        Vector3 bg_dark1 = rgb_unpack(0xFF282828);
+        Vector3 bg_dark0 = bgr_unpack(0xFF212121);
+        Vector3 bg_dark1 = bgr_unpack(0xFF282828);
 
-        Vector3 bg_light0 = rgb_unpack(0xFF828282);
+        Vector3 bg_light0 = bgr_unpack(0xFF828282);
 
-        Vector3 accent_bg = rgb_unpack(0xFFCA5100);
-        Vector3 accent_bg_hot = rgb_unpack(0xFFFD8433);
-        Vector3 accent_bg_press = rgb_unpack(0xFFDA4100);
+        Vector3 accent_bg = bgr_unpack(0xFFCA5100);
+        Vector3 accent_bg_hot = bgr_unpack(0xFFFD8433);
+        Vector3 accent_bg_press = bgr_unpack(0xFFDA4100);
 
         struct {
             FontAtlas font;
@@ -262,7 +262,7 @@ struct GuiContext {
 
             Vector3 title_fg = { 1, 1, 1 };
 
-            Vector3 close_bg_hot = rgb_unpack(0xFFFF0000);
+            Vector3 close_bg_hot = bgr_unpack(0xFFFF0000);
         } window;
 
         struct {
