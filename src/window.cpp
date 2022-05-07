@@ -1,9 +1,9 @@
-#include "input.h"
+#include "window.h"
 
 #if defined(_WIN32)
-#include "win32_input.cpp"
+#include "win32_window.cpp"
 #elif defined(__linux__)
-#include "linux_input.cpp"
+#include "linux_window.cpp"
 #endif
 
 String string_from_enum(KeyCode_ kc)

@@ -1,4 +1,4 @@
-#include "input.h"
+#include "window.h"
 
 struct {
     bool text_input_enabled;
@@ -105,19 +105,23 @@ KeyCode_ keycode_from_scancode(u8 scancode)
     return KC_UNKNOWN;
 }
 
-void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
     static u32 modifier_state = MF_NONE;
-    InputEvent event{};
+    WindowEvent event{};
     
     switch (message) {
+    case WM_CLOSE:
+    case WM_QUIT:
+        event.type = WE_QUIT;
+        break;
     case WM_MOUSEWHEEL: {
             i16 delta = (wparam >> 16) & 0xFFFFF;
-            event.type = IE_MOUSE_WHEEL;
+            event.type = WE_MOUSE_WHEEL;
             event.mouse_wheel.delta = delta;
         } break;
     case WM_MOUSEMOVE:
-        event.type = IE_MOUSE_MOVE;
+        event.type = WE_MOUSE_MOVE;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         if (wparam & MK_LBUTTON) event.mouse.button |= MB_PRIMARY;
@@ -125,25 +129,25 @@ void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message,
         if (wparam & MK_MBUTTON) event.mouse.button |= MB_MIDDLE;
         break;
     case WM_LBUTTONDOWN:
-        event.type = IE_MOUSE_PRESS;
+        event.type = WE_MOUSE_PRESS;
         event.mouse.button = MB_PRIMARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_LBUTTONUP:
-        event.type = IE_MOUSE_RELEASE;
+        event.type = WE_MOUSE_RELEASE;
         event.mouse.button = MB_PRIMARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_RBUTTONDOWN:
-        event.type = IE_MOUSE_PRESS;
+        event.type = WE_MOUSE_PRESS;
         event.mouse.button = MB_SECONDARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
         break;
     case WM_RBUTTONUP:
-        event.type = IE_MOUSE_RELEASE;
+        event.type = WE_MOUSE_RELEASE;
         event.mouse.button = MB_SECONDARY;
         event.mouse.x = lparam & 0xFFFF;
         event.mouse.y = (lparam >> 16) & 0xFFFF;
@@ -166,7 +170,7 @@ void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message,
             u8 utf8[4];
             i32 length = utf8_from_utf32(utf8, utf32);
             
-            event.type = IE_TEXT;
+            event.type = WE_TEXT;
             event.text.modifiers = modifier_state;
             event.text.length = 0;
             u16 repeat_count = lparam & 0xff;
@@ -196,15 +200,15 @@ void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message,
             event.key.prev_state = (lparam >> 30) & 0x1;
             
             if (event.key.keycode != KC_UNKNOWN) {
-                event.type = IE_KEY_PRESS;
+                event.type = WE_KEY_PRESS;
                 array_add(queue, event);
                 
                 event.key.repeat = 1;
                 for (; repeat_count > 1; repeat_count--) {
-                    event.type = IE_KEY_RELEASE;
+                    event.type = WE_KEY_RELEASE;
                     array_add(queue, event);
                     
-                    event.type = IE_KEY_PRESS;
+                    event.type = WE_KEY_PRESS;
                     array_add(queue, event);
                 }
                 
@@ -221,7 +225,7 @@ void win32_input_event(DynamicArray<InputEvent> *queue, HWND hwnd, UINT message,
 
             u8 scancode = (lparam >> 16) & 0xff;
 
-            event.type = IE_KEY_RELEASE;
+            event.type = WE_KEY_RELEASE;
             event.key.keycode = keycode_from_scancode(scancode);
             event.key.modifiers = modifier_state;
             event.key.prev_state = (lparam >> 30) & 0x1;

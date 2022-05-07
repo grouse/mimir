@@ -4,7 +4,7 @@
 #include "maths.h"
 #include "array.h"
 #include "string.h"
-#include "input.h"
+#include "window.h"
 #include "gfx_opengl.h"
 #include "font.h"
 
@@ -216,7 +216,7 @@ struct GuiContext {
     bool capture_keyboard[2];
     bool capture_mouse_wheel[2];
 
-    DynamicArray<InputEvent> events;
+    DynamicArray<WindowEvent> events;
 
     Vector2 drag_start_mouse;
     Vector2 drag_start_data;
@@ -290,7 +290,7 @@ extern GuiContext gui;
 
 void init_gui();
 void gui_begin_frame();
-bool gui_input(InputEvent event);
+bool gui_input(WindowEvent event);
 void gui_render();
 
 void gui_begin_layout(GuiLayout layout);

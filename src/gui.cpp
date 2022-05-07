@@ -917,9 +917,9 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
     }
 
     if (gui.focused == id && gui_capture(gui.capture_text) && gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_KEY_PRESS:
+            case WE_KEY_PRESS:
                 switch (e.key.keycode) {
                 case KC_LEFT:
                     gui.edit.cursor = utf8_decr({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
@@ -1014,7 +1014,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
                 default: break;
                 }
                 break;
-            case IE_TEXT:
+            case WE_TEXT:
                 if (gui.edit.cursor != gui.edit.selection) {
                     i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                     i32 end = MAX(gui.edit.cursor, gui.edit.selection);
@@ -1399,9 +1399,9 @@ bool gui_begin_window_id(
     // should be given a chance to respond to certain key events first
     // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
     if (gui.focused_window == id && gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_KEY_PRESS:
+            case WE_KEY_PRESS:
                 switch (e.key.keycode) {
                 case KC_Q:
                     if (e.key.modifiers == MF_CTRL) {
@@ -1524,9 +1524,9 @@ void gui_end_window()
     // should be given a chance to respond to certain key events first
     // I need to implement something that lets widgets mark events as handled in appropriate hierarchy order
     if (gui.focused_window == wnd->id && gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_KEY_PRESS:
+            case WE_KEY_PRESS:
                 switch (e.key.keycode) {
                 case KC_ESC:
                     gui.focused_window = GUI_ID_INVALID;
@@ -2272,9 +2272,9 @@ void gui_end_menu()
     ASSERT(menu);
 
     if (menu->active && gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_KEY_PRESS:
+            case WE_KEY_PRESS:
                 switch (e.key.keycode) {
                 case KC_ESC: menu->active = false; break;
                 }
@@ -2470,9 +2470,9 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     if (gui_mouse_over_rect(lr.pos, lr.size) &&
         gui_capture(gui.capture_mouse_wheel))
     {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_MOUSE_WHEEL:
+            case WE_MOUSE_WHEEL:
                 *current -= step_size*e.mouse_wheel.delta;
                 *current = CLAMP(*current, 0, max_c);
                 break;
@@ -2577,9 +2577,9 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
 
     i32 next_selected_item = CLAMP(*selected_item, 0, items.count-1);
     if (gui_capture(gui.capture_keyboard)) {
-        for (InputEvent e : gui.events) {
+        for (WindowEvent e : gui.events) {
             switch (e.type) {
-            case IE_KEY_PRESS:
+            case WE_KEY_PRESS:
                 switch (e.key.keycode) {
                 case KC_DOWN:
                     next_selected_item = MIN((*selected_item)+1, items.count-1);
@@ -2668,23 +2668,23 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     return result;
 }
 
-bool gui_input(InputEvent event)
+bool gui_input(WindowEvent event)
 {
     switch (event.type) {
-    case IE_TEXT:
+    case WE_TEXT:
         if (gui.capture_text[0]) {
             array_add(&gui.events, event);
             return true;
         }
         break;
-    case IE_MOUSE_WHEEL:
+    case WE_MOUSE_WHEEL:
         if (gui.capture_mouse_wheel[0]) {
             array_add(&gui.events, event);
             return true;
         }
         break;
-    case IE_KEY_RELEASE:
-    case IE_KEY_PRESS:
+    case WE_KEY_RELEASE:
+    case WE_KEY_PRESS:
         if (gui.capture_keyboard[0]) {
             array_add(&gui.events, event);
             return true;

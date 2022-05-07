@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 
     timespec last_time = monotonic_time();
 
-    DynamicArray<InputEvent> input_stream{};
+    DynamicArray<WindowEvent> input_stream{};
     array_reserve(&input_stream, 2);
 
     while (true) {
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 
 			input_stream.count = 0;
 			linux_input_event(&input_stream, wnd.ic, event);
-			for (InputEvent e : input_stream) app_event(e);
+			for (WindowEvent e : input_stream) app_event(e);
 
             switch (event.type) {
             case PropertyNotify: {

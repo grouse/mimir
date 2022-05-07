@@ -2,7 +2,7 @@
 #include "core.h"
 #include "maths.h"
 #include "allocator.h"
-#include "input.h"
+#include "window.h"
 #include "process.h"
 
 #include "maths.cpp"
@@ -10,7 +10,7 @@
 #include "string.cpp"
 #include "allocator.cpp"
 #include "core.cpp"
-#include "input.cpp"
+#include "window.cpp"
 #include "gfx_opengl.cpp"
 #include "assets.cpp"
 #include "font.cpp"
@@ -581,18 +581,26 @@ void init_app(Array<String> args)
         }
     }
     
-    set(&app.syntax_colors, "preproc", 0xFFFE8019);
-    set(&app.syntax_colors, "include", 0xFFFE8019);
-    set(&app.syntax_colors, "string", 0xFF689D6A);
-    set(&app.syntax_colors, "comment", 0xFF8EC07C);
-    set(&app.syntax_colors, "function", 0xFFccb486);
-    set(&app.syntax_colors, "operator", 0xFFfcedcf);
-    set(&app.syntax_colors, "punctuation", 0xFFfcedcf);
-    set(&app.syntax_colors, "type", 0xFFbcbf91);
-    set(&app.syntax_colors, "constant", 0xFFe8e3c5);
-    set(&app.syntax_colors, "keyword", 0xFFd36e2a);
-    set(&app.syntax_colors, "namespace", 0xFFd36e2a);
-    set(&app.syntax_colors, "preproc.identifier", 0xFF84a89a); 
+    u32 fg = bgr_pack(app.fg);
+    set(&app.syntax_colors, "unused", fg);
+    set(&app.syntax_colors, "_parent", fg);
+    set(&app.syntax_colors, "label", fg);
+    set(&app.syntax_colors, "parameter", fg);
+    set(&app.syntax_colors, "namespace", fg);
+
+    set(&app.syntax_colors, "preproc", 0xFE8019u);
+    set(&app.syntax_colors, "include", 0xFE8019u);
+    set(&app.syntax_colors, "string", 0x689D6Au);
+    set(&app.syntax_colors, "comment", 0x8EC07Cu);
+    set(&app.syntax_colors, "function", 0xccb486u);
+    set(&app.syntax_colors, "operator", 0xfcedcfu);
+    set(&app.syntax_colors, "punctuation", 0xfcedcfu);
+    set(&app.syntax_colors, "type", 0xbcbf91u);
+    set(&app.syntax_colors, "constant", 0xe9e4c6u);
+    set(&app.syntax_colors, "constant.identifier", 0xff0000u);//0xe9e4c6u);
+    set(&app.syntax_colors, "keyword", 0xd36e2au);
+    set(&app.syntax_colors, "namespace", 0xd36e2au);
+    set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
     
     // TODO(jesper): this is kinda neat but I think I might want this as some kind of underline or background
     // style instead of foreground colour?
@@ -1837,7 +1845,7 @@ void exec_process_command()
     }
 }
 
-void app_event(InputEvent event)
+void app_event(WindowEvent event)
 {
     if (gui_input(event)) {
         app.animating = true;
@@ -1853,13 +1861,16 @@ void app_event(InputEvent event)
     // this point, especially when I don't even have anything animating
 
     switch (event.type) {
-    case IE_TEXT:
+    case WE_QUIT:
+        exit(0);
+        break;
+    case WE_TEXT:
         if (app.mode == MODE_INSERT) {
             write_string(view.buffer, String{ (char*)&event.text.c[0], event.text.length });
             app.animating = true;
         }
         break;
-    case IE_KEY_PRESS:
+    case WE_KEY_PRESS:
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.keycode) {
@@ -1909,7 +1920,8 @@ void app_event(InputEvent event)
                     
                     BufferHistoryScope h(view.buffer);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view_seek_line(MIN(view.caret.wrapped_line, view.mark.wrapped_line));
+                        view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
+                        view.mark = view.caret;
                         move_view_to_caret();
                     }
                 } break;
@@ -1922,10 +1934,8 @@ void app_event(InputEvent event)
                     set_clipboard_data(str);
 
                     if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view.caret.byte_offset = r.start;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.mark;
-
+                        view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
+                        view.mark = view.caret;
                         move_view_to_caret();
                     }
                 } break;
@@ -2158,7 +2168,7 @@ void app_event(InputEvent event)
             }
         }
         break;
-    case IE_MOUSE_MOVE:
+    case WE_MOUSE_MOVE:
         if (gui.hot == view.gui_id &&
             event.mouse.button == MB_PRIMARY &&
             point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
@@ -2166,7 +2176,7 @@ void app_event(InputEvent event)
             set_caret_xy(event.mouse.x, event.mouse.y);
             app.animating = true;
         } break;
-    case IE_MOUSE_PRESS:
+    case WE_MOUSE_PRESS:
         if (gui.hot == view.gui_id &&
             event.mouse.button == MB_PRIMARY &&
             point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
@@ -2175,7 +2185,7 @@ void app_event(InputEvent event)
             view.mark = view.caret;
             app.animating = true;
         } break;
-    case IE_MOUSE_WHEEL:
+    case WE_MOUSE_WHEEL:
         // TODO(jesper): make a decision/option whether this should be moving
         // the caret or not. My current gut feeling says no, as a way to allow a
         // kind of temporary scroll back to check on something, that you then get

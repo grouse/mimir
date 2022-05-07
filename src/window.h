@@ -1,14 +1,15 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-enum InputEventType : u8 {
-    IE_MOUSE_WHEEL = 1,
-    IE_MOUSE_PRESS,
-    IE_MOUSE_RELEASE,
-    IE_MOUSE_MOVE,
-    IE_KEY_PRESS,
-    IE_KEY_RELEASE,
-    IE_TEXT,
+enum WindowEventType : u8 {
+    WE_MOUSE_WHEEL = 1,
+    WE_MOUSE_PRESS,
+    WE_MOUSE_RELEASE,
+    WE_MOUSE_MOVE,
+    WE_KEY_PRESS,
+    WE_KEY_RELEASE,
+    WE_TEXT,
+    WE_QUIT,
 };
 
 enum KeyCode_ : u8 {
@@ -122,7 +123,7 @@ enum MouseButton : u8 {
     MB_MIDDLE = 1 << 2,
 };
 
-struct InputEvent {
+struct WindowEvent {
     u8 type;
     union {
         struct {

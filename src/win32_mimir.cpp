@@ -30,7 +30,7 @@ bool has_init = false;
 
 LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-    DynamicArray<InputEvent> events{ .alloc = mem_tmp };
+    DynamicArray<WindowEvent> events{ .alloc = mem_tmp };
     array_reserve(&events, 2);
               
     win32_input_event(&events, hwnd, message, wparam, lparam);
@@ -41,10 +41,6 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     // When app_event is more built it, maybe it should go in there.
 
     switch (message) {
-    case WM_QUIT:
-    case WM_CLOSE:
-        exit(0);
-        break;
     case WM_MOUSEMOVE:
         g_mouse.x = lparam & 0xFFFF;
         g_mouse.y = (lparam >> 16) & 0xFFFF;
@@ -72,8 +68,6 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     case WM_MOUSEWHEEL:
     case WM_KEYDOWN:
     case WM_KEYUP:
-    case WM_SYSKEYDOWN:
-    case WM_SYSKEYUP:
     case WM_SIZING:
     case WM_ENTERSIZEMOVE:
     case WM_EXITSIZEMOVE:
