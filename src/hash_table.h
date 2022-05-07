@@ -91,6 +91,13 @@ void set(HashTable<K, V> *table, K key, V value)
     table->count++;
 }
 
+template<typename V>
+V* find(HashTable<String, V> *table, String key)
+{
+    i32 i = find_slot(table, key);
+    if (i == -1 || !table->slots[i].occupied) return nullptr;
+    return &table->slots[i].value;
+}
 
 template<typename V>
 void set(HashTable<String, V> *table, String key, V value)

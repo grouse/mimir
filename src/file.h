@@ -38,6 +38,7 @@ FileHandle open_file(String path, FileOpenMode mode);
 void write_file(FileHandle handle, char *data, i32 bytes);
 void close_file(FileHandle handle);
 
+void write_file(String path, void *data, i32 bytes);
 void write_file(String path, StringBuilder *sb);
 
 bool is_directory(String path);

@@ -221,6 +221,16 @@ void write_file(String path, StringBuilder *sb)
     }
 }
 
+void write_file(String path, void *data, i32 size)
+{
+    char *sz_path = sz_string(path);
+
+    HANDLE file = win32_open_file(sz_path, CREATE_ALWAYS, GENERIC_WRITE);
+    defer{ CloseHandle(file); };
+
+    WriteFile(file, data, size, NULL, NULL);
+}
+
 enum FileChangeType {
     FILE_CHANGE_MODIFY,
     FILE_CHANGE_ADD,

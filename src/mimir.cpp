@@ -411,6 +411,19 @@ BufferId create_buffer(String file)
             ts_parser_set_language(parser, lang);
             b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
             ts_parser_delete(parser);
+#if 0
+            TSNode root = ts_tree_root_node(b.syntax_tree);
+            char *sexpr = ts_node_string(root);
+            
+            String n = slice(b.name, 0, b.name.length-extension_of(b.name).length);
+            String scm_path = stringf(mem_tmp, "D:/projects/mimir/build/%.*s.scm", STRFMT(n));
+            write_file(scm_path, sexpr, strlen(sexpr));
+            
+            String gv_path = stringf(mem_tmp, "D:/projects/mimir/build/%.*s.dot", STRFMT(n));
+            FILE *f = fopen(sz_string(gv_path), "wb");
+            ts_tree_print_dot_graph(b.syntax_tree, f);
+            fclose(f);
+#endif
         }
     }
 
@@ -528,7 +541,6 @@ void ts_custom_free(void *ptr)
 
 void init_app(Array<String> args)
 {
-    
     fzy_init_table();
 
     String exe_folder = get_exe_folder();
@@ -547,7 +559,7 @@ void init_app(Array<String> args)
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
     ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
     
-    if (auto a = find_asset("highlighting/cpp.scm"); a) {
+    if (auto a = find_asset("queries/cpp/highlights.scm"); a) {
         u32 error_loc;
         TSQueryError error;
         app.queries[LANGUAGE_CPP] = ts_query_new(app.languages[LANGUAGE_CPP], (char*)a->data, a->size, &error_loc, &error);
@@ -564,18 +576,28 @@ void init_app(Array<String> args)
             case TSQueryErrorLanguage: s = "language"; break;
             }
             
-            String file = "highlighting/cpp.scm";
+            String file = "queries/cpp/highlights.scm";
             LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(file), error_loc);
         }
     }
     
     set(&app.syntax_colors, "preproc", 0xFFFE8019);
-    set(&app.syntax_colors, "keyword", 0xFFD65D0E);
+    set(&app.syntax_colors, "include", 0xFFFE8019);
     set(&app.syntax_colors, "string", 0xFF689D6A);
-    set(&app.syntax_colors, "operator", 0xFFfcedcf);
-    set(&app.syntax_colors, "constant", 0xFFECE6D6);
     set(&app.syntax_colors, "comment", 0xFF8EC07C);
+    set(&app.syntax_colors, "function", 0xFFccb486);
+    set(&app.syntax_colors, "operator", 0xFFfcedcf);
+    set(&app.syntax_colors, "punctuation", 0xFFfcedcf);
+    set(&app.syntax_colors, "type", 0xFFbcbf91);
+    set(&app.syntax_colors, "constant", 0xFFe8e3c5);
+    set(&app.syntax_colors, "keyword", 0xFFd36e2a);
+    set(&app.syntax_colors, "namespace", 0xFFd36e2a);
+    set(&app.syntax_colors, "preproc.identifier", 0xFF84a89a); 
     
+    // TODO(jesper): this is kinda neat but I think I might want this as some kind of underline or background
+    // style instead of foreground colour?
+    //set(&app.syntax_colors, "error", 0xFFFF0000); 
+
     // TODO(jesper): I definitely need to figure this shit out
     for (i32 i = 0; i < app.syntax_colors.capacity; i++) {
         if (!app.syntax_colors.slots[i].occupied) continue;
@@ -2190,6 +2212,9 @@ struct {
 
 void update_and_render()
 {
+    //LOG_INFO("------- frame --------");
+    //defer { LOG_INFO("-------- frame end -------\n\n"); };
+    
     gfx_begin_frame();
     gui_begin_frame();
 
@@ -2640,7 +2665,6 @@ next_node:;
             TSQueryMatch match;
             u32 capture_index;
 
-            if (DEBUG_TREE_SITTER_QUERY) LOG_INFO("\n\nquery matches---------");
             while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
                 auto *capture = &match.captures[capture_index];
                 u32 start_byte = ts_node_start_byte(capture->node);
@@ -2649,15 +2673,23 @@ next_node:;
                 u32 capture_name_length;
                 const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
                 String capture_name{ (char*)tmp, (i32)capture_name_length };
-
-                if (u32 *c = find(&app.syntax_colors, capture_name); c) array_add(&colors, { start_byte, end_byte, *c });
-
+                
 #if DEBUG_TREE_SITTER_QUERY
                 const char *node_type = ts_node_type(capture->node);
                 LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
                 LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
                 LOG_INFO("capture name: %.*s", STRFMT(capture_name));
 #endif
+                String str = capture_name;
+                u32 *color = nullptr;
+                do {
+                    color = find(&app.syntax_colors, str);
+                    i32 p = last_of(str, '.');
+                    if (p > 0) str = slice(str, 0, p);
+                    else str.length = 0;
+                } while(color == nullptr && str.length > 0);
+                
+                if (color) array_add(&colors, { start_byte, end_byte, *color });
             }
         }
         
@@ -2783,3 +2815,4 @@ next_node:;
     if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
     else disable_text_input();
 }
+    
