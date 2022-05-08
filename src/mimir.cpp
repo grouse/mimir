@@ -730,25 +730,21 @@ i64 buffer_prev_offset(Buffer *buffer, i64 byte_offset)
     ASSERT(buffer);
     i64 prev_offset = byte_offset;
 
-    switch (buffer->type) {
-    case BUFFER_FLAT:
-        if (byte_offset == 0) return 0;
+    if (byte_offset == 0) return 0;
 
-        char c = char_at(buffer, prev_byte(buffer, byte_offset));
-        if (c == '\n' || c == '\r') {
-            prev_offset = prev_byte(buffer, byte_offset);
-            char prev_c = char_at(buffer, prev_byte(buffer, prev_offset));
+    char c = char_at(buffer, prev_byte(buffer, byte_offset));
+    if (c == '\n' || c == '\r') {
+        prev_offset = prev_byte(buffer, byte_offset);
+        char prev_c = char_at(buffer, prev_byte(buffer, prev_offset));
 
-            if (prev_offset > 0 &&
-                ((c == '\n' && prev_c == '\r') ||
-                 (c == '\r' && prev_c == '\n')))
-            {
-                prev_offset = prev_byte(buffer, prev_offset);
-            }
-        } else {
-            prev_offset = utf8_decr(buffer, byte_offset);
+        if (prev_offset > 0 &&
+            ((c == '\n' && prev_c == '\r') ||
+             (c == '\r' && prev_c == '\n')))
+        {
+            prev_offset = prev_byte(buffer, prev_offset);
         }
-        break;
+    } else {
+        prev_offset = utf8_decr(buffer, byte_offset);
     }
 
     return prev_offset;
@@ -835,6 +831,7 @@ Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buff
     }
 
     if (r.start == r.end) r.end = buffer_next_offset(buffer, r.end);
+    if (r.start == r.end) r.start = buffer_prev_offset(buffer, r.start);
     return r;
 }
 
@@ -847,14 +844,14 @@ i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
 
 i32 calc_unwrapped_line(i32 wrapped_line, Array<BufferLine> lines)
 {
-    i32 line = wrapped_line;
+    i32 line = CLAMP(wrapped_line, 0, lines.count-1);
     while (line > 0 && lines[line].wrapped) line--;
     return line;
 }
 
 i32 wrapped_line_from_offset(i64 offset, Array<BufferLine> lines, i32 guessed_line = 0)
 {
-    i32 line = guessed_line;
+    i32 line = CLAMP(guessed_line, 0, lines.count-1);
     while (line > 0 && offset < lines[line].offset) line--;
     while (line < (lines.count-2) && offset > lines[line+1].offset) line++;
     return line;
@@ -1605,14 +1602,18 @@ i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<BufferLine> lines, i
 
     i64 start = lines[line].offset;
     i64 end = line_end_offset(line, lines, buffer);
+    if (start == end) return start;
 
+    // NOTE(jesper): in general, return the byte offset to the start of the textual content,
+    // skipping past whitespace. If the line only contains whitespace, return the absolute
+    // start.
     i64 offset = start;
     while (offset < end) {
         if (!is_whitespace(char_at(buffer, offset))) return offset;
         offset = next_byte(buffer, offset);
     }
 
-    return offset;
+    return start;
 }
 
 i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
@@ -1622,8 +1623,15 @@ i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 lin
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return 0;
 
+    i64 start = lines[line].offset;
     i64 end = line_end_offset(line, lines, buffer);
-    return end == buffer_end(buffer) ? end : buffer_prev_offset(buffer, end);
+    if (start == end) return end;
+    
+    i64 endt = buffer_prev_offset(buffer, end);
+    
+    char c = char_at(buffer, endt);
+    if (c == '\n' || c == '\r') return endt;
+    return end;
 }
 
 i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
@@ -1937,6 +1945,7 @@ void app_event(WindowEvent event)
                     BufferHistoryScope h(view.buffer);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
                         view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
                         move_view_to_caret();
                     }
@@ -1951,6 +1960,7 @@ void app_event(WindowEvent event)
 
                     if (buffer_remove(view.buffer, r.start, r.end)) {
                         view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         view.mark = view.caret;
                         move_view_to_caret();
                     }
@@ -2616,8 +2626,8 @@ next_node:;
         char str[256];
         gui_textbox(
             stringf(str, sizeof str,
-                    "Ln: %d, Col: %lld %.*s %.*s",
-                    view.caret.line+1, view.caret.column+1,
+                    "Ln: %d, Col: %lld, Pos: %lld, %.*s %.*s",
+                    view.caret.line+1, view.caret.column+1, view.caret.byte_offset,
                     STRFMT(nl), STRFMT(in)));
     }
 
