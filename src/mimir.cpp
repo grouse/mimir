@@ -482,7 +482,7 @@ void view_set_buffer(BufferId buffer)
     view.buffer = buffer;
 
     i32 idx = array_find_index(view.buffers, view.buffer);
-    if (idx >= 0) array_remove_sorted(&view.buffers, idx);
+    if (idx >= 0) array_remove(&view.buffers, idx);
     array_insert(&view.buffers, 0, view.buffer);
 
     // NOTE(jesper): not storing line wrap data (for now). Computing it is super quick, and storing
@@ -1190,8 +1190,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             for (i32 i = line+1; i < view.lines.count; i++) {
                 view.lines[i].offset -= num_bytes;
 
-                if (view.lines[i].offset <= start_offset)
-                    array_remove_sorted(&view.lines, i--);
+                if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
             }
             
             recalc_line_wrap(
@@ -2370,7 +2369,7 @@ next_node:;
                 }
 
                 LOG_INFO("num items: %d, filtered: %d", app.lister.values.count, app.lister.filtered.count);
-                sort(scores, app.lister.filtered);
+                quick_sort(scores, app.lister.filtered);
             }
         }
 

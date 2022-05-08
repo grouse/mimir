@@ -672,7 +672,7 @@ GuiWindow* push_window_to_top(i32 index)
 {
     if (index != gui.windows.count-1) {
         GuiWindow window = gui.windows[index];
-        array_remove_sorted(&gui.windows, index);
+        array_remove(&gui.windows, index);
         array_add(&gui.windows, window);
     }
     gui.current_window = gui.windows.count-1;

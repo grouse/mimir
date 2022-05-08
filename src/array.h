@@ -39,9 +39,9 @@ struct DynamicArray : Array<T> {
 };
 
 template<typename T>
-void array_resize(DynamicArray<T> *arr, i32 count, Allocator mem = mem_dynamic)
+void array_resize(DynamicArray<T> *arr, i32 count)
 {
-    if (!arr->alloc.proc) arr->alloc = mem;
+    if (!arr->alloc.proc) arr->alloc = mem_dynamic;
 
     if (arr->capacity < count) {
         arr->data = REALLOC_ARR(arr->alloc, T, arr->data, arr->capacity, count);
@@ -122,9 +122,7 @@ template<typename T>
 i32 array_add(DynamicArray<T> *arr, T e)
 {
     if (arr->count+1 > arr->capacity) {
-        if (arr->alloc.proc == nullptr) {
-            arr->alloc = mem_dynamic;
-        }
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
         i32 old_capacity = arr->capacity;
         arr->capacity = arr->capacity == 0 ? 1 : arr->capacity*2;
@@ -139,9 +137,7 @@ template<typename T>
 i32 array_add(DynamicArray<T> *arr, T *es, i32 count)
 {
     if (arr->count+count > arr->capacity) {
-        if (arr->alloc.proc == nullptr) {
-            arr->alloc = mem_dynamic;
-        }
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
         i32 old_capacity = arr->capacity;
         arr->capacity = MAX(arr->count+count, arr->capacity*2);
@@ -157,9 +153,7 @@ template<typename T>
 i32 array_add(DynamicArray<T> *arr, Array<T> es)
 {
     if (arr->count+es.count > arr->capacity) {
-        if (arr->alloc.proc == nullptr) {
-            arr->alloc = mem_dynamic;
-        }
+        if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
         i32 old_capacity = arr->capacity;
         arr->capacity = MAX(arr->count+es.count, arr->capacity*2);
@@ -289,7 +283,7 @@ void array_remove_unsorted(Array<T> *arr, i32 index)
 }
 
 template<typename T>
-void array_remove_sorted(Array<T> *arr, i32 index)
+void array_remove(Array<T> *arr, i32 index)
 {
     ASSERT(index >= 0);
     ASSERT(index < arr->count);
@@ -345,5 +339,74 @@ bool array_equals(Array<T> lhs, std::initializer_list<T> rhs)
 {
     return array_equals(lhs, { .data = (T*)rhs.begin(), .count = (i32)rhs.size() });
 }
+
+
+template<typename T>
+void array_swap(Array<T> arr, i32 a, i32 b)
+{
+    SWAP(arr[a], arr[b]);
+}
+
+template<typename T, typename K>
+void array_swap(Array<T> arr, i32 a, i32 b, Array<K> arr1)
+{
+    SWAP(arr[a], arr[b]);
+    SWAP(arr1[a], arr1[b]);
+}
+
+template<typename T, typename K, typename... Tail>
+void array_swap(Array<T> arr, i32 a, i32 b, Array<K> arr1, Array<Tail>... tail)
+{
+    SWAP(arr[a], arr[b]);
+    array_swap(arr1, a, b, tail...);
+}
+
+
+template<typename T, typename... Tail>
+void exchange_sort(Array<T> arr, Array<Tail>... tail)
+{
+    for (int i = 0; i < arr.count; i++) {
+        for (int j = i+1; j < arr.count; j++) {
+            if (arr[i] > arr[j]) array_swap(arr, i, j, tail...);
+        }
+    }
+
+}
+template<typename T, typename... Tail>
+void quick_sort(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
+{
+    if (l < 0 || r < 0 || l >= r) return;
+
+    T pivot = arr[(r+l)/2];
+
+    i32 i = l-1;
+    i32 j = r+1;
+
+    i32 pi = -1;
+    while (true) {
+        do i += 1; while(arr[i] > pivot);
+        do j -= 1; while(arr[j] < pivot);
+
+        if (i >= j) { 
+            pi = j;
+            break;
+        }
+
+        array_swap(arr, j, i, tail...);
+    }
+
+    ASSERT(pi >= 0);
+
+    quick_sort(arr, l, pi, tail...);
+    quick_sort(arr, pi+1, r, tail...);
+}
+
+template<typename T, typename... Tail>
+void quick_sort(Array<T> arr, Array<Tail>... tail)
+{
+    quick_sort(arr, 0, arr.count-1, tail...);
+}
+
+
 
 #endif // ARRAY_H
