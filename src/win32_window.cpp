@@ -105,9 +105,9 @@ KeyCode_ keycode_from_scancode(u8 scancode)
     return KC_UNKNOWN;
 }
 
-void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+void win32_input_event(DynamicArray<WindowEvent> *queue, HWND /*hwnd*/, UINT message, WPARAM wparam, LPARAM lparam)
 {
-    static u32 modifier_state = MF_NONE;
+    static u8 modifier_state = MF_NONE;
     WindowEvent event{};
     
     switch (message) {
@@ -122,35 +122,38 @@ void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message
         } break;
     case WM_MOUSEMOVE:
         event.type = WE_MOUSE_MOVE;
-        event.mouse.x = lparam & 0xFFFF;
-        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        event.mouse = { .x = (i16)(lparam & 0xFFFF), .y = (i16)((lparam >> 16) & 0xFFFF) };
         if (wparam & MK_LBUTTON) event.mouse.button |= MB_PRIMARY;
         if (wparam & MK_RBUTTON) event.mouse.button |= MB_SECONDARY;
         if (wparam & MK_MBUTTON) event.mouse.button |= MB_MIDDLE;
         break;
     case WM_LBUTTONDOWN:
         event.type = WE_MOUSE_PRESS;
-        event.mouse.button = MB_PRIMARY;
-        event.mouse.x = lparam & 0xFFFF;
-        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        event.mouse = { 
+            .x = (i16)((i16)(lparam & 0xFFFF)), .y = (i16)((lparam >> 16) & 0xFFFF),
+            .button = MB_PRIMARY
+        };
         break;
     case WM_LBUTTONUP:
         event.type = WE_MOUSE_RELEASE;
-        event.mouse.button = MB_PRIMARY;
-        event.mouse.x = lparam & 0xFFFF;
-        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        event.mouse = { 
+            .x = (i16)(lparam & 0xFFFF), .y = (i16)((lparam >> 16) & 0xFFFF),
+            .button = MB_PRIMARY
+        };
         break;
     case WM_RBUTTONDOWN:
         event.type = WE_MOUSE_PRESS;
-        event.mouse.button = MB_SECONDARY;
-        event.mouse.x = lparam & 0xFFFF;
-        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        event.mouse = { 
+            .x = (i16)(lparam & 0xFFFF), .y = (i16)((lparam >> 16) & 0xFFFF),
+            .button = MB_SECONDARY
+        };
         break;
     case WM_RBUTTONUP:
         event.type = WE_MOUSE_RELEASE;
-        event.mouse.button = MB_SECONDARY;
-        event.mouse.x = lparam & 0xFFFF;
-        event.mouse.y = (lparam >> 16) & 0xFFFF;
+        event.mouse = { 
+            .x = (i16)(lparam & 0xFFFF), .y = (i16)((lparam >> 16) & 0xFFFF),
+            .button = MB_SECONDARY
+        };
         break;
     case WM_CHAR:
         if (input.text_input_enabled && wparam >= 0x20) {
@@ -171,8 +174,7 @@ void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message
             i32 length = utf8_from_utf32(utf8, utf32);
             
             event.type = WE_TEXT;
-            event.text.modifiers = modifier_state;
-            event.text.length = 0;
+            event.text = { .modifiers = modifier_state };
             u16 repeat_count = lparam & 0xff;
             
             i32 count = 0;
@@ -192,12 +194,14 @@ void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message
             if (wparam == VK_CONTROL) modifier_state |= MF_CTRL;
             else if (wparam == VK_SHIFT) modifier_state |= MF_SHIFT;
 
-            u8 scancode = (lparam >> 16) & 0xff;
+            u8 scancode = (i16)(lparam >> 16) & 0xff;
             u16 repeat_count = lparam & 0xff;
             
-            event.key.keycode = keycode_from_scancode(scancode);
-            event.key.modifiers = modifier_state;
-            event.key.prev_state = (lparam >> 30) & 0x1;
+            event.key = {
+                .keycode = keycode_from_scancode(scancode),
+                .modifiers = modifier_state,
+                .prev_state = (u32)((lparam >> 30) & 0x1),
+            };
             
             if (event.key.keycode != KC_UNKNOWN) {
                 event.type = WE_KEY_PRESS;
@@ -223,14 +227,17 @@ void win32_input_event(DynamicArray<WindowEvent> *queue, HWND hwnd, UINT message
             if (wparam == VK_CONTROL) modifier_state &= ~MF_CTRL;
             else if (wparam == VK_SHIFT) modifier_state &= ~MF_SHIFT;
 
-            u8 scancode = (lparam >> 16) & 0xff;
+            u8 scancode = (i16)(lparam >> 16) & 0xff;
 
             event.type = WE_KEY_RELEASE;
-            event.key.keycode = keycode_from_scancode(scancode);
-            event.key.modifiers = modifier_state;
-            event.key.prev_state = (lparam >> 30) & 0x1;
+            event.key = { 
+                .keycode = keycode_from_scancode(scancode),
+                .modifiers = modifier_state,
+                .prev_state = (u32)((lparam >> 30) & 0x1)
+            };
         } break;
     }
     
     if (event.type != 0) array_add(queue, event);
 }
+                       

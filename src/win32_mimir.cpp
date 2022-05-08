@@ -121,9 +121,9 @@ HWND win32_root_window;
 
 int WINAPI wWinMain(
     HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
+    HINSTANCE /*hPrevInstance*/,
     LPWSTR pCmdLine,
-    int nShowCmd)
+    int /*nShowCmd*/)
 {
     init_default_allocators();
     mem_frame = linear_allocator(100*1024*1024);
@@ -216,11 +216,6 @@ int WINAPI wWinMain(
         while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
-            
-            if (app_needs_render()) {
-                update_and_render();
-                SwapBuffers(wnd.hdc);
-            }
         }
 
         g_mouse.dx = (i32)g_mouse.x - (i32)old_x;
@@ -245,3 +240,4 @@ int WINAPI wWinMain(
     return 0;
 }
 
+    

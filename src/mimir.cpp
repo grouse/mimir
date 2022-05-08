@@ -1077,7 +1077,7 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
     DynamicArray<BufferLine> tmp_lines{ .alloc = mem_tmp };
     DynamicArray<BufferLine> *new_lines = &tmp_lines;
     
-    if (lines->count == 0 || start_line == 0 && end_line == lines->count) {
+    if (lines->count == 0 || (start_line == 0 && end_line == lines->count)) {
         new_lines = lines;
         lines->count = start_line = end_line = 0;
         array_add(new_lines, BufferLine{ start, 0 });
