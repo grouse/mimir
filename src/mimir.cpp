@@ -18,6 +18,7 @@
 
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
+extern "C" const TSLanguage* tree_sitter_rust();
 
 #define DEBUG_LINE_WRAP_RECALC 0
 #define DEBUG_TREE_SITTER_QUERY 0
@@ -40,6 +41,7 @@ enum BufferHistoryType {
 enum Language {
     LANGUAGE_NONE,
     LANGUAGE_CPP,
+    LANGUAGE_RUST,
     LANGUAGE_COUNT,
 };
 
@@ -385,6 +387,8 @@ BufferId create_buffer(String file)
         ext == ".cxx" || ext == ".cc")
     {
         b.language = LANGUAGE_CPP;
+    } else if (ext == ".rs") {
+        b.language = LANGUAGE_RUST;
     }
     
     if (f.data) {
@@ -539,6 +543,35 @@ void ts_custom_free(void *ptr)
     FREE(ts_custom_alloc, header);
 }
 
+TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
+{
+    if (auto a = find_asset(highlights); a) {
+        u32 error_loc;
+        TSQueryError error;
+        TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
+
+        if (error != TSQueryErrorNone) {
+            String s = "";
+            switch (error) {
+            case TSQueryErrorNone: s = "none"; break;
+            case TSQueryErrorSyntax: s = "syntax"; break;
+            case TSQueryErrorNodeType: s = "node_type"; break;
+            case TSQueryErrorField: s = "field"; break;
+            case TSQueryErrorCapture: s = "capture"; break;
+            case TSQueryErrorStructure: s = "structure"; break;
+            case TSQueryErrorLanguage: s = "language"; break;
+            }
+
+            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
+            return nullptr;
+        }
+        
+        return query;
+    }
+    
+    return nullptr;
+}
+
 void init_app(Array<String> args)
 {
     fzy_init_table();
@@ -556,37 +589,20 @@ void init_app(Array<String> args)
     init_gui();
     
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
+    app.languages[LANGUAGE_RUST] = tree_sitter_rust();
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
     ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
     
-    if (auto a = find_asset("queries/cpp/highlights.scm"); a) {
-        u32 error_loc;
-        TSQueryError error;
-        app.queries[LANGUAGE_CPP] = ts_query_new(app.languages[LANGUAGE_CPP], (char*)a->data, a->size, &error_loc, &error);
-        
-        if (error != TSQueryErrorNone) {
-            String s = "";
-            switch (error) {
-            case TSQueryErrorNone: s = "none"; break;
-            case TSQueryErrorSyntax: s = "syntax"; break;
-            case TSQueryErrorNodeType: s = "node_type"; break;
-            case TSQueryErrorField: s = "field"; break;
-            case TSQueryErrorCapture: s = "capture"; break;
-            case TSQueryErrorStructure: s = "structure"; break;
-            case TSQueryErrorLanguage: s = "language"; break;
-            }
-            
-            String file = "queries/cpp/highlights.scm";
-            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(file), error_loc);
-        }
-    }
-    
+    app.queries[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/highlights.scm");
+    app.queries[LANGUAGE_RUST] = ts_create_query(app.languages[LANGUAGE_RUST], "queries/rust/highlights.scm");
+
     u32 fg = bgr_pack(app.fg);
     set(&app.syntax_colors, "unused", fg);
     set(&app.syntax_colors, "_parent", fg);
     set(&app.syntax_colors, "label", fg);
     set(&app.syntax_colors, "parameter", fg);
     set(&app.syntax_colors, "namespace", fg);
+    set(&app.syntax_colors, "variable", fg);
 
     set(&app.syntax_colors, "preproc", 0xFE8019u);
     set(&app.syntax_colors, "include", 0xFE8019u);
@@ -597,10 +613,11 @@ void init_app(Array<String> args)
     set(&app.syntax_colors, "punctuation", 0xfcedcfu);
     set(&app.syntax_colors, "type", 0xbcbf91u);
     set(&app.syntax_colors, "constant", 0xe9e4c6u);
-    set(&app.syntax_colors, "constant.identifier", 0xff0000u);//0xe9e4c6u);
+    //set(&app.syntax_colors, "constant.identifier", 0xff0000u);//0xe9e4c6u);
     set(&app.syntax_colors, "keyword", 0xd36e2au);
     set(&app.syntax_colors, "namespace", 0xd36e2au);
     set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
+    set(&app.syntax_colors, "attribute", 0x84a89au);
     
     // TODO(jesper): this is kinda neat but I think I might want this as some kind of underline or background
     // style instead of foreground colour?

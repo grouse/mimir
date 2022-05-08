@@ -231,3 +231,5 @@
 (this) @keyword
 
 (comment) @comment
+
+;((identifier) @constant.identifier (#lua-match? @constant.identifier "^[A-Z][A-Z0-9_]+$"))

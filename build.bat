@@ -13,6 +13,7 @@ if not exist %BUILD_DIR% mkdir %BUILD_DIR%
 
 SET TS_DIR=%ROOT%\external\tree-sitter-0.20.6
 SET TS_CPP_DIR=%ROOT%\external\tree-sitter-cpp-master
+SET TS_RS_DIR=%ROOT%\external\tree-sitter-rust-0.20.1
 
 SET INCLUDE_DIR=-I%ROOT% -I%TS_DIR%\lib\include
 SET LIBS=-luser32.lib -lShell32.lib -lopengl32.lib -lgdi32.lib -lshlwapi.lib
@@ -21,10 +22,18 @@ SET LLVM=D:\apps\LLVM
 PUSHD %BUILD_DIR%
 echo compiling...
 REM clang -O3 -g -gcodeview -w -c -I%TS_DIR%\src -I%TS_DIR%\lib\include -o tree_sitter.obj %TS_DIR%\lib\src\lib.c 
+
 REM clang -O3 -g -gcodeview -w -c -I%TS_CPP_DIR%\src -o tree_sitter_cpp_parser.obj %TS_CPP_DIR%\src\parser.c 
 REM clang -O3 -g -gcodeview -w -c -I%TS_CPP_DIR%\src -o tree_sitter_cpp_scanner.obj %TS_CPP_DIR%\src\scanner.cc 
+SET TS_CPP_OBJ=tree_sitter_cpp_parser.obj tree_sitter_cpp_scanner.obj
 
-clang -O0 %FLAGS% %INCLUDE_DIR% %LIBS% -o mimir.exe %ROOT%\src\win32_mimir.cpp tree_sitter.obj tree_sitter_cpp_parser.obj tree_sitter_cpp_scanner.obj
+REM clang -O3 -g -gcodeview -w -c -I%TS_RS_DIR%\src -o tree_sitter_rust_parser.obj %TS_RS_DIR%\src\parser.c 
+REM clang -O3 -g -gcodeview -w -c -I%TS_RS_DIR%\src -o tree_sitter_rust_scanner.obj %TS_RS_DIR%\src\scanner.c
+SET TS_RS_OBJ=tree_sitter_rust_parser.obj tree_sitter_rust_scanner.obj
+
+SET TS_OBJ=tree_sitter.obj %TS_CPP_OBJ% %TS_RS_OBJ%
+
+clang -O0 %FLAGS% %INCLUDE_DIR% %LIBS% -o mimir.exe %ROOT%\src\win32_mimir.cpp %TS_OBJ%
 POPD
 
 set end_time=%time%
