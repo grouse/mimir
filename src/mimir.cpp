@@ -1934,7 +1934,8 @@ void app_event(WindowEvent event)
                 list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
                 array_copy(&app.lister.filtered, app.lister.values);
                 break;
-            case KC_D: {
+            case KC_D: 
+                if (buffer_valid(view.buffer)) {
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     if (r.end == r.start) break;
@@ -2116,17 +2117,16 @@ void app_event(WindowEvent event)
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case KC_ENTER: {
+            case KC_ENTER: 
+                if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     ASSERT(!view.lines_dirty);
                     String indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
                     write_string(view.buffer, buffer_newline_str(view.buffer));
                     write_string(view.buffer, indent);
                 } break;
-            case KC_TAB: {
-                    Buffer *buffer = get_buffer(view.buffer);
-                    if (!buffer) break;
-
+            case KC_TAB: 
+                if (Buffer *buffer = get_buffer(view.buffer); buffer) {
                     if (buffer->indent_with_tabs) write_string(view.buffer, "\t");
                     else {
                         String current_indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
@@ -2152,8 +2152,6 @@ void app_event(WindowEvent event)
                     if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
                         view.caret.byte_offset = start;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.caret;
-
                         move_view_to_caret();
                     }
                 } break;
@@ -2163,8 +2161,6 @@ void app_event(WindowEvent event)
                     i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
                     if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.caret;
-
                         move_view_to_caret();
                     }
                 } break;
@@ -2325,7 +2321,8 @@ void update_and_render()
     Vector2 lister_p = gfx.resolution*0.5f;
 
     gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
-        GuiEditboxAction edit_action = gui_editbox("");
+        GuiId id = GUI_ID(0);
+        GuiEditboxAction edit_action = gui_editbox_id(id, "");
 
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
@@ -2413,7 +2410,7 @@ next_node:;
             }
         }
 
-        GuiListerAction lister_action = gui_lister(app.lister.filtered, &app.lister.selected_item);
+        GuiListerAction lister_action = gui_lister_id(id, app.lister.filtered, &app.lister.selected_item);
         if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count &&
             (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH))
         {
