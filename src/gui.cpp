@@ -333,7 +333,9 @@ void gui_end_frame()
         }
     }
 
-    if (gui.hot_window == GUI_ID_INVALID) gui.hot_window = gui.windows[GUI_BACKGROUND].id;
+    if (gui.hot_window == GUI_ID_INVALID) {
+        gui.hot_window = gui.focused_window = gui.windows[GUI_BACKGROUND].id;
+    }
 
     if (false && old != gui.hot_window) {
         LOG_INFO("hot window: %d, %d, %d", gui.hot_window.owner, gui.hot_window.index, gui.hot_window.internal);

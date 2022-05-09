@@ -30,6 +30,13 @@ String duplicate_string(String other, Allocator mem)
     return str;
 }
 
+void string_copy(String *dst, String src, Allocator mem)
+{
+    dst->data = (char*)REALLOC(mem, dst->data, dst->length, src.length);
+    memcpy(dst->data, src.data, src.length);
+    dst->length = src.length;
+}
+
 String stringf(char *buffer, i32 size, const char *fmt, ...)
 {
     String result{};

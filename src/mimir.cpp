@@ -80,7 +80,14 @@ struct Application {
 
         i32 selected_item;
     } lister;
-
+    
+    struct {
+        String str;
+        i64 start_caret, start_mark;
+        bool active;
+        bool set_mark;
+    } incremental_search;
+    
     const TSLanguage *languages[LANGUAGE_COUNT];
     TSQuery *queries[LANGUAGE_COUNT];
     EditMode mode, next_mode;
@@ -1271,6 +1278,80 @@ String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator m
     return s;
 }
 
+i64 buffer_seek_forward(BufferId buffer_id, String needle, i64 start)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return start;
+    
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        for (i64 offset = start+1; 
+             offset < buffer->flat.size && offset + needle.length <= buffer->flat.size; 
+             offset++) 
+        {
+            char *p = buffer->flat.data+offset;
+            for (i32 i = 0; i < needle.length; i++) {
+                if (to_lower(*(p+i)) != needle[i]) goto next0;
+            }
+
+            return offset;
+next0:;
+        }
+
+        for (i64 offset = 0;
+             offset < start && offset + needle.length <= start && offset + needle.length <= buffer->flat.size;
+             offset++) 
+        {
+            char *p = buffer->flat.data+offset;
+            for (i32 i = 0; i < needle.length; i++) {
+                if (to_lower(*(p+i)) != needle[i]) goto next1;
+            }
+
+            return offset;
+next1:;
+        }
+        break;
+    }
+
+
+    return start;
+}
+
+i64 buffer_seek_back(BufferId buffer_id, String needle, i64 start)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return start;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        for (i64 offset = start-1; offset > 0; offset--) {
+            char *p = buffer->flat.data+offset;
+            for (i32 i = 0; i < needle.length; i++) {
+                if (to_lower(*(p+i)) != needle[i]) goto next0;
+            }
+
+            return offset;
+next0:;
+        }
+        
+        for (i64 offset = buffer->flat.size-1; offset > start; offset--) {
+            char *p = buffer->flat.data+offset;
+            for (i32 i = 0; i < needle.length; i++) {
+                if (to_lower(*(p+i)) != needle[i]) goto next1;
+            }
+
+            return offset;
+next1:;
+        }
+
+        break;
+    }
+
+
+    return start;
+}
+
+
 void buffer_save(BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
@@ -1894,9 +1975,20 @@ void app_event(WindowEvent event)
         }
         break;
     case WE_KEY_PRESS:
+        if (gui.focused != GUI_ID_INVALID) break;
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.keycode) {
+            case KC_SLASH:
+                app.incremental_search.start_caret = view.caret.byte_offset;
+                app.incremental_search.start_mark = view.mark.byte_offset;
+                app.incremental_search.active = true;
+                app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
+                break;
+            case KC_ESC:
+                FREE(mem_dynamic, app.incremental_search.str.data);
+                app.incremental_search.str = {};
+                break;
             case KC_F5: exec_process_command(); break;
             case KC_Q:
                 if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
@@ -1967,6 +2059,20 @@ void app_event(WindowEvent event)
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     set_clipboard_data(buffer_read(view.buffer, r.start, r.end));
+                } break;
+            case KC_N:
+                if (app.incremental_search.str.length > 0) {
+                    i64 offset = event.key.modifiers == MF_CTRL ? 
+                        buffer_seek_back(view.buffer, app.incremental_search.str, view.caret.byte_offset) :
+                        buffer_seek_forward(view.buffer, app.incremental_search.str, view.caret.byte_offset);
+                    
+                    if (offset != view.caret.byte_offset) {
+                        view.caret.byte_offset = offset;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        if (app.incremental_search.set_mark) view.mark = view.caret;
+                        
+                        move_view_to_caret();
+                    }
                 } break;
             case KC_P:
                 write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
@@ -2248,9 +2354,9 @@ void update_and_render()
     // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
     // be deferred.
     if (app.mode != app.next_mode) {
-        if (app.mode == MODE_EDIT && app.next_mode == MODE_INSERT) {
+        if (app.next_mode == MODE_INSERT) {
             buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_START });
-        } else if (app.mode == MODE_INSERT && app.next_mode == MODE_EDIT) {
+        } else if (app.mode == MODE_INSERT) {
             buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_END });
             if (view.mark.byte_offset > view.caret.byte_offset) view.mark = view.caret;
         }
@@ -2320,7 +2426,7 @@ void update_and_render()
 
     Vector2 lister_p = gfx.resolution*0.5f;
 
-    gui_window("fuzzy lister", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
+    gui_window("open file", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
         GuiId id = GUI_ID(0);
         GuiEditboxAction edit_action = gui_editbox_id(id, "");
 
@@ -2575,6 +2681,57 @@ next_node:;
 
             view_set_buffer(active_buffer);
         }
+        
+        if (auto buffer = get_buffer(view.buffer); buffer) {
+            if (app.incremental_search.active) {
+                Vector2 size{ 0, 25.0f };
+                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
+                gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
+                defer { gui_end_layout(); };
+
+                auto action = gui_editbox("");
+                if (action & GUI_EDITBOX_CHANGE) {
+                    String needle{ gui.edit.buffer, gui.edit.length };
+                    string_copy(&app.incremental_search.str, needle, mem_dynamic);
+                    
+                    view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
+                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                    if (app.incremental_search.set_mark) view.mark = view.caret;
+                } 
+                
+                if (action & GUI_EDITBOX_FINISH) {
+                    app.incremental_search.active = false;
+                }
+                
+                if (action & GUI_EDITBOX_CANCEL) {
+                    FREE(mem_dynamic, app.incremental_search.str.data);
+                    app.incremental_search.str = {};
+                    
+                    view.caret.byte_offset = app.incremental_search.start_caret;
+                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                    if (app.incremental_search.set_mark) {
+                        view.mark.byte_offset = app.incremental_search.start_mark;
+                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                    }
+                    app.incremental_search.active = false;
+                }
+            } else {
+                Vector2 size{ 0, 15.0f };
+                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
+                gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
+                defer { gui_end_layout(); };
+
+                String nl = string_from_enum(buffer->newline_mode);
+                String in = buffer->indent_with_tabs ? String("TAB") : String("SPACE");
+
+                char str[256];
+                gui_textbox(
+                    stringf(str, sizeof str,
+                            "Ln: %d, Col: %lld, Pos: %lld, %.*s %.*s",
+                            view.caret.line+1, view.caret.column+1, view.caret.byte_offset,
+                            STRFMT(nl), STRFMT(in)));
+            }
+        }
 
         {
             gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .rect = gui_layout_widget_fill() });
@@ -2624,21 +2781,6 @@ next_node:;
         view.defer_move_view_to_caret = 0;
     }
 
-    if (auto buffer = get_buffer(view.buffer); buffer) {
-        Vector2 ib_s{ 0, 15.0f };
-        gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { view.rect.pos.x, view.rect.pos.y+view.rect.size.y-ib_s.y }, .size = ib_s });
-        defer { gui_end_layout(); };
-
-        String nl = string_from_enum(buffer->newline_mode);
-        String in = buffer->indent_with_tabs ? String("TAB") : String("SPACE");
-
-        char str[256];
-        gui_textbox(
-            stringf(str, sizeof str,
-                    "Ln: %d, Col: %lld, Pos: %lld, %.*s %.*s",
-                    view.caret.line+1, view.caret.column+1, view.caret.byte_offset,
-                    STRFMT(nl), STRFMT(in)));
-    }
 
     if (view.caret.wrapped_line >= view.line_offset &&
         view.caret.wrapped_line < view.line_offset + view.lines_visible)
@@ -2841,8 +2983,11 @@ next_node:;
     Vector3 clear_color = linear_from_sRGB(app.bg);
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-
+    
     gui_end_layout();
+    
+    app.animating = false;
+    if (gui.capture_text[0] != gui.capture_text[1]) app.animating = true;
     gui_end_frame();
 
     gfx_flush_transfers();
@@ -2850,7 +2995,5 @@ next_node:;
     gfx_submit_commands(debug_gfx);
 
     gui_render();
-
-    app.animating = false;
 }
     
