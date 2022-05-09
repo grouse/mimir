@@ -1140,7 +1140,7 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
     }
     
     if (new_lines != lines) {
-        if (new_lines->at(new_lines->count-1).offset == end) new_lines->count--;
+        if (end != buffer_end(buffer) && new_lines->at(new_lines->count-1).offset == end) new_lines->count--;
         
 #if DEBUG_LINE_WRAP_RECALC
         LOG_INFO("start line: %d, end line: %d, start offset: %lld, end offset: %lld", start_line, end_line, start, end);
