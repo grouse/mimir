@@ -4,6 +4,9 @@ struct {
     bool text_input_enabled;
 } input;
 
+MouseCursor current_cursor;
+HCURSOR cursors[MC_MAX];
+
 void enable_text_input()
 {
     input.text_input_enabled = true;
@@ -240,4 +243,15 @@ void win32_input_event(DynamicArray<WindowEvent> *queue, HWND /*hwnd*/, UINT mes
     
     if (event.type != 0) array_add(queue, event);
 }
-                       
+
+void init_cursors()
+{
+    cursors[MC_NORMAL] = LoadCursorA(NULL, IDC_ARROW);
+    cursors[MC_SIZE_NW_SE] = LoadCursorA(NULL, IDC_SIZENWSE);
+}
+
+void push_cursor(MouseCursor c)
+{
+    current_cursor = c;
+}
+

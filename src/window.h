@@ -154,4 +154,16 @@ String string_from_enum(KeyCode_ kc);
 void enable_text_input();
 void disable_text_input();
 
+
+enum MouseCursor {
+    MC_NORMAL = 0,
+    MC_SIZE_NW_SE,
+    MC_MAX,
+};
+
+void init_cursors();
+void push_cursor(MouseCursor c);
+
+
+
 #endif //INPUT_H

@@ -98,8 +98,6 @@ enum LogType {
     LOG_TYPE_ASSERT
 };
 
-void init_core(int argc, char **argv);
-
 bool debugger_attached();
 
 void set_clipboard_data(String str);
@@ -107,13 +105,5 @@ String read_clipboard_str(Allocator mem = mem_tmp);
 
 void log(String path, u32 line, String func, LogType type, const char *fmt, ...);
 void log(const char *fmt, ...);
-
-enum MouseCursor {
-    MC_NORMAL = 0,
-    MC_SIZE_NW_SE,
-    MC_MAX,
-};
-
-void set_cursor(MouseCursor c);
 
 #endif // CORE_H

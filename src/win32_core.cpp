@@ -3,21 +3,6 @@
 #include "win32_core.h"
 #include "win32_user32.h"
 
-MouseCursor current_cursor;
-HCURSOR cursors[MC_MAX];
-
-void init_core(int /*argc*/, char ** /*argv*/)
-{
-    cursors[MC_NORMAL] = LoadCursorA(NULL, IDC_ARROW);
-    cursors[MC_SIZE_NW_SE] = LoadCursorA(NULL, IDC_SIZENWSE);
-}
-
-void set_cursor(MouseCursor c)
-{
-    if (c != current_cursor) LOG_INFO("new cursor: %d, handle: %p", c, cursors[c]);
-    current_cursor = c;
-}
-
 bool debugger_attached()
 {
     return IsDebuggerPresent();

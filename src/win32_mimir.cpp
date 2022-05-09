@@ -127,7 +127,6 @@ int WINAPI wWinMain(
 {
     init_default_allocators();
     mem_frame = linear_allocator(100*1024*1024);
-    init_core(0, NULL);
 
     Vector2 resolution{ 1280, 720 };
 
@@ -139,6 +138,7 @@ int WINAPI wWinMain(
         WS_OVERLAPPEDWINDOW);
     win32_client_rect(wnd.hwnd, &resolution.x, &resolution.y);
     win32_root_window = wnd.hwnd;
+    init_cursors();
 
     init_gfx(resolution);
     
@@ -234,7 +234,7 @@ int WINAPI wWinMain(
         }
         
         SetCursor(cursors[current_cursor]);
-        set_cursor(MC_NORMAL);
+        push_cursor(MC_NORMAL);
     }
 
     return 0;

@@ -1488,7 +1488,7 @@ void gui_end_window()
         Vector2 resize_bl{ br.x - 10.0f, br.y };
 
         if (gui.hot == resize_id) {
-            set_cursor(MC_SIZE_NW_SE);
+            push_cursor(MC_SIZE_NW_SE);
 
             if (gui.pressed != resize_id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
                 gui.pressed = resize_id;
