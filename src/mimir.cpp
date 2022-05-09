@@ -26,7 +26,6 @@ extern "C" const TSLanguage* tree_sitter_rust();
 enum EditMode {
     MODE_EDIT,
     MODE_INSERT,
-    MODE_DIALOG,
 };
 
 enum BufferHistoryType {
@@ -1934,8 +1933,6 @@ void app_event(WindowEvent event)
 
                 list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
                 array_copy(&app.lister.filtered, app.lister.values);
-
-                app.mode = MODE_DIALOG;
                 break;
             case KC_D: {
                     ASSERT(!view.lines_dirty);
@@ -2250,7 +2247,23 @@ void update_and_render()
 {
     //LOG_INFO("------- frame --------");
     //defer { LOG_INFO("-------- frame end -------\n\n"); };
-    
+
+    // NOTE(jesper): this is something of a hack because WM_CHAR messages come after the WM_KEYDOWN, and
+    // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
+    // be deferred.
+    if (app.mode != app.next_mode) {
+        if (app.mode == MODE_EDIT && app.next_mode == MODE_INSERT) {
+            buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_START });
+        } else if (app.mode == MODE_INSERT && app.next_mode == MODE_EDIT) {
+            buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_END });
+            if (view.mark.byte_offset > view.caret.byte_offset) view.mark = view.caret;
+        }
+    }
+
+    app.mode = app.next_mode;
+    if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
+    else disable_text_input();
+
     gfx_begin_frame();
     gui_begin_frame();
 
@@ -2843,12 +2856,5 @@ next_node:;
     gui_render();
 
     app.animating = false;
-
-    // NOTE(jesper): this is something of a hack because WM_CHAR messages come after the WM_KEYDOWN, and
-    // we're listening to WM_KEYDOWN to determine whether to switch modes, so the actual mode switch has to
-    // be deferred.
-    app.mode = app.next_mode;
-    if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
-    else disable_text_input();
 }
     
