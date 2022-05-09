@@ -233,18 +233,20 @@ struct GuiContext {
         Vector3 fg = bgr_unpack(0xFFFFFFFF);
         //Vector3 fg_hot = rgb_unpack(0xFFFD8433);
 
-        Vector3 bg = bgr_unpack(0xFF333333);
-        Vector3 bg_hot = bgr_unpack(0xFF3F3F3F);
-        Vector3 bg_press = bgr_unpack(0xFF2A2A2A);
+        Vector3 bg = bgr_unpack(0x333333u);
+        Vector3 bg_hot = bgr_unpack(0x3F3F3Fu);
+        Vector3 bg_press = bgr_unpack(0x2A2A2Au);
 
-        Vector3 bg_dark0 = bgr_unpack(0xFF212121);
-        Vector3 bg_dark1 = bgr_unpack(0xFF282828);
+        Vector3 bg_dark0 = bgr_unpack(0x212121u);
+        Vector3 bg_dark1 = bgr_unpack(0x282828u);
+        Vector3 bg_dark2 = bgr_unpack(0x131313u);
 
-        Vector3 bg_light0 = bgr_unpack(0xFF828282);
+        Vector3 bg_light0 = bgr_unpack(0x828282u);
+        Vector3 bg_light1 = bgr_unpack(0x5C5C5Cu);
 
-        Vector3 accent_bg = bgr_unpack(0xFFCA5100);
-        Vector3 accent_bg_hot = bgr_unpack(0xFFFD8433);
-        Vector3 accent_bg_press = bgr_unpack(0xFFDA4100);
+        Vector3 accent_bg = bgr_unpack(0xCA5100u);
+        Vector3 accent_bg_hot = bgr_unpack(0xE16817u);
+        Vector3 accent_bg_press = bgr_unpack(0xDA4100u);
 
         struct {
             FontAtlas font;

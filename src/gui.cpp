@@ -99,9 +99,10 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
          rel.y >= 0.0f && rel.y < size.y))
     {
         gui_hot(id);
+        return true;
     }
-
-    return gui.hot == id;
+    
+    return false;
 }
 
 void gui_clear_hot()
@@ -109,13 +110,14 @@ void gui_clear_hot()
     gui.hot = gui.next_hot = GUI_ID_INVALID;
 }
 
-bool gui_clicked(GuiId id)
+bool gui_clicked(GuiId id, Vector2 pos, Vector2 size)
 {
+    bool mouse_over = gui_hot_rect(id, pos, size);
     if (gui.hot == id && gui.mouse.left_pressed && !gui.mouse.left_was_pressed) {
         gui.pressed = id;
     } else if (gui.pressed == id && !gui.mouse.left_pressed) {
         gui.pressed = GUI_ID_INVALID;
-        return true;
+        return mouse_over;
     }
 
     return false;
@@ -798,8 +800,7 @@ bool gui_button_id(GuiId id, f32 icon_width, GLuint icon)
     Vector2 size{ icon_width+margin, icon_width+margin };
     pos.y = floorf(pos.y + (total_size.y-size.y)/2);
 
-    gui_hot_rect(id, pos, size);
-    bool clicked = gui_clicked(id);
+    bool clicked = gui_clicked(id, pos, size);
 
     gui_draw_button(id, pos, size);
     gui_draw_rect({ pos.x+margin/2, pos.y+margin/2 }, { icon_width, icon_width }, icon);
@@ -820,8 +821,7 @@ bool gui_button_id(GuiId id, Vector2 pos, Vector2 size, GLuint icon)
 
 bool gui_button_id(GuiId id, Vector2 pos, Vector2 size)
 {
-    gui_hot_rect(id, pos, size);
-    bool clicked = gui_clicked(id);
+    bool clicked = gui_clicked(id, pos, size);
     gui_draw_button(id, pos, size);
     return clicked;
 }
@@ -877,16 +877,15 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     Vector2 btn_pos = pos + btn_offset;
 
-    gui_hot_rect(id, pos, size);
-    if (gui_clicked(id)) {
+    if (gui_clicked(id, pos, size)) {
         *checked = !(*checked);
         toggled = true;
     }
 
-    Vector3 border_col = bgr_unpack(0xFFCCCCCC);
-    Vector3 bg_col = gui.pressed == id ? bgr_unpack(0xFF2C2C2C) : gui.hot == id ? bgr_unpack(0xFF3A3A3A) : bgr_unpack(0xFF1d2021);
-    Vector3 checked_col = bgr_unpack(0xFFCCCCCC); (void)checked_col;
-    Vector3 label_col = bgr_unpack(0xFFFFFFFF);
+    Vector3 border_col = gui.style.bg_light1;
+    Vector3 bg_col = gui.pressed == id ? gui.style.bg_press : gui.hot == id ? gui.style.bg_hot : gui.style.bg;
+    Vector3 checked_col = gui.style.accent_bg; (void)checked_col;
+    Vector3 label_col = gui.style.fg;
 
     gui_draw_rect(btn_pos, btn_size, wnd->clip_rect, border_col);
     gui_draw_rect(btn_pos + border_size, btn_size - 2.0f*border_size, wnd->clip_rect, bg_col);
@@ -1053,8 +1052,8 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
     Vector3 selection_bg = gui.style.bg_light0;
 
-    Vector3 bg = gui.style.bg_dark0;
-    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 bg = gui.style.bg_dark1;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
     Vector3 fg = gui.style.fg;
 
     Vector2 text_pos = pos+border+gui.style.edit.padding;
@@ -1293,10 +1292,8 @@ bool gui_window_close_button(GuiId id, Vector2 wnd_pos, Vector2 wnd_size)
     Vector2 icon_size = gui.style.window.close_size;
     Vector2 icon_pos = close_pos + (close_size - icon_size) * 0.5f;
 
-    if (gui_hot_rect(id, close_pos, close_size)) {
-        gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot, &wnd->command_buffer);
-    }
-    bool clicked = gui_clicked(id);
+    bool clicked = gui_clicked(id, close_pos, close_size);
+    if (gui.hot == id) gui_draw_rect(close_pos, close_size, gui.style.window.close_bg_hot, &wnd->command_buffer);
 
     gui_draw_rect(icon_pos, icon_size, gui.icons.close);
     return clicked;
@@ -1422,13 +1419,13 @@ bool gui_begin_window_id(
     }
 
     Vector3 title_bg = gui.focused_window != id
-        ? gui.style.bg_dark0
+        ? gui.style.bg_dark2
         : gui.hot == title_id ? gui.style.accent_bg_hot : gui.style.accent_bg;
 
     Vector2 title_pos = wnd->pos + window_border + Vector2{ 2.0f, 2.0f };
 
     gui_draw_rect(wnd->pos, wnd->size, title_bg);
-    gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.bg_dark1);
+    gui_draw_rect(wnd->pos + window_border, wnd->size - 2.0f*window_border, gui.style.bg_dark0);
     gui_draw_rect(wnd->pos + window_border, title_size, title_bg);
     gui_draw_text(title, title_pos, { title_pos, title_size }, gui.style.window.title_fg, &gui.style.text.font);
 
@@ -1515,7 +1512,7 @@ void gui_end_window()
             }
         }
 
-        Vector3 resize_bg = gui.hot == resize_id ? bgr_unpack(0xFFFFFFFF) : bgr_unpack(0xFF5B5B5B);
+        Vector3 resize_bg = gui.hot == resize_id ? gui.style.bg_light0 : gui.style.bg_light1;
         gfx_draw_triangle(resize_tr, resize_br, resize_bl, resize_bg, &wnd->command_buffer);
     }
     //gui_hot_rect(wnd->id, wnd->pos, wnd->size);
@@ -2039,9 +2036,9 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
     Vector2 rhs_p1{ rhs_p0.x + (rhs-2.0f*rhs_margin), rhs_p0.y };
     Vector2 rhs_p2{ rhs_p0.x + 0.5f*(rhs_p1.x - rhs_p0.x), rhs_p0.y + (rhs-2.0f*rhs_margin) };
 
-    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
     Vector3 rhs_col = gui.hot == id ? gui.style.accent_bg : gui.style.fg;
-    Vector3 bg_col = gui.hot == id ? gui.style.bg_hot : gui.style.bg_dark0;
+    Vector3 bg_col = gui.hot == id ? gui.style.bg_hot : gui.style.bg;
 
     gui_draw_rect(pos, size, wnd->clip_rect, border_col);
     gui_draw_rect(inner_pos, inner_size, wnd->clip_rect, bg_col);
@@ -2080,7 +2077,7 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
 
             gui_hot_rect(label_id, rect_p, rect_s);
             if ((gui.hot == label_id && gui.pressed == id && !gui.mouse.left_pressed) ||
-                gui_clicked(label_id))
+                gui_clicked(label_id, rect_p, rect_s))
             {
                 index = i;
                 gui.focused = GUI_ID_INVALID;
@@ -2221,8 +2218,7 @@ bool gui_begin_menu_id(GuiId id, String label)
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
 
-    gui_hot_rect(id, pos, size);
-    if (gui_clicked(id)) menu->active = !menu->active;
+    if (gui_clicked(id, pos, size)) menu->active = !menu->active;
 
     if (menu->active) {
         // TODO(jesper): this needs to be adjusted and fixed for nested sub-menus. Probably using the id stack
@@ -2315,8 +2311,7 @@ bool gui_menu_button_id(GuiId id, String label)
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, font->line_height + 2.0f*text_offset.y };
     Vector2 pos = gui_layout_widget(&size);
 
-    gui_hot_rect(id, pos, size);
-    bool clicked = gui_clicked(id);
+    bool clicked = gui_clicked(id, pos, size);
 
     if (clicked) {
         GuiMenu *menu = gui_find_menu(gui.active_menu);
@@ -2356,7 +2351,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
 
-    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_light0);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_dark0);
 
     i32 step_size = 3;
     if (gui_button_id(up_id, btn_up_p, btn_size, gui.icons.up)) {
@@ -2390,7 +2385,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     f32 ratio = scroll_size.y/total_size.y;
     f32 row_height = line_height*ratio;
 
-    f32 pixels_per_i = scroll_size.y / max;
+    f32 pixels_per_i = scroll_size.y / (max+4);
     f32 scroll_to_total = row_height/pixels_per_i;
     f32 total_to_scroll = pixels_per_i/row_height;
 
@@ -2458,7 +2453,7 @@ void gui_vscrollbar_id(GuiId id, f32 *current, f32 total_height, f32 step_size, 
     Vector2 scroll_size{ gui.style.scrollbar.thickness, total_size.y - btn_size.y*2 };
     Vector2 scroll_pos{ total_pos.x, btn_up_p.y + btn_size.y };
 
-    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_light0);
+    gui_draw_rect(total_pos, total_size, wnd->clip_rect, gui.style.bg_dark0);
 
     f32 scroll_to_total = total_height/scroll_size.y;
     f32 total_to_scroll = scroll_size.y/total_height;
@@ -2616,8 +2611,8 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
     }
 
 
-    Vector3 bg = gui.style.bg_dark0;
-    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light0;
+    Vector3 bg = gui.style.bg_dark1;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
     Vector3 selected_bg = gui.style.accent_bg;
     Vector3 selected_hot_bg = gui.style.accent_bg_hot;
     Vector3 hot_bg = gui.style.bg_hot;
@@ -2652,8 +2647,7 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
 
         GuiId item_id = GUI_ID_INTERNAL(id, i+10);
 
-        gui_hot_rect(item_id, pos, size);
-        if (gui_clicked(item_id)) {
+        if (gui_clicked(item_id, pos, size)) {
             *selected_item = i;
             result = GUI_LISTER_SELECT;
         }

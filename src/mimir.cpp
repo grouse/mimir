@@ -2485,8 +2485,7 @@ next_node:;
                 Vector2 pos = gui_layout_widget(size);
                 Vector2 text_offset = size*0.5f - Vector2{ td.bounds.size.x*0.5f, font->line_height*0.5f };
 
-                gui_hot_rect(id, pos, size);
-                if (gui_clicked(id)) active_buffer = b->id;
+                if (gui_clicked(id, pos, size)) active_buffer = b->id;
 
                 if (i == current_tab) {
                     gui_draw_accent_button(id, pos, size);
@@ -2563,7 +2562,7 @@ next_node:;
                         // I can press the trigger button, drag to an item, then release to select it
                         gui_hot_rect(lid, rect_p, rect_s);
                         if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) ||
-                            gui_clicked(lid))
+                            gui_clicked(lid, rect_p, rect_s))
                         {
                             active_buffer = b->id;
                             gui.focused = GUI_ID_INVALID;
