@@ -114,7 +114,12 @@ bool f32_from_string(String s, f32 *dst)
 
 bool starts_with(String lhs, String rhs)
 {
-    return lhs.length >= rhs.length && strncmp(lhs.data, rhs.data, rhs.length) == 0;
+    return lhs.length >= rhs.length && memcmp(lhs.data, rhs.data, rhs.length) == 0;
+}
+
+bool ends_with(String lhs, String rhs)
+{
+    return lhs.length >= rhs.length && memcmp(lhs.data-rhs.length, rhs.data, rhs.length) == 0;
 }
 
 char* sz_string(String str, Allocator mem)

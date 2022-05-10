@@ -48,6 +48,9 @@ struct StringBuilder {
 bool operator!=(String lhs, String rhs);
 bool operator==(String lhs, String rhs);
 
+bool starts_with(String lhs, String rhs);
+bool ends_with(String lhs, String rhs);
+
 String create_string(char *str, i32 length, Allocator mem = mem_tmp);
 String string_duplicate(String other, Allocator mem = mem_tmp);
 void string_copy(String *dst, String src, Allocator mem = mem_tmp);

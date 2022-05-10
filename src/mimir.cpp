@@ -643,15 +643,29 @@ void init_app(Array<String> args)
     calculate_num_visible_lines();
     glGenBuffers(1, &view.glyph_data_ssbo);
     
-    if (true) {
-        array_add(&app.process_command_names, { "build.bat" });
-        array_add(&app.process_commands, { .exe = "D:\\projects\\plumber\\build.bat" });
-    }
-
     if (args.count > 0) {
         String dir = directory_of(args[0]);
         if (dir.length > 0) set_working_dir(dir);
         view_set_buffer(create_buffer(args[0]));
+    }
+    
+    Array<String> files = list_files(get_working_dir());
+    for (String s : files) {
+#ifdef _WIN32
+        if (extension_of(s) == ".bat") {
+            String full = absolute_path(s, mem_dynamic);
+            array_add(&app.process_command_names, filename_of(full));
+            array_add(&app.process_commands, { .exe = full });
+        }
+#endif
+        
+#ifdef __linux__
+        if (extension_of(s) == ".sh") {
+            String full = absolute_path(s, mem_dynamic);
+            array_add(&app.process_command_names, filename_of(full));
+            array_add(&app.process_commands, { .exe = full });
+        }
+#endif
     }
 }
 
