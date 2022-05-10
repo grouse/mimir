@@ -318,7 +318,8 @@ void gui_end_frame()
 
     for (Rect &r : gui.overlay_rects) {
         if (gui_mouse_over_rect(r.pos, r.size)) {
-            gui.hot_window = gui.windows[GUI_OVERLAY].id;
+            gui.hot_window = gui.focused_window = gui.windows[GUI_OVERLAY].id;
+            gui.windows[GUI_OVERLAY].active = true;
             break;
         }
     }
@@ -2006,17 +2007,18 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
     FontAtlas *font = &gui.style.text.font;
 
     f32 margin = 4.0f;
-    f32 border = 1.0f;
+    Vector2 border{ 1.0f, 1.0f };
 
-    Vector2 total_size{ 100.0f + margin + border, font->line_height + margin };
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(labels[current_index], font);
+    Vector2 total_size = { td.bounds.size.x+margin+16+2*border.x, font->line_height };
     Vector2 pos = gui_layout_widget(&total_size);
 
     // TODO(jesper): maybe this should be part of layout_widget procedures with some kind of flags
     Vector2 size{ total_size.x, font->line_height + margin };
     pos.y = floorf(pos.y + 0.5f*(total_size.y-size.y));
 
-    Vector2 inner_size{ size.x - 2*border, size.y - 2*border };
-    Vector2 inner_pos{ pos.x + border, pos.y + border };
+    Vector2 inner_size = size - 2*border;
+    Vector2 inner_pos = pos + border;
     Vector2 text_pos{ inner_pos.x + 0.5f*margin, floorf(inner_pos.y + 0.5f*(inner_size.y - font->line_height)) };
 
     gui_hot_rect(id, pos, size);
@@ -2034,7 +2036,7 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
     f32 rhs_y_o = floorf(0.5f*(inner_size.y-rhs));
 
     Vector2 rhs_p{ inner_pos.x + inner_size.x - rhs, inner_pos.y };
-    Vector2 rhs_p0{ floorf(rhs_p.x + border + rhs_margin), inner_pos.y + rhs_margin + rhs_y_o };
+    Vector2 rhs_p0{ floorf(rhs_p.x + border.x + rhs_margin), inner_pos.y + rhs_margin + rhs_y_o };
     Vector2 rhs_p1{ rhs_p0.x + (rhs-2.0f*rhs_margin), rhs_p0.y };
     Vector2 rhs_p2{ rhs_p0.x + 0.5f*(rhs_p1.x - rhs_p0.x), rhs_p0.y + (rhs-2.0f*rhs_margin) };
 
@@ -2044,8 +2046,8 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
 
     gui_draw_rect(pos, size, wnd->clip_rect, border_col);
     gui_draw_rect(inner_pos, inner_size, wnd->clip_rect, bg_col);
-    gui_draw_text(labels[index], text_pos, wnd->clip_rect, gui.style.fg, font);
-    gui_draw_rect(rhs_p, { border, inner_size.y }, border_col);
+    gui_draw_text(td.glyphs, text_pos, wnd->clip_rect, gui.style.fg, font);
+    gui_draw_rect(rhs_p, { border.x, inner_size.y }, border_col);
     gfx_draw_triangle(rhs_p0, rhs_p1, rhs_p2, rhs_col, cmdbuf);
 
     // TODO(jesper): I think this needs to use something other than focused to keep track of whether
@@ -2055,36 +2057,73 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
     // presses a button, like enter or down-arrow
     if (gui.focused == id) {
         Vector2 p{ pos.x, pos.y + size.y };
-        Vector2 inner_p{ p.x + border, p.y };
-        Vector2 text_offset{ 0.5f*margin + border, 0.5f*margin };
-        Vector2 text_p = p + text_offset;
+        Vector2 inner_p{ p.x + border.x, p.y };
 
-        Vector2 total_s{ size.x, labels.count * font->line_height + border + 0.5f*margin };
-        Vector2 inner_s{ total_s.x - 2*border, total_s.y - border };
+        i32 old_window = gui.current_window;
+        gui.current_window = GUI_OVERLAY;
+        
+        auto cmdbuf = &gui_current_window()->command_buffer;
+        i32 draw_index = gui_current_window()->command_buffer.commands.count;
+        
+        gui_begin_layout(
+            GuiLayout{
+                .type = GUI_LAYOUT_ROW,
+                .flags = GUI_LAYOUT_EXPAND,
+                .pos = inner_p,
+                .size = {},
+                .margin.x = 4,
+                .margin.y = 4,
+                .column.spacing = 2,
+            });
+        
+        defer { 
+            gui.current_window = old_window; 
+            gui_end_layout();
+        };
 
-        gui_draw_rect(p, total_s, gui.windows[GUI_OVERLAY].clip_rect, border_col, &gui.windows[GUI_OVERLAY].command_buffer);
-        gui_draw_rect(inner_p, inner_s, gui.windows[GUI_OVERLAY].clip_rect, gui.style.bg_dark0, &gui.windows[GUI_OVERLAY].command_buffer);
+        FontAtlas *font = &gui.style.text.font;
 
         // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
+        
+        bool hot_label = false;
+        Vector2 hot_p;
+        
         for (i32 i = 0; i < labels.count; i++) {
             String label = labels[i];
             GuiId label_id = GUI_ID_INTERNAL(id, i);
+            
+            TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font);
+            Vector2 size{ td.bounds.size.x, font->line_height };
+            Vector2 pos = gui_layout_widget(&size);
 
-            Vector2 rect_p{ inner_p.x, inner_p.y + font->line_height*i };
-            Vector2 rect_s{ inner_s.x, font->line_height + border };
+            if (gui.hot == label_id) {
+                hot_p = pos;
+                hot_label = true;
+            }
+            gui_draw_text(td.glyphs, pos, { pos, size }, gui.style.fg, font, cmdbuf);
 
-            if (gui.hot == label_id) gui_draw_rect(rect_p, rect_s, gui.style.bg_hot, &gui.windows[GUI_OVERLAY].command_buffer);
-            gui_draw_text(label, text_p, { rect_p, rect_s }, { 1.0f, 1.0f, 1.0f }, font, &gui.windows[GUI_OVERLAY].command_buffer);
-            text_p.y += font->line_height;
-
-            gui_hot_rect(label_id, rect_p, rect_s);
+            gui_hot_rect(label_id, pos, size);
             if ((gui.hot == label_id && gui.pressed == id && !gui.mouse.left_pressed) ||
-                gui_clicked(label_id, rect_p, rect_s))
+                gui_clicked(label_id, pos, size))
             {
                 index = i;
                 gui.focused = GUI_ID_INVALID;
             }
         }
+        
+        GuiLayout* cl = gui_current_layout();
+        
+        gui_draw_rect(cl->pos, cl->size, border_col, cmdbuf, draw_index++);
+        gui_draw_rect(cl->pos+border, cl->size-2*border, gui.style.bg_dark0, cmdbuf, draw_index++);
+        if (hot_label) {
+            gui_draw_rect(
+                { cl->pos.x+border.x, hot_p.y }, 
+                { cl->size.x-2*border.x, font->line_height }, 
+                gui.style.bg_hot, 
+                cmdbuf, draw_index++);
+        }
+
+        array_add(&gui.overlay_rects, { cl->pos, cl->size });
 
         if (gui.hot.owner != id.owner &&
             gui.mouse.left_pressed && !gui.mouse.left_was_pressed)
