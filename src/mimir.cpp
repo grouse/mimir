@@ -2800,7 +2800,7 @@ next_node:;
         if (auto buffer = get_buffer(view.buffer); buffer) {
             if (app.incremental_search.active) {
                 Vector2 size{ 0, 25.0f };
-                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
+                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_TOP);;
                 gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
                 defer { gui_end_layout(); };
 
@@ -2812,6 +2812,7 @@ next_node:;
                     view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
                     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                     if (app.incremental_search.set_mark) view.mark = view.caret;
+                    move_view_to_caret();
                 } 
                 
                 if (action & GUI_EDITBOX_FINISH) {
@@ -2830,7 +2831,10 @@ next_node:;
                     }
                     app.incremental_search.active = false;
                 }
-            } else {
+            } else if (app.incremental_search.str.length > 0) {
+            }
+            
+            {
                 Vector2 size{ 0, 15.0f };
                 Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
                 gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
