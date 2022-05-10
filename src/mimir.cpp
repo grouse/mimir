@@ -1317,6 +1317,33 @@ next1:;
     return start;
 }
 
+i64 buffer_seek_first_forward(BufferId buffer_id, Array<char> chars, i64 start)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return start;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        for (i64 offset = start+1; offset < buffer->flat.size; offset++)  {
+            char c = *(buffer->flat.data+offset);
+            for (i32 i = 0; i < chars.count; i++) {
+                if (c == chars[i]) return offset;
+            }
+        }
+
+        for (i64 offset = 0; offset < start; offset++) {
+            char c = *(buffer->flat.data+offset);
+            for (i32 i = 0; i < chars.count; i++) {
+                if (c == chars[i]) return offset;
+            }
+        }
+        break;
+    }
+
+
+    return -1;
+}
+
 i64 buffer_seek_back(BufferId buffer_id, String needle, i64 start)
 {
     Buffer *buffer = get_buffer(buffer_id);
@@ -1324,7 +1351,7 @@ i64 buffer_seek_back(BufferId buffer_id, String needle, i64 start)
 
     switch (buffer->type) {
     case BUFFER_FLAT:
-        for (i64 offset = start-1; offset > 0; offset--) {
+        for (i64 offset = start-1; offset >= 0; offset--) {
             char *p = buffer->flat.data+offset;
             for (i32 i = 0; i < needle.length; i++) {
                 if (to_lower(*(p+i)) != needle[i]) goto next0;
@@ -1351,6 +1378,42 @@ next1:;
     return start;
 }
 
+i64 buffer_seek_first_back(BufferId buffer_id, Array<char> chars, i64 start)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) return start;
+
+    switch (buffer->type) {
+    case BUFFER_FLAT:
+        for (i64 offset = start-1; offset >= 0; offset--) {
+            char c = *(buffer->flat.data+offset);
+            for (i32 i = 0; i < chars.count; i++) {
+                if (c == chars[i]) return offset;
+            }
+        }
+
+        for (i64 offset = buffer->flat.size-1; offset > start; offset--) {
+            char c = *(buffer->flat.data+offset);
+            for (i32 i = 0; i < chars.count; i++) {
+                if (c == chars[i]) return offset;
+            }
+        }
+        break;
+    }
+
+
+    return -1;
+}
+
+i64 buffer_seek_first_forward(BufferId buffer_id, std::initializer_list<char> chars, i64 start)
+{
+    return buffer_seek_first_forward(buffer_id, Array<char>{ .data = (char*)chars.begin(), .count = (i32)chars.size() }, start);
+}
+
+i64 buffer_seek_first_back(BufferId buffer_id, std::initializer_list<char> chars, i64 start)
+{
+    return buffer_seek_first_back(buffer_id, Array<char>{ .data = (char*)chars.begin(), .count = (i32)chars.size() }, start);
+}
 
 void buffer_save(BufferId buffer_id)
 {
@@ -1985,6 +2048,58 @@ void app_event(WindowEvent event)
                 app.incremental_search.active = true;
                 app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
                 break;
+            case KC_GRAVE: 
+                // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
+                // textual fall-back version which doesn't handle comments or strings
+                if (auto buffer = get_buffer(view.buffer); buffer) {
+                    i64 f = buffer_seek_first_forward(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset-1);
+                    i64 b = buffer_seek_first_back(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset+1);
+                    
+                    if (f != -1 && f != view.caret.byte_offset && 
+                        (b < line_start_offset(view.caret.wrapped_line, view.lines) || 
+                         b > line_end_offset(view.caret.wrapped_line, view.lines, view.buffer)))
+                    {
+                        view.caret.byte_offset = f;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                        break;
+                    }
+                    
+                    i64 offset = b == -1 || f-view.caret.byte_offset < view.caret.byte_offset-b ? f : b;
+                    if (offset == -1) break;
+                    
+                    char l = char_at(buffer, offset);
+                    bool forward = false;
+                    char r;
+                    switch (l) {
+                    case '{': r = '}'; forward = true; break;
+                    case '}': r = '{'; break;
+                    case '[': r = ']'; forward = true; break;
+                    case ']': r = '['; break;
+                    case '(': r = ')'; forward = true; break;
+                    case ')': r = '('; break;
+                    default: 
+                        LOG_ERROR("unexpected char '%c'", l); 
+                        return;
+                    }
+
+                    i32 level = 1;
+                    while (level >= 1) {
+                        offset = forward ? 
+                            buffer_seek_first_forward(view.buffer, {l, r}, offset) : 
+                            buffer_seek_first_back(view.buffer, {l, r}, offset);
+
+                        char c = char_at(buffer, offset);
+                        if (c == l) level++;
+                        else if (c == r) level--;
+                    }
+
+                    if (offset >= 0) {
+                        view.caret.byte_offset = offset;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                    }
+                } break;
             case KC_ESC:
                 FREE(mem_dynamic, app.incremental_search.str.data);
                 app.incremental_search.str = {};
