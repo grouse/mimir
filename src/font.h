@@ -12,6 +12,7 @@
 
 struct Glyph {
     u32 codepoint;
+    i32 glyph_index;
     f32 advance;
     i32 x0, y0;
     i32 x1, y1;
@@ -43,8 +44,7 @@ struct FontAtlas {
     Vector2 current;
     f32 current_row_height;
 
-    HashTable<u32, Glyph> glyphs;
-    //DynamicArray<Glyph> glyphs;
+    HashTable<i32 , Glyph> glyphs;
 };
 
 FontAtlas create_font(String path, f32 pixel_height, bool mono_space = false);
