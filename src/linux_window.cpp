@@ -147,8 +147,25 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
         break;
 	case KeyPress:
 		if (false) log_key_event(xevent.xkey);
-		if (input.text_input_enabled) {
+
+		event.type = WE_KEY_PRESS;
+		event.key = {
+			.keycode = keycode_from_x11_keycode(xevent.xkey.keycode),
+			.prev_state = key_state[event.key.keycode],
+		};
+
+		if (xevent.xkey.state & ShiftMask) event.key.modifiers |= MF_SHIFT;
+		if (xevent.xkey.state & ControlMask) event.key.modifiers |= MF_CTRL;
+		if (xevent.xkey.state & Mod1Mask) event.key.modifiers |= MF_ALT;
+		key_state[event.key.keycode] = 1;
+
+		if (event.key.keycode != KC_BACKSPACE &&
+		    event.key.keycode != KC_ESC &&
+		    event.key.keycode != KC_DELETE &&
+		    input.text_input_enabled)
+		{
 			WindowEvent t{ .type = WE_TEXT };
+
 			t.text.length = Xutf8LookupString(
 				ic, &xevent.xkey,
 				(char*)t.text.c, sizeof t.text.c,
@@ -157,17 +174,10 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
 			if (t.text.length > 0) {
 				array_add(stream, t);
 				String s{(char*)t.text.c, t.text.length};
-				LOG_INFO("text input: '%.*s'", STRFMT(s));
 			}
 		}
 
-		event.type = WE_KEY_PRESS;
-		event.key.keycode = keycode_from_x11_keycode(xevent.xkey.keycode);
-		event.key.prev_state = key_state[event.key.keycode];
-		if (xevent.xkey.state & ShiftMask) event.key.modifiers |= MF_SHIFT;
-		if (xevent.xkey.state & ControlMask) event.key.modifiers |= MF_CTRL;
-		if (xevent.xkey.state & Mod1Mask) event.key.modifiers |= MF_ALT;
-		key_state[event.key.keycode] = 1;
+
 
 		if (false && event.key.keycode == KC_UNKNOWN) LOG_INFO("unknown x11 keycode: 0x%X", xevent.xkey.keycode);
 
