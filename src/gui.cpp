@@ -307,13 +307,15 @@ void gui_end_frame()
     gui.capture_mouse_wheel[0] = gui.capture_mouse_wheel[1];
     gui.capture_mouse_wheel[1] = false;
 
+    GuiId old_focused = gui.focused_window;
+    GuiId old = gui.hot_window;
+    
     for (GuiWindow &wnd : gui.windows) {
         if (!wnd.active && gui.focused_window == wnd.id) {
             gui.focused_window = GUI_ID_INVALID;
         }
     }
 
-    GuiId old = gui.hot_window;
     gui.hot_window = GUI_ID_INVALID;
 
     for (Rect &r : gui.overlay_rects) {
@@ -335,11 +337,16 @@ void gui_end_frame()
     }
 
     if (gui.hot_window == GUI_ID_INVALID) {
-        gui.hot_window = gui.focused_window = gui.windows[GUI_BACKGROUND].id;
+        gui.hot_window = gui.windows[GUI_BACKGROUND].id;
     }
 
     if (false && old != gui.hot_window) {
         LOG_INFO("hot window: %d, %d, %d", gui.hot_window.owner, gui.hot_window.index, gui.hot_window.internal);
+    }
+    
+    if (false && old_focused != gui.focused_window) {
+        LOG_INFO("focused window: %d, %d, %d", gui.focused_window.owner, gui.focused_window.index, gui.focused_window.internal);
+        LOG_INFO("old focused window: %d, %d, %d", old_focused.owner, old_focused.index, old_focused.internal);
     }
 }
 
@@ -2426,7 +2433,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
     f32 ratio = scroll_size.y/total_size.y;
     f32 row_height = line_height*ratio;
 
-    f32 pixels_per_i = scroll_size.y / (max+4);
+    f32 pixels_per_i = scroll_size.y / (max+3);
     f32 scroll_to_total = row_height/pixels_per_i;
     f32 total_to_scroll = pixels_per_i/row_height;
 
@@ -2452,7 +2459,7 @@ void gui_vscrollbar_id(GuiId id, f32 line_height, i32 *current, i32 max, i32 num
         *current = c;
     }
 
-    f32 min_h = 8.0f;
+    f32 min_h = 15.0f;
 
     f32 y0 = *current*pixels_per_i + *offset*total_to_scroll;
     f32 yh = MIN(num_visible, max) * pixels_per_i;

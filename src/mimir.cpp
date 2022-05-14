@@ -62,6 +62,64 @@ struct BufferLine {
     i64 wrapped : 1;
 };
 
+enum NewlineMode {
+    NEWLINE_LF = 1,
+    NEWLINE_CR,
+    NEWLINE_CRLF,
+    NEWLINE_LFCR,
+};
+
+enum BufferType {
+    BUFFER_FLAT,
+};
+
+#define BUFFER_INVALID BufferId{ -1 }
+
+struct BufferId {
+    i32 index = -1;
+
+    bool operator==(const BufferId &rhs) { return index == rhs.index; }
+    bool operator!=(const BufferId &rhs) { return index != rhs.index; }
+    operator bool() { return *this != BUFFER_INVALID; }
+};
+
+struct BufferHistory {
+    BufferHistoryType type;
+    union {
+        struct {
+            i64 offset;
+            String text;
+        };
+        struct {
+            i64 caret;
+            i64 mark;
+        };
+    };
+};
+
+struct Buffer {
+    BufferId id;
+
+    String name;
+    String file_path;
+
+    Language language;
+    TSTree *syntax_tree;
+
+    DynamicArray<BufferHistory> history;
+    i32 history_index;
+    i32 saved_at;
+
+    NewlineMode newline_mode;
+    i32 tab_width = 4;
+    bool indent_with_tabs;
+
+    BufferType type;
+    union {
+        struct { char *data; i64 size; i64 capacity; } flat;
+    };
+};
+
 struct ProcessCommand {
     String exe;
     String args;
@@ -108,64 +166,6 @@ struct Application {
     struct {
         GLuint build;
     } icons;
-};
-
-struct BufferHistory {
-    BufferHistoryType type;
-    union {
-        struct {
-            i64 offset;
-            String text;
-        };
-        struct {
-            i64 caret;
-            i64 mark;
-        };
-    };
-};
-
-enum NewlineMode {
-    NEWLINE_LF = 1,
-    NEWLINE_CR,
-    NEWLINE_CRLF,
-    NEWLINE_LFCR,
-};
-
-enum BufferType {
-    BUFFER_FLAT,
-};
-
-#define BUFFER_INVALID BufferId{ -1 }
-
-struct BufferId {
-    i32 index = -1;
-
-    bool operator==(const BufferId &rhs) { return index == rhs.index; }
-    bool operator!=(const BufferId &rhs) { return index != rhs.index; }
-    operator bool() { return *this != BUFFER_INVALID; }
-};
-
-struct Buffer {
-    BufferId id;
-
-    String name;
-    String file_path;
-    
-    Language language;
-    TSTree *syntax_tree;
-
-    DynamicArray<BufferHistory> history;
-    i32 history_index;
-    i32 saved_at;
-
-    NewlineMode newline_mode;
-    i32 tab_width = 4;
-    bool indent_with_tabs;
-
-    BufferType type;
-    union {
-        struct { char *data; i64 size; i64 capacity; } flat;
-    };
 };
 
 struct Caret {
@@ -337,7 +337,7 @@ i64 prev_byte(Buffer *b, i64 i)
 
 void calculate_num_visible_lines()
 {
-    i32 lines_visible = (i32)((gfx.resolution.y / (f32)app.mono.line_height) + 1.999f);
+    i32 lines_visible = (i32)ceilf(gfx.resolution.y / (f32)app.mono.line_height);
     view.lines_dirty = view.lines_dirty || lines_visible != view.lines_visible;
     view.lines_visible = lines_visible;
 }
@@ -2848,7 +2848,7 @@ next_node:;
             } else if (app.incremental_search.str.length > 0) {
             }
             
-            {
+            if (false) {
                 Vector2 size{ 0, 15.0f };
                 Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
                 gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
@@ -2962,9 +2962,9 @@ next_node:;
         Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
         Vector2 size{ view.rect.size.x, view.rect.size.y };
 
-        i32 columns = (view.rect.size.x / font->space_width) + 1;
-        i32 rows = (view.rect.size.y / font->line_height) + 2;
-
+        i32 columns = (i32)ceilf(view.rect.size.x / font->space_width);
+        i32 rows = view.lines_visible;
+        
         struct RangeColor {
             i64 start, end;
             u32 color;
@@ -3030,7 +3030,7 @@ next_node:;
         }
         
         mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
-        glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows };
+        glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
         defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
         
         Vector3 fg = linear_from_sRGB(app.fg);
@@ -3041,7 +3041,10 @@ next_node:;
         }
         
         i32 current_color = 0;
-        for (i32 line_index = view.line_offset; line_index < MIN(view.lines.count, view.line_offset+rows); line_index++) {
+        for (i32 line_index = view.line_offset; 
+             line_index < MIN(view.lines.count, view.line_offset+rows); 
+             line_index++) 
+        {
             i32 i = line_index-view.line_offset;
             i64 p = view.lines[line_index].offset;
             i64 end = line_end_offset(line_index, view.lines, buffer);

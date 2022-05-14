@@ -8,6 +8,7 @@ extern "C" double floor (double x) NOTHROW;
 extern "C" float floorf(float x) NOTHROW;
 extern "C" float powf( float base, float exponent ) NOTHROW;
 extern "C" double ceil (double x) NOTHROW;
+extern "C" float ceilf (float x) NOTHROW;
 extern "C" float fabsf( float arg ) NOTHROW;
 extern "C" float cosf( float arg ) NOTHROW;
 extern "C" float tanf( float arg ) NOTHROW;

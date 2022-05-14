@@ -28,10 +28,7 @@ FontAtlas create_font(String path, f32 pixel_height, bool mono_space)
         font.baseline = (i32)(font.ascent*font.scale);
         // TODO(jesper): dynamically resize the atlas texture
         font.size = { 512, 512 };
-        
-        // TODO(jesper): bunch of padding here because some glyphs have really bounding box
-        // offsets that I really need to actually investigate properly
-        font.current = { 4, 4 };
+        font.current = { 0, 0 };
 
         int advance, lsb;
         stbtt_GetCodepointHMetrics(&font.info, ' ', &advance, &lsb);
@@ -81,11 +78,13 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     i32 x = font->current.x, y = font->current.y;
     i32 dst_x = font->mono_space ? x+xoff : x;
     i32 dst_y = font->mono_space ? y+yoff : y;
-
+    
+    if (font->mono_space) ASSERT(xoff >= 0 && yoff >= 0);
+    
     if (dst_x + wa >= font->size.x) {
-        font->current.x = x = 4;
+        font->current.x = x = 0;
         font->current.y = y = font->current.y+font->current_row_height;
-        font->current_row_height = 4;
+        font->current_row_height = 0;
         
         dst_x = font->mono_space ? x+xoff : x;
         dst_y = font->mono_space ? y+yoff : y;
