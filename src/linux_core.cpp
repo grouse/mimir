@@ -37,21 +37,6 @@ bool debugger_attached()
     return true;
 }
 
-void log_key_event(XKeyEvent event)
-{
-    LOG_INFO(
-        "keycode: 0x%x, shift: %d, ctrl: %d, lock: %d, mod1: %d, mod2: %d, mod3: %d, mod4: %d, mod5: %d",
-        event.keycode,
-        event.state & ShiftMask ? 1 : 0,
-        event.state & ControlMask ? 1 : 0,
-        event.state & LockMask ? 1 : 0,
-        event.state & Mod1Mask ? 1 : 0, // alt
-        event.state & Mod2Mask ? 1 : 0, // no idea
-        event.state & Mod3Mask ? 1 : 0, // no idea
-        event.state & Mod4Mask ? 1 : 0, // no idea
-        event.state & Mod5Mask ? 1 : 0); // no idea
-}
-
 void log(String path, u32 line, String proc, LogType type, const char *fmt, ...)
 {
     char buffer0[1024];
