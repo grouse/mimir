@@ -10,15 +10,19 @@ void* align_ptr(void *ptr, u8 alignment, u8 header_size);
 template<typename T>
 T* get_header(void *aligned_ptr) { return (T*)((size_t)aligned_ptr-sizeof(T)); }
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include "win32_allocator.cpp"
+#elif defined(__linux__)
+#include "linux_allocator.cpp"
+#else
+#error "unsupported platform"
 #endif
 
 struct LinearAllocatorState {
     u8 *start;
     u8 *end;
     u8 *current;
-    
+
     void *last;
 };
 
@@ -45,10 +49,10 @@ void* linear_alloc(void *v_state, AllocatorCmd cmd, void *old_ptr, i64 old_size,
     auto state = (LinearAllocatorState*)v_state;
 
     switch (cmd) {
-    case ALLOCATOR_CMD_ALLOC: 
+    case ALLOCATOR_CMD_ALLOC:
         {
             if (size == 0) return nullptr;
-            
+
             if (state->current + size >= state->end) {
                 LOG_ERROR("allocator does not have enough memory for allocation: %lld", size);
                 return nullptr;
@@ -58,18 +62,18 @@ void* linear_alloc(void *v_state, AllocatorCmd cmd, void *old_ptr, i64 old_size,
             state->last = ptr;
             return ptr;
         } break;
-    case ALLOCATOR_CMD_FREE: 
+    case ALLOCATOR_CMD_FREE:
         LOG_ERROR("free called on linear allocator, unsupported");
         return nullptr;
     case ALLOCATOR_CMD_REALLOC:
         {
             if (size == 0) return nullptr;
-            
+
             if (old_ptr && state->last == old_ptr) {
                 state->current += size-old_size;
                 return old_ptr;
             }
-            
+
             //LOG_INFO("leaking %lld bytes", old_size);
             void *ptr = linear_alloc(v_state, ALLOCATOR_CMD_ALLOC, nullptr, 0, size, alignment);
             if (old_size > 0) memcpy(ptr, old_ptr, old_size);
@@ -92,16 +96,16 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
     switch (cmd) {
     case ALLOCATOR_CMD_ALLOC: {
             if (size == 0) return nullptr;
-            
+
             u8 header_size = sizeof(Header);
             void *ptr = malloc(size+alignment+header_size);
             void *aligned_ptr = align_ptr(ptr, alignment, header_size);
-            
+
             auto header = get_header<Header>(aligned_ptr); header->offset = (u8)((size_t)aligned_ptr - (size_t)ptr);
             header->alignment = alignment;
             return aligned_ptr;
-        } 
-    case ALLOCATOR_CMD_FREE: 
+        }
+    case ALLOCATOR_CMD_FREE:
         if (old_ptr) {
             Header *header = get_header<Header>(old_ptr);
             void *unaligned_ptr = (void*)((size_t)old_ptr - header->offset);
@@ -115,15 +119,15 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
                 ASSERT(header->alignment == alignment);
                 old_unaligned_ptr = (void*)((size_t)old_ptr - header->offset);
             }
-            
+
             u8 header_size = sizeof(Header);
             void *ptr = realloc(old_unaligned_ptr, size+alignment+header_size);
             void *aligned_ptr = align_ptr(ptr, alignment, header_size);
-            
+
             auto header = get_header<Header>(aligned_ptr);
             header->offset = (u8)((size_t)aligned_ptr - (size_t)ptr);
             header->alignment = alignment;
-            
+
             return aligned_ptr;
         }
     case ALLOCATOR_CMD_RESET:
@@ -135,13 +139,13 @@ void* malloc_alloc(void */*v_state*/, AllocatorCmd cmd, void *old_ptr, i64 /*old
 Allocator linear_allocator(i64 size)
 {
     u8 *mem = (u8*)malloc(size);
-    
+
     LinearAllocatorState *state = (LinearAllocatorState*)mem;
     state->start = mem + sizeof *state;
     state->end = mem+size;
     state->current = state->start;
     state->last = nullptr;
-    
+
     return Allocator{ state, linear_alloc };
 }
 

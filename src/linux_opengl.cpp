@@ -137,9 +137,14 @@ void load_opengl_procs()
     LOAD_GL_PROC(glBufferData);
     LOAD_GL_PROC(glBufferSubData);
     LOAD_GL_PROC(glVertexAttribPointer);
+    LOAD_GL_PROC(glMapBufferRange);
+    LOAD_GL_PROC(glMapNamedBufferRange);
+    LOAD_GL_PROC(glUnmapBuffer);
+    LOAD_GL_PROC(glUnmapNamedBuffer);
     LOAD_GL_PROC(glEnableVertexAttribArray);
     LOAD_GL_PROC(glDisableVertexAttribArray);
     LOAD_GL_PROC(glUseProgram);
+    LOAD_GL_PROC(glUniform1i);
     LOAD_GL_PROC(glUniform1f);
     LOAD_GL_PROC(glUniform2f);
     LOAD_GL_PROC(glUniform3f);
@@ -160,6 +165,7 @@ void load_opengl_procs()
     LOAD_GL_PROC(glDebugMessageCallback);
     LOAD_GL_PROC(glPolygonMode);
     LOAD_GL_PROC(glBindBufferRange);
+    LOAD_GL_PROC(glBindBufferBase);
     LOAD_GL_PROC(glScissor);
     LOAD_GL_PROC(glTextureSubImage2D);
 }

@@ -121,7 +121,7 @@ void log_key_event(XKeyEvent event)
         event.state & Mod5Mask ? 1 : 0); // no idea
 }
 
-void linux_input_event(DynamicArray<InputEvent> *stream, XIC ic, XEvent xevent)
+void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
 {
 	static u16 key_state[256] = {0};
 
@@ -161,7 +161,7 @@ void linux_input_event(DynamicArray<InputEvent> *stream, XIC ic, XEvent xevent)
 			}
 		}
 
-		event.type = IE_KEY_PRESS;
+		event.type = WE_KEY_PRESS;
 		event.key.keycode = keycode_from_x11_keycode(xevent.xkey.keycode);
 		event.key.prev_state = key_state[event.key.keycode];
 		if (xevent.xkey.state & ShiftMask) event.key.modifiers |= MF_SHIFT;
@@ -176,7 +176,7 @@ void linux_input_event(DynamicArray<InputEvent> *stream, XIC ic, XEvent xevent)
     case KeyRelease:
         if (false) log_key_event(xevent.xkey);
 
-		event.type = IE_KEY_RELEASE;
+		event.type = WE_KEY_RELEASE;
 		event.key.keycode = keycode_from_x11_keycode(xevent.xkey.keycode);
 		event.key.prev_state = key_state[event.key.keycode];
 		if (xevent.xkey.state & ShiftMask) event.key.modifiers |= MF_SHIFT;
@@ -191,3 +191,13 @@ void linux_input_event(DynamicArray<InputEvent> *stream, XIC ic, XEvent xevent)
 
 	if (event.type) array_add(stream, event);
 }
+
+
+MouseCursor current_cursor;
+Cursor cursors[MC_MAX];
+
+void push_cursor(MouseCursor c)
+{
+	current_cursor = c;
+}
+

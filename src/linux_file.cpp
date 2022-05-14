@@ -129,6 +129,15 @@ String get_exe_folder(Allocator mem)
 	return duplicate_string(core.exe_path, mem);
 }
 
+String get_working_dir(Allocator mem)
+{
+	char buffer[PATH_MAX];
+	char *wd = getcwd(buffer, sizeof buffer);
+	PANIC_IF(wd == nullptr, "current working dir exceeds PATH_MAX");
+
+	return create_string(wd, (i32)strlen(wd), mem);
+}
+
 String directory_of(String path, Allocator mem)
 {
 	i32 p = last_of(path, '/');

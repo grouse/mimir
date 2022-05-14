@@ -52,6 +52,7 @@ int main(int argc, char **argv)
         last_time = current_time;
 
         f32 dt = (i32)elapsed / 1000000000.0f;
+        (void)dt;
 
         RESET_ALLOC(mem_tmp);
         RESET_ALLOC(mem_frame);
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
 
-        update_and_render(dt);
+        update_and_render();
         glXSwapBuffers(wnd.dsp, wnd.handle);
 
         XDefineCursor(wnd.dsp, wnd.handle, core.cursors[core.current_cursor]);

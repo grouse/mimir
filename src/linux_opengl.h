@@ -6,6 +6,7 @@
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_SHADER_STORAGE_BUFFER          0x90D2
 
 #define GL_STREAM_DRAW                    0x88E0
 #define GL_STREAM_READ                    0x88E1
@@ -16,6 +17,13 @@
 #define GL_DYNAMIC_DRAW                   0x88E8
 #define GL_DYNAMIC_READ                   0x88E9
 #define GL_DYNAMIC_COPY                   0x88EA
+
+#define GL_MAP_READ_BIT                   0x0001
+#define GL_MAP_WRITE_BIT                  0x0002
+#define GL_MAP_INVALIDATE_RANGE_BIT       0x0004
+#define GL_MAP_INVALIDATE_BUFFER_BIT      0x0008
+#define GL_MAP_FLUSH_EXPLICIT_BIT         0x0010
+#define GL_MAP_UNSYNCHRONIZED_BIT         0x0020
 
 #define GL_FRAMEBUFFER_SRGB               0x8DB9
 #define GL_BLEND                          0x0BE2
@@ -230,10 +238,15 @@ DECL_GL_PROC(void, glBindVertexArray, GLuint array);
 DECL_GL_PROC(void, glBindBuffer, GLenum target, GLuint buffer);
 DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage);
 DECL_GL_PROC(void, glBufferSubData, GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
+DECL_GL_PROC(void*, glMapBufferRange, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+DECL_GL_PROC(void*, glMapNamedBufferRange, GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
+DECL_GL_PROC(GLboolean, glUnmapBuffer, GLenum target);
+DECL_GL_PROC(GLboolean, glUnmapNamedBuffer, GLuint buffer);
 DECL_GL_PROC(void, glVertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
 DECL_GL_PROC(void, glEnableVertexAttribArray, GLuint index);
 DECL_GL_PROC(void, glDisableVertexAttribArray, GLuint index);
 DECL_GL_PROC(void, glUseProgram, GLuint program);
+DECL_GL_PROC(void, glUniform1i, GLint location, GLint v0);
 DECL_GL_PROC(void, glUniform1f, GLint location, GLfloat v0);
 DECL_GL_PROC(void, glUniform2f, GLint location, GLfloat v0, GLfloat v1);
 DECL_GL_PROC(void, glUniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
@@ -254,6 +267,7 @@ DECL_GL_PROC(void, glBlendFunc, GLenum sfactor, GLenum dfactor);
 DECL_GL_PROC(void, glDebugMessageCallback, GLDEBUGPROC callback, void * userParam);
 DECL_GL_PROC(void, glPolygonMode, GLenum face, GLenum mode);
 DECL_GL_PROC(void, glBindBufferRange, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
+DECL_GL_PROC(void, glBindBufferBase, GLenum target, GLuint index, GLuint buffer);
 DECL_GL_PROC(void, glScissor, GLint x, GLint y, GLsizei width, GLsizei height);
 
 DECL_GL_PROC(void, glTextureSubImage2D, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
