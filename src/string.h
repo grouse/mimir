@@ -1,7 +1,7 @@
 #ifndef STRING_H
 #define STRING_H
 
-#include "allocator.h"
+#include "memory.h"
 
 #define STRFMT(str) (str).length, (str).data
 

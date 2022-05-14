@@ -1,5 +1,5 @@
-#ifndef ALLOCATOR_H
-#define ALLOCATOR_H
+#ifndef MEMORY_H
+#define MEMORY_H
 
 #include "platform.h"
 
@@ -40,4 +40,9 @@ Allocator linear_allocator(i64 size);
 Allocator malloc_allocator();
 Allocator vm_freelist_allocator(i64 max_size);
 
-#endif // ALLOCATOR_H
+i32 get_page_size();
+void* virtual_reserve(i64 size);
+void* virtual_commit(void *addr, i64 size);
+
+
+#endif // MEMORY_H

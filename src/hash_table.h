@@ -1,7 +1,7 @@
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
 
-#include "allocator.h"
+#include "memory.h"
 #include "hash.h"
 
 #define HASH_TABLE_INITIAL_CAPACITY 16
@@ -14,7 +14,7 @@ struct HashTable {
         V value;
         bool occupied;
     };
-    
+
     Pair *slots;
     i32 count;
     i32 capacity;
@@ -35,7 +35,7 @@ i32 find_slot(HashTable<K, V> *table, K key)
         i = (i+1) % table->capacity;
         if (i == end_probe) return -1;
     }
-    
+
     return i;
 }
 
@@ -55,18 +55,18 @@ void grow_table(HashTable<K, V> *table, i32 new_capacity)
 
     using Pair = typename HashTable<K,V>::Pair;
     HashTable<K, V> old_table = *table;
-    
+
     table->slots = ALLOC_ARR(table->alloc, Pair, new_capacity);
     for (i32 i = 0; i < new_capacity; i++) table->slots[i].occupied = false;
     table->capacity = new_capacity;
     table->count = 0;
-    
+
     for (i32 i = 0; i < old_table.capacity; i++) {
         if (old_table.slots[i].occupied) {
             set(table, old_table.slots[i].key, old_table.slots[i].value);
         }
     }
-    
+
     if (old_table.slots) FREE(table->alloc, old_table.slots);
 }
 
@@ -78,15 +78,15 @@ void set(HashTable<K, V> *table, K key, V value)
         table->slots[i].value = value;
         return;
     }
-    
+
     if (table->count >= table->capacity*HASH_TABLE_LOAD_FACTOR) {
         i32 new_capacity = table->capacity == 0 ? HASH_TABLE_INITIAL_CAPACITY : table->capacity*2;
         grow_table(table, new_capacity);
     }
-    
+
     i = find_slot(table, key);
     ASSERT(i >= 0);
-    
+
     table->slots[i] = { .key = key, .value = value, .occupied = true };
     table->count++;
 }

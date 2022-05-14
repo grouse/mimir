@@ -1,14 +1,14 @@
 #include "platform.h"
 #include "core.h"
 #include "maths.h"
-#include "allocator.h"
+#include "memory.h"
 #include "window.h"
 #include "process.h"
 
 #include "maths.cpp"
 #include "gui.cpp"
 #include "string.cpp"
-#include "allocator.cpp"
+#include "memory.cpp"
 #include "core.cpp"
 #include "window.cpp"
 #include "gfx_opengl.cpp"
@@ -138,14 +138,14 @@ struct Application {
 
         i32 selected_item;
     } lister;
-    
+
     struct {
         String str;
         i64 start_caret, start_mark;
         bool active;
         bool set_mark;
     } incremental_search;
-    
+
     const TSLanguage *languages[LANGUAGE_COUNT];
     TSQuery *queries[LANGUAGE_COUNT];
     EditMode mode, next_mode;
@@ -160,7 +160,7 @@ struct Application {
     Vector3 caret_fg = bgr_unpack(0xFFEF5F0A);
     Vector3 caret_bg = bgr_unpack(0xFF8a523f);
     Vector3 line_bg = bgr_unpack(0xFF264041);
-    
+
     HashTable<String, u32> syntax_colors;
 
     struct {
@@ -386,7 +386,7 @@ BufferId create_buffer(String file)
     b.flat.data = (char*)f.data;
     b.flat.size = f.size;
     b.flat.capacity = f.size;
-    
+
     String ext = extension_of(b.file_path);
     if (ext == ".cpp" || ext == ".c" ||
         ext == ".h" || ext == ".hpp" ||
@@ -396,10 +396,10 @@ BufferId create_buffer(String file)
     } else if (ext == ".rs") {
         b.language = LANGUAGE_RUST;
     }
-    
+
     if (f.data) {
         // TODO(jesper): guess tabs/spaces based on file content?
-        
+
         char *start = (char*)f.data;
         char *p = start+f.size-1;
         while (p >= start) {
@@ -424,11 +424,11 @@ BufferId create_buffer(String file)
 #if 0
             TSNode root = ts_tree_root_node(b.syntax_tree);
             char *sexpr = ts_node_string(root);
-            
+
             String n = slice(b.name, 0, b.name.length-extension_of(b.name).length);
             String scm_path = stringf(mem_tmp, "D:/projects/mimir/build/%.*s.scm", STRFMT(n));
             write_file(scm_path, sexpr, strlen(sexpr));
-            
+
             String gv_path = stringf(mem_tmp, "D:/projects/mimir/build/%.*s.dot", STRFMT(n));
             FILE *f = fopen(sz_string(gv_path), "wb");
             ts_tree_print_dot_graph(b.syntax_tree, f);
@@ -511,7 +511,7 @@ struct ts_alloc_header {
 void* ts_custom_malloc(size_t size)
 {
     if (size == 0) return nullptr;
-    
+
     void *ptr = ALLOC(ts_custom_alloc, size+sizeof(ts_alloc_header));
     auto header = (ts_alloc_header*)ptr;
     header->size = size;
@@ -521,7 +521,7 @@ void* ts_custom_malloc(size_t size)
 void* ts_custom_calloc(size_t count, size_t size)
 {
     if (size == 0) return nullptr;
-    
+
     void *ptr = ts_custom_malloc(count*size);
     memset(ptr, 0, count*size);
     return ptr;
@@ -531,10 +531,10 @@ void* ts_custom_realloc(void *ptr, size_t size)
 {
     if (size == 0) return nullptr;
     if (ptr == nullptr) return ts_custom_malloc(size);
-    
+
     auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
     void *nptr = REALLOC(ts_custom_alloc, header, header->size+sizeof(ts_alloc_header), size+sizeof(ts_alloc_header));
-    
+
     header = (ts_alloc_header*)nptr;
     header->size = size;
     return (u8*)header + sizeof *header;
@@ -544,7 +544,7 @@ void* ts_custom_realloc(void *ptr, size_t size)
 void ts_custom_free(void *ptr)
 {
     if (!ptr) return;
-    
+
     auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
     FREE(ts_custom_alloc, header);
 }
@@ -571,10 +571,10 @@ TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
             LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
             return nullptr;
         }
-        
+
         return query;
     }
-    
+
     return nullptr;
 }
 
@@ -593,12 +593,12 @@ void init_app(Array<String> args)
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
 
     init_gui();
-    
+
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
     app.languages[LANGUAGE_RUST] = tree_sitter_rust();
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
     ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
-    
+
     app.queries[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/highlights.scm");
     app.queries[LANGUAGE_RUST] = ts_create_query(app.languages[LANGUAGE_RUST], "queries/rust/highlights.scm");
 
@@ -624,10 +624,10 @@ void init_app(Array<String> args)
     set(&app.syntax_colors, "namespace", 0xd36e2au);
     set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
     set(&app.syntax_colors, "attribute", 0x84a89au);
-    
+
     // TODO(jesper): this is kinda neat but I think I might want this as some kind of underline or background
     // style instead of foreground colour?
-    //set(&app.syntax_colors, "error", 0xFFFF0000); 
+    //set(&app.syntax_colors, "error", 0xFFFF0000);
 
     // TODO(jesper): I definitely need to figure this shit out
     for (i32 i = 0; i < app.syntax_colors.capacity; i++) {
@@ -642,13 +642,13 @@ void init_app(Array<String> args)
 
     calculate_num_visible_lines();
     glGenBuffers(1, &view.glyph_data_ssbo);
-    
+
     if (args.count > 0) {
         String dir = directory_of(args[0]);
         if (dir.length > 0) set_working_dir(dir);
         view_set_buffer(create_buffer(args[0]));
     }
-    
+
     Array<String> files = list_files(get_working_dir());
     for (String s : files) {
 #ifdef _WIN32
@@ -658,7 +658,7 @@ void init_app(Array<String> args)
             array_add(&app.process_commands, { .exe = full });
         }
 #endif
-        
+
 #ifdef __linux__
         if (extension_of(s) == ".sh") {
             String full = absolute_path(s, mem_dynamic);
@@ -841,7 +841,7 @@ Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buff
 
         r.start = line_start_offset(start_line, lines);
         r.end = line_end_offset(end_line, lines, buffer);
-        
+
         if (end_line < lines.count-1 && lines[end_line].wrapped && !lines[end_line+1].wrapped) {
             r.end = buffer_prev_offset(buffer, r.end);
         }
@@ -1011,7 +1011,7 @@ i64 unwrapped_column_from_offset(i64 offset, Array<BufferLine> lines, i32 wrappe
     for (i64 i = lines[line].offset; i < offset; i++, column++);
     return column;
 }
-       
+
 
 
 i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
@@ -1077,26 +1077,26 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
-    
+
     Rect r = view.rect;
     f32 base_x = r.pos.x;
-    
+
     start_line = MAX(start_line, 0);
     end_line = MIN(end_line, lines->count);
-    
+
     i64 start = line_start_offset(start_line, *lines);
     i64 end = line_end_offset(end_line, *lines, buffer);
-    
+
     i32 prev_c = ' ';
     i64 vcolumn = 0;
 
     i64 p = start;
     i64 word_start = p;
     i64 line_start = p;
-    
+
     DynamicArray<BufferLine> tmp_lines{ .alloc = mem_tmp };
     DynamicArray<BufferLine> *new_lines = &tmp_lines;
-    
+
     if (lines->count == 0 || (start_line == 0 && end_line == lines->count)) {
         new_lines = lines;
         lines->count = start_line = end_line = 0;
@@ -1104,14 +1104,14 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
     } else {
         end_line = MIN(lines->count, end_line+1);
         start_line = MIN(lines->count, start_line+1);
-        
+
         if (start_line == lines->count) new_lines = lines;
     }
-    
+
     while (p < end) {
         i64 pn = p;
         i32 c = utf32_it_next(buffer, &p);
-        
+
         if ((is_word_boundary(prev_c) && !is_word_boundary(c)) ||
             (is_word_boundary(c) && !is_word_boundary(prev_c)))
         {
@@ -1120,13 +1120,13 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
         prev_c = c;
 
         if (c == '\n' || c == '\r') {
-            if (p < end && 
-                ((c == '\n' && char_at(buffer, p) == '\r') || 
+            if (p < end &&
+                ((c == '\n' && char_at(buffer, p) == '\r') ||
                  (c == '\r' && char_at(buffer, p) == '\n')))
             {
                 p = next_byte(buffer, p);
             }
-            
+
             line_start = word_start = p;
             array_add(new_lines, { line_start, 0 });
 
@@ -1159,10 +1159,10 @@ void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_l
 
         vcolumn++;
     }
-    
+
     if (new_lines != lines) {
         if (end != buffer_end(buffer) && new_lines->at(new_lines->count-1).offset == end) new_lines->count--;
-        
+
 #if DEBUG_LINE_WRAP_RECALC
         LOG_INFO("start line: %d, end line: %d, start offset: %lld, end offset: %lld", start_line, end_line, start, end);
         for (i32 i = MAX(0, start_line-5); i < MIN(end_line+5, lines->count); i++) {
@@ -1189,13 +1189,13 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
-    
+
     i32 start_line, old_end_line;
     i64 start_column, old_end_column;
     if (view.buffer == buffer_id) {
         start_line = unwrapped_line_from_offset(byte_start, view.lines, view.caret.line);
         start_column = unwrapped_column_from_offset(byte_start, view.lines, start_line);
-        
+
         old_end_line = unwrapped_line_from_offset(byte_end, view.lines, view.caret.line);
         old_end_column = unwrapped_column_from_offset(byte_end, view.lines, old_end_line);
     }
@@ -1226,34 +1226,34 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
                 if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
             }
-            
+
             recalc_line_wrap(
                 &view.lines,
                 prev_unwrapped_line(line, view.lines),
                 next_unwrapped_line(line, view.lines),
                 view.buffer);
-            
-            
+
+
             if (auto lang = app.languages[buffer->language]; lang) {
                 if (buffer->syntax_tree) {
                     i32 new_end_line = unwrapped_line_from_offset(byte_start, view.lines, start_line);
                     i64 new_end_column = unwrapped_column_from_offset(byte_start, view.lines, new_end_line);
-                    
+
                     TSInputEdit edit{
-                        .start_byte = (u32)byte_start, 
+                        .start_byte = (u32)byte_start,
                         .old_end_byte = (u32)byte_end,
                         .new_end_byte = (u32)byte_start,
                         .start_point = { .row = (u32)start_line, .column = (u32)start_column},
                         .old_end_point = { .row = (u32)old_end_line, .column = (u32)old_end_column},
                         .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
                     };
-                    
+
                     ts_tree_edit(buffer->syntax_tree, &edit);
                 }
-                
+
                 TSParser *parser = ts_parser_new();
                 defer { ts_parser_delete(parser); };
-                
+
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
             }
@@ -1261,7 +1261,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             if (buffer->syntax_tree) ts_tree_delete(buffer->syntax_tree);
             buffer->syntax_tree = nullptr;
         }
-        
+
         return true;
     }
 
@@ -1296,12 +1296,12 @@ i64 buffer_seek_forward(BufferId buffer_id, String needle, i64 start)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return start;
-    
+
     switch (buffer->type) {
     case BUFFER_FLAT:
-        for (i64 offset = start+1; 
-             offset < buffer->flat.size && offset + needle.length <= buffer->flat.size; 
-             offset++) 
+        for (i64 offset = start+1;
+             offset < buffer->flat.size && offset + needle.length <= buffer->flat.size;
+             offset++)
         {
             char *p = buffer->flat.data+offset;
             for (i32 i = 0; i < needle.length; i++) {
@@ -1314,7 +1314,7 @@ next0:;
 
         for (i64 offset = 0;
              offset < start && offset + needle.length <= start && offset + needle.length <= buffer->flat.size;
-             offset++) 
+             offset++)
         {
             char *p = buffer->flat.data+offset;
             for (i32 i = 0; i < needle.length; i++) {
@@ -1374,7 +1374,7 @@ i64 buffer_seek_back(BufferId buffer_id, String needle, i64 start)
             return offset;
 next0:;
         }
-        
+
         for (i64 offset = buffer->flat.size-1; offset > start; offset--) {
             char *p = buffer->flat.data+offset;
             for (i32 i = 0; i < needle.length; i++) {
@@ -1516,7 +1516,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                 buffer->flat.data = (char*)REALLOC(mem_dynamic, buffer->flat.data, buffer->flat.capacity, new_capacity);
                 buffer->flat.capacity = new_capacity;
             }
-            
+
             memmove(buffer->flat.data+offset+text.length, buffer->flat.data+offset, buffer->flat.size-offset);
             memcpy(buffer->flat.data+offset, text.data, text.length);
             buffer->flat.size += required_extra_space;
@@ -1530,30 +1530,30 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
         for (i32 i = line+1; i < view.lines.count; i++) {
             view.lines[i].offset += required_extra_space;
         }
-        
+
         recalc_line_wrap(
-            &view.lines, 
-            calc_unwrapped_line(line, view.lines), 
-            next_unwrapped_line(line, view.lines), 
+            &view.lines,
+            calc_unwrapped_line(line, view.lines),
+            next_unwrapped_line(line, view.lines),
             view.buffer);
-        
+
         i32 new_end_line = unwrapped_line_from_offset(offset+required_extra_space, view.lines, view.caret.line);
         i64 new_end_column = unwrapped_column_from_offset(offset+required_extra_space, view.lines, new_end_line);
 
         if (auto lang = app.languages[buffer->language]; lang) {
             if (buffer->syntax_tree) {
                 TSInputEdit edit{
-                    .start_byte = (u32)offset, 
+                    .start_byte = (u32)offset,
                     .old_end_byte = (u32)offset,
                     .new_end_byte = (u32)(offset+required_extra_space),
                     .start_point = { .row = (u32)at_line, .column = (u32)at_column },
                     .old_end_point = { .row = (u32)at_line, .column = (u32)at_column },
                     .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
                 };
-                
+
                 ts_tree_edit(buffer->syntax_tree, &edit);
             }
-            
+
             TSParser *parser = ts_parser_new();
             defer { ts_parser_delete(parser); };
             ts_parser_set_language(parser, lang);
@@ -1567,7 +1567,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
     if (record_history) {
         buffer_history(buffer_id, { .type = BUFFER_INSERT, .offset = offset, .text = text });
     }
-    
+
     return end_offset;
 }
 
@@ -1783,9 +1783,9 @@ i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 lin
     i64 start = lines[line].offset;
     i64 end = line_end_offset(line, lines, buffer);
     if (start == end) return end;
-    
+
     i64 endt = buffer_prev_offset(buffer, end);
-    
+
     char c = char_at(buffer, endt);
     if (c == '\n' || c == '\r') return endt;
     return end;
@@ -1933,7 +1933,7 @@ void view_seek_line(i32 wrapped_line)
 {
     ASSERT(!view.lines_dirty);
     Buffer *buffer = get_buffer(view.buffer);
-    
+
     wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
     if (buffer && wrapped_line != view.caret.wrapped_line) {
         i32 l = CLAMP(view.caret.wrapped_line, 0, view.lines.count-1);
@@ -2062,15 +2062,15 @@ void app_event(WindowEvent event)
                 app.incremental_search.active = true;
                 app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
                 break;
-            case KC_GRAVE: 
+            case KC_GRAVE:
                 // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
                 // textual fall-back version which doesn't handle comments or strings
                 if (auto buffer = get_buffer(view.buffer); buffer) {
                     i64 f = buffer_seek_first_forward(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset-1);
                     i64 b = buffer_seek_first_back(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset+1);
-                    
-                    if (f != -1 && f != view.caret.byte_offset && 
-                        (b < line_start_offset(view.caret.wrapped_line, view.lines) || 
+
+                    if (f != -1 && f != view.caret.byte_offset &&
+                        (b < line_start_offset(view.caret.wrapped_line, view.lines) ||
                          b > line_end_offset(view.caret.wrapped_line, view.lines, view.buffer)))
                     {
                         view.caret.byte_offset = f;
@@ -2078,10 +2078,10 @@ void app_event(WindowEvent event)
                         if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
                         break;
                     }
-                    
+
                     i64 offset = b == -1 || f-view.caret.byte_offset < view.caret.byte_offset-b ? f : b;
                     if (offset == -1) break;
-                    
+
                     char l = char_at(buffer, offset);
                     bool forward = false;
                     char r;
@@ -2092,15 +2092,15 @@ void app_event(WindowEvent event)
                     case ']': r = '['; break;
                     case '(': r = ')'; forward = true; break;
                     case ')': r = '('; break;
-                    default: 
-                        LOG_ERROR("unexpected char '%c'", l); 
+                    default:
+                        LOG_ERROR("unexpected char '%c'", l);
                         return;
                     }
 
                     i32 level = 1;
                     while (level >= 1) {
-                        offset = forward ? 
-                            buffer_seek_first_forward(view.buffer, {l, r}, offset) : 
+                        offset = forward ?
+                            buffer_seek_first_forward(view.buffer, {l, r}, offset) :
                             buffer_seek_first_back(view.buffer, {l, r}, offset);
 
                         char c = char_at(buffer, offset);
@@ -2155,12 +2155,12 @@ void app_event(WindowEvent event)
                 list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
                 array_copy(&app.lister.filtered, app.lister.values);
                 break;
-            case KC_D: 
+            case KC_D:
                 if (buffer_valid(view.buffer)) {
                     ASSERT(!view.lines_dirty);
                     Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
                     if (r.end == r.start) break;
-                    
+
                     BufferHistoryScope h(view.buffer);
                     if (buffer_remove(view.buffer, r.start, r.end)) {
                         view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
@@ -2191,15 +2191,15 @@ void app_event(WindowEvent event)
                 } break;
             case KC_N:
                 if (app.incremental_search.str.length > 0) {
-                    i64 offset = event.key.modifiers == MF_CTRL ? 
+                    i64 offset = event.key.modifiers == MF_CTRL ?
                         buffer_seek_back(view.buffer, app.incremental_search.str, view.caret.byte_offset) :
                         buffer_seek_forward(view.buffer, app.incremental_search.str, view.caret.byte_offset);
-                    
+
                     if (offset != view.caret.byte_offset) {
                         view.caret.byte_offset = offset;
                         view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                         if (app.incremental_search.set_mark) view.mark = view.caret;
-                        
+
                         move_view_to_caret();
                     }
                 } break;
@@ -2262,7 +2262,7 @@ void app_event(WindowEvent event)
                             view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
                         }
                     };
-                    
+
                     BufferHistoryScope h(view.buffer);
 
                     if (event.key.modifiers & MF_SHIFT) {
@@ -2283,7 +2283,7 @@ void app_event(WindowEvent event)
 
                             if (i > 0) array_add(&edits, { line_start, bytes_to_remove });
                         }
-                        
+
                         for (i32 i = edits.count-1; i >= 0; i--) {
                             Edit edit = edits[i];
 
@@ -2299,7 +2299,7 @@ void app_event(WindowEvent event)
                                 }
                             }
                         }
-                        
+
                     } else {
                         for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view.lines)) {
                             i64 line_start = line_start_offset(l, view.lines);
@@ -2352,7 +2352,7 @@ void app_event(WindowEvent event)
                 view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                 move_view_to_caret();
                 break;
-            case KC_ENTER: 
+            case KC_ENTER:
                 if (buffer_valid(view.buffer)) {
                     BufferHistoryScope h(view.buffer);
                     ASSERT(!view.lines_dirty);
@@ -2360,7 +2360,7 @@ void app_event(WindowEvent event)
                     write_string(view.buffer, buffer_newline_str(view.buffer));
                     write_string(view.buffer, indent);
                 } break;
-            case KC_TAB: 
+            case KC_TAB:
                 if (Buffer *buffer = get_buffer(view.buffer); buffer) {
                     if (buffer->indent_with_tabs) write_string(view.buffer, "\t");
                     else {
@@ -2810,7 +2810,7 @@ next_node:;
 
             view_set_buffer(active_buffer);
         }
-        
+
         if (auto buffer = get_buffer(view.buffer); buffer) {
             if (app.incremental_search.active) {
                 Vector2 size{ 0, 25.0f };
@@ -2822,21 +2822,21 @@ next_node:;
                 if (action & GUI_EDITBOX_CHANGE) {
                     String needle{ gui.edit.buffer, gui.edit.length };
                     string_copy(&app.incremental_search.str, needle, mem_dynamic);
-                    
+
                     view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
                     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                     if (app.incremental_search.set_mark) view.mark = view.caret;
                     move_view_to_caret();
-                } 
-                
+                }
+
                 if (action & GUI_EDITBOX_FINISH) {
                     app.incremental_search.active = false;
                 }
-                
+
                 if (action & GUI_EDITBOX_CANCEL) {
                     FREE(mem_dynamic, app.incremental_search.str.data);
                     app.incremental_search.str = {};
-                    
+
                     view.caret.byte_offset = app.incremental_search.start_caret;
                     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                     if (app.incremental_search.set_mark) {
@@ -2847,7 +2847,7 @@ next_node:;
                 }
             } else if (app.incremental_search.str.length > 0) {
             }
-            
+
             if (false) {
                 Vector2 size{ 0, 15.0f };
                 Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
@@ -2953,9 +2953,9 @@ next_node:;
         gui_draw_rect(p0, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
         gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
     }
-    
+
     Buffer *buffer = get_buffer(view.buffer);
-    
+
     if (buffer) {
         FontAtlas *font = &app.mono;
 
@@ -2964,7 +2964,7 @@ next_node:;
 
         i32 columns = (i32)ceilf(view.rect.size.x / font->space_width);
         i32 rows = view.lines_visible;
-        
+
         struct RangeColor {
             i64 start, end;
             u32 color;
@@ -2993,7 +2993,7 @@ next_node:;
                 u32 capture_name_length;
                 const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
                 String capture_name{ (char*)tmp, (i32)capture_name_length };
-                
+
 #if DEBUG_TREE_SITTER_QUERY
                 const char *node_type = ts_node_type(capture->node);
                 LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
@@ -3008,42 +3008,42 @@ next_node:;
                     if (p > 0) str = slice(str, 0, p);
                     else str.length = 0;
                 } while(color == nullptr && str.length > 0);
-                
+
                 if (color) array_add(&colors, { start_byte, end_byte, *color });
             }
         }
-        
+
         ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
 
         void *mapped = nullptr;
         i32 buffer_size = 0;
-        //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size) 
+        //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size)
         {
             if (mapped) {
                 glUnmapNamedBuffer(view.glyph_data_ssbo);
                 mapped = nullptr;
             }
-            
+
             buffer_size = columns*rows*sizeof glyphs[0];
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
             glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
         }
-        
+
         mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
         glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
         defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
-        
+
         Vector3 fg = linear_from_sRGB(app.fg);
-        
+
         for (auto &g : glyphs) {
             g.glyph_index = 0xFFFFFFFF;
             g.fg = bgr_pack(fg);
         }
-        
+
         i32 current_color = 0;
-        for (i32 line_index = view.line_offset; 
-             line_index < MIN(view.lines.count, view.line_offset+rows); 
-             line_index++) 
+        for (i32 line_index = view.line_offset;
+             line_index < MIN(view.lines.count, view.line_offset+rows);
+             line_index++)
         {
             i32 i = line_index-view.line_offset;
             i64 p = view.lines[line_index].offset;
@@ -3072,12 +3072,12 @@ next_node:;
                     vcolumn += w;
                     continue;
                 }
-                
+
                 // TODO(jesper): this is broken if a glyph is larger than the cell whatever unicode esque reason
                 Glyph glyph = find_or_create_glyph(font, c);
                 u32 index = (u32(glyph.x0) & 0xFFFF) | (u32(glyph.y0) << 16);
                 glyphs[i*columns + vcolumn].glyph_index = index;
-                
+
                 while (current_color < colors.count && colors[current_color].end <= pc) current_color++;
                 if (current_color < colors.count && pc >= colors[current_color].start) {
                     glyphs[i*columns+vcolumn].fg = colors[current_color].color;
@@ -3086,8 +3086,8 @@ next_node:;
                 vcolumn++;
             }
         }
-        
-        GfxCommand cmd{ 
+
+        GfxCommand cmd{
             .type = GFX_COMMAND_MONO_TEXT,
             .mono_text = {
                 .vbo = gfx.vbos.frame,
@@ -3095,7 +3095,7 @@ next_node:;
                 .glyph_ssbo = view.glyph_data_ssbo,
                 .glyph_atlas = font->texture,
                 .cell_size = { app.mono.space_width, app.mono.line_height },
-                .pos = pos, 
+                .pos = pos,
                 .offset = view.voffset,
                 .line_offset = view.line_offset,
                 .columns = columns,
@@ -3103,7 +3103,7 @@ next_node:;
         };
 
         array_add(
-            &gfx.frame_vertices, 
+            &gfx.frame_vertices,
             {
                 pos.x+size.x, pos.y,
                 pos.x       , pos.y,
@@ -3112,16 +3112,16 @@ next_node:;
                 pos.x+size.x, pos.y+size.y,
                 pos.x+size.x, pos.y,
             });
-        
+
         gfx_push_command(&gfx.frame_cmdbuf, cmd);
     }
-    
+
     Vector3 clear_color = linear_from_sRGB(app.bg);
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    
+
     gui_end_layout();
-    
+
     app.animating = false;
     if (gui.capture_text[0] != gui.capture_text[1]) app.animating = true;
     gui_end_frame();
@@ -3132,4 +3132,4 @@ next_node:;
 
     gui_render();
 }
-    
+

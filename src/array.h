@@ -2,7 +2,7 @@
 #define ARRAY_H
 
 #include "core.h"
-#include "allocator.h"
+#include "memory.h"
 
 #include <initializer_list>
 
@@ -13,18 +13,18 @@ template<typename T>
 struct Array {
     T *data;
     i32 count;
-    
-    
-    T& operator[](i32 i) 
-    { 
+
+
+    T& operator[](i32 i)
+    {
         ASSERT(i < count && i >= 0);
-        return data[i]; 
+        return data[i];
     }
-    
-    T& at(i32 i) 
-    { 
+
+    T& at(i32 i)
+    {
         ASSERT(i < count && i >= 0);
-        return data[i]; 
+        return data[i];
     }
 
 
@@ -67,7 +67,7 @@ template<typename T>
 void array_reserve(DynamicArray<T> *arr, i32 capacity)
 {
     if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
-    
+
     arr->data = ALLOC_ARR(arr->alloc, T, capacity);
     arr->capacity = capacity;
 }
@@ -237,12 +237,12 @@ i32 array_replace(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
 {
     ASSERT(start >= 0);
     ASSERT(end >= 0);
-    
+
     i32 remove_count = end-start;
 
     i32 old_count = arr->count;
     i32 new_count = arr->count - remove_count + values.count;
-    
+
     if (new_count > arr->capacity) {
         if (arr->alloc.proc == nullptr) arr->alloc = mem_dynamic;
 
@@ -250,18 +250,18 @@ i32 array_replace(DynamicArray<T> *arr, i32 start, i32 end, Array<T> values)
         arr->capacity = MAX(new_count, arr->capacity*2);
         arr->data = REALLOC_ARR(arr->alloc, T, arr->data, old_capacity, arr->capacity);
     }
-    
+
     if (remove_count > 0 && values.count > remove_count) {
         i32 move_count = new_count-end-1;
         for (i32 i = 0; i < move_count; i++) arr->data[new_count-i-1] = arr->data[old_count-i-1];
     }
-    
+
     for (i32 i = 0; i < values.count; i++) arr->data[start+i] = values.data[i];
-    
+
     if (remove_count > values.count) {
         for (i32 i = start+values.count; i < new_count; i++) arr->data[i] = arr->data[i+1];
     }
-         
+
     arr->count = new_count;
     return new_count;
 }
@@ -277,7 +277,7 @@ void array_remove_unsorted(Array<T> *arr, i32 index)
 {
     ASSERT(index >= 0);
     ASSERT(index < arr->count);
-    
+
     arr->data[index] = arr->data[arr->count-1];
     arr->count--;
 }
@@ -287,7 +287,7 @@ void array_remove(Array<T> *arr, i32 index)
 {
     ASSERT(index >= 0);
     ASSERT(index < arr->count);
-    
+
     memmove(&arr->data[index], &arr->data[index+1], (arr->count-index-1)*sizeof(T));
     arr->count--;
 }
@@ -387,7 +387,7 @@ void quick_sort(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
         do i += 1; while(arr[i] > pivot);
         do j -= 1; while(arr[j] < pivot);
 
-        if (i >= j) { 
+        if (i >= j) {
             pi = j;
             break;
         }
