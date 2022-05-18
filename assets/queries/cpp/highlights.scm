@@ -232,4 +232,6 @@
 
 (comment) @comment
 
-;((identifier) @constant.identifier (#lua-match? @constant.identifier "^[A-Z][A-Z0-9_]+$"))
+; Why doesn't this work? It's only supposed to match upper case identifiers
+; but it's matching all of them
+;((identifier) @constant (#lua-match? @constant "^[A-Z][A-Z0-9_]+$"))

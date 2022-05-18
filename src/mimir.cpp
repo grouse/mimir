@@ -19,6 +19,10 @@
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
 extern "C" const TSLanguage* tree_sitter_rust();
+extern "C" const TSLanguage* tree_sitter_bash();
+extern "C" const TSLanguage* tree_sitter_c_sharp();
+extern "C" const TSLanguage* tree_sitter_lua();
+
 
 #define DEBUG_LINE_WRAP_RECALC 0
 #define DEBUG_TREE_SITTER_QUERY 0
@@ -41,6 +45,9 @@ enum Language {
     LANGUAGE_NONE,
     LANGUAGE_CPP,
     LANGUAGE_RUST,
+    LANGUAGE_BASH,
+    LANGUAGE_CS,
+    LANGUAGE_LUA,
     LANGUAGE_COUNT,
 };
 
@@ -395,6 +402,12 @@ BufferId create_buffer(String file)
         b.language = LANGUAGE_CPP;
     } else if (ext == ".rs") {
         b.language = LANGUAGE_RUST;
+    } else if (ext == ".sh") {
+        b.language = LANGUAGE_BASH;
+    } else if (ext == ".cs") {
+        b.language = LANGUAGE_CS;
+    } else if (ext == ".lua") {
+        b.language = LANGUAGE_LUA;
     }
 
     if (f.data) {
@@ -595,20 +608,28 @@ void init_app(Array<String> args)
     init_gui();
 
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
+    app.languages[LANGUAGE_CS] = tree_sitter_c_sharp();
     app.languages[LANGUAGE_RUST] = tree_sitter_rust();
-    ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
-    ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
+    app.languages[LANGUAGE_BASH] = tree_sitter_bash(); 
+    app.languages[LANGUAGE_LUA] = tree_sitter_lua(); 
 
     app.queries[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/highlights.scm");
     app.queries[LANGUAGE_RUST] = ts_create_query(app.languages[LANGUAGE_RUST], "queries/rust/highlights.scm");
+    app.queries[LANGUAGE_BASH] = ts_create_query(app.languages[LANGUAGE_BASH], "queries/bash/highlights.scm");
+    app.queries[LANGUAGE_CS] = ts_create_query(app.languages[LANGUAGE_CS], "queries/cs/highlights.scm");
+    app.queries[LANGUAGE_LUA] = ts_create_query(app.languages[LANGUAGE_LUA], "queries/lua/highlights.scm");
+    
+    ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
+    ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
 
-    u32 fg = bgr_pack(app.fg);
-    set(&app.syntax_colors, "unused", fg);
-    set(&app.syntax_colors, "_parent", fg);
-    set(&app.syntax_colors, "label", fg);
-    set(&app.syntax_colors, "parameter", fg);
-    set(&app.syntax_colors, "namespace", fg);
-    set(&app.syntax_colors, "variable", fg);
+
+    //u32 fg = bgr_pack(app.fg);
+    //set(&app.syntax_colors, "unused", fg);
+    //set(&app.syntax_colors, "_parent", fg);
+    //set(&app.syntax_colors, "label", fg);
+    //set(&app.syntax_colors, "parameter", fg);
+    //set(&app.syntax_colors, "namespace", fg);
+    //set(&app.syntax_colors, "variable", fg);
 
     set(&app.syntax_colors, "preproc", 0xFE8019u);
     set(&app.syntax_colors, "include", 0xFE8019u);
