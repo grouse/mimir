@@ -181,16 +181,12 @@ int WINAPI wWinMain(
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&last_time);
     
-#if 0
-    for (i32 i = 0; i < 50000; i++) {
-        RESET_ALLOC(mem_tmp);
-        RESET_ALLOC(mem_frame);
-        update_and_render();
-    }
-    exit(0);
-#endif
-    
     while (true) {
+        defer { 
+            RESET_ALLOC(mem_tmp);
+            RESET_ALLOC(mem_frame);
+        };
+        
         LARGE_INTEGER current_time;
         QueryPerformanceCounter(&current_time);
         i64 elapsed = current_time.QuadPart - last_time.QuadPart;
@@ -199,14 +195,11 @@ int WINAPI wWinMain(
         f32 dt = (f32)elapsed / frequency.QuadPart;
         if (debugger_attached()) dt = MIN(dt, 0.1f);
         
-        RESET_ALLOC(mem_tmp);
-        RESET_ALLOC(mem_frame);
-        
-        
         u16 old_x = g_mouse.x;
         u16 old_y = g_mouse.y;
         g_mouse.left_was_pressed = g_mouse.left_pressed;
 
+        bool did_render = false;
         MSG msg;
         while (!app_needs_render() && GetMessageA(&msg, nullptr, 0, 0)) {
             TranslateMessage(&msg);
@@ -216,6 +209,13 @@ int WINAPI wWinMain(
         while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
+
+            if (app_needs_render()) {
+                update_and_render();
+                RESET_ALLOC(mem_tmp);
+                RESET_ALLOC(mem_frame);
+                did_render = true;
+            }
         }
 
         g_mouse.dx = (i32)g_mouse.x - (i32)old_x;
@@ -230,11 +230,14 @@ int WINAPI wWinMain(
         
         if (app_needs_render()) {
             update_and_render();
-            SwapBuffers(wnd.hdc);
+            did_render = true;
         }
         
+        if (did_render) SwapBuffers(wnd.hdc);
+
         SetCursor(cursors[current_cursor]);
         push_cursor(MC_NORMAL);
+        
     }
 
     return 0;
