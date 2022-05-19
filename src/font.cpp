@@ -25,7 +25,7 @@ FontAtlas create_font(String path, f32 pixel_height, bool mono_space)
         stbtt_GetFontVMetrics(&font.info, &font.ascent, &font.descent, &font.line_gap);
         font.scale = stbtt_ScaleForPixelHeight(&font.info, pixel_height);
         font.line_height = font.scale * (font.ascent - font.descent + font.line_gap);
-        font.baseline = (i32)(font.ascent*font.scale);
+        font.baseline = (i32)ceilf(font.ascent*font.scale);
         // TODO(jesper): dynamically resize the atlas texture
         font.size = { 512, 512 };
         font.current = { 0, 0 };
@@ -56,6 +56,9 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     Glyph *existing = find(&font->glyphs, glyph_index);
     if (existing) return *existing;
     
+    bool glyph_empty = stbtt_IsGlyphEmpty(&font->info, glyph_index);
+    (void)glyph_empty;
+    
     int x0, y0, x1, y1;
     stbtt_GetGlyphBitmapBox(&font->info, glyph_index, font->scale, font->scale, &x0, &y0, &x1, &y1);
 
@@ -73,13 +76,23 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     u8 *pixels = (u8*)ALLOC(mem_tmp, wa*ha);
     memset(pixels, 0, wa*ha);
     stbtt_MakeGlyphBitmap(&font->info, pixels, w, h, wa, font->scale, font->scale, glyph_index);
-
+    
     i32 xoff = x0, yoff = font->baseline+y0;
     i32 x = font->current.x, y = font->current.y;
-    i32 dst_x = font->mono_space ? x+xoff : x;
-    i32 dst_y = font->mono_space ? y+yoff : y;
+    i32 dst_x = x;
+    i32 dst_y = y;
     
-    if (font->mono_space) ASSERT(xoff >= 0 && yoff >= 0);
+    // TODO(jesper): we need to better handle funkier glyphs in monospace fonts better. This rendering
+    // path relies on a glyph not going outside its bounds, but they can, because fonts are fun
+    // Some of the funkyness can be argued that it should be blocked and clamped similar to this, because
+    // full font support in code editors can be a bad idea
+    if (font->mono_space) {
+        xoff = MAX(0, xoff);
+        yoff = MAX(0, yoff);
+        
+        dst_x = x+xoff;
+        dst_y = y+yoff;
+    }
     
     if (dst_x + wa >= font->size.x) {
         font->current.x = x = 0;
@@ -101,8 +114,11 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
         y0 = 0; y1 = font->line_height;
     }
 
+    int advance, lsb;
+    stbtt_GetGlyphHMetrics(&font->info, glyph_index, &advance, &lsb);
+    
 #if 0
-    LOG_RAW("------- '%c (0x%x)' -------\n", (char)codepoint, codepoint);
+    LOG_RAW("------- '%c (0x%x)' -------\n", codepoint < 128 ? codepoint : 0, codepoint);
     LOG_RAW("x0: %d, y0: %d, x1: %d, y1: %d\n", x0, y0, x1, y1);
     LOG_RAW("x: %d, y: %d, w: %d, h: %d, wa: %d, ha: %d\n", x, y, w, h, wa, ha);
     for (i32 j = 0; j < h; j++) {
@@ -113,15 +129,6 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     }
 
     LOG_RAW("\n");
-#endif
-
-    int advance, lsb;
-    stbtt_GetGlyphHMetrics(&font->info, glyph_index, &advance, &lsb);
-    
-#if 0
-    if (font->mono_space) {
-        LOG_INFO("c: %c, x0: %d, y0: %d, x1: %d, y1: %d", (char)codepoint, x, y, x+dst_w, y+dst_h);
-    }
 #endif
 
     Glyph glyph{
