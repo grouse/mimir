@@ -8,23 +8,17 @@
   (if_then)
   (if_elseif)
   (if_else)
-  (if_end)]
-@keyword.branch
+  (if_end)
+] @keyword.branch
 
 [
   (for_start)
   (for_in)
   (for_do)
-  (for_end)]
-@keyword.control
-
-[
+  (for_end)
   (while_start)
   (while_do)
-  (while_end)]
-@keyword.control
-
-[
+  (while_end)
   (repeat_start)
   (repeat_until)
 ] @keyword.control
@@ -48,8 +42,8 @@
 [
  "not"
  "and"
- "or"]
-@keyword.operator
+ "or"
+] @operator.keyword
 
 [
  "="
@@ -72,8 +66,8 @@
  ">>"
  "<<"
  ".."
- "#"]
-@operator
+ "#"
+] @operator
 
 
 
@@ -90,8 +84,8 @@
  "["
  "]"
  "{"
- "}"]
-@punctuation.bracket
+ "}"
+] @punctuation.bracket
 
 ;; Variables
 (identifier) @variable
@@ -105,7 +99,7 @@
 ;   (#eq? @_u "#undef"))
 
 ;; Constants
-(boolean) @boolean
+(boolean) @constant.boolean
 (nil) @constant.builtin
 (ellipsis) @constant ;; "..."
 (local) @keyword
@@ -171,7 +165,7 @@
 ; (table ["{" "}"] @constructor)
 (comment) @comment
 (string) @string
-(number) @number
+(number) @constant.number
 ; (label_statement) @label
 
 ;; Error

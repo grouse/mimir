@@ -1,3 +1,4 @@
+
 [
   (string)
   (raw_string)
@@ -5,9 +6,8 @@
   (heredoc_start)
 ] @string
 
-(command_name) @function
-
 (variable_name) @property
+(command_name) @function
 
 [
   "case"
@@ -31,13 +31,13 @@
 
 (function_definition name: (word) @function)
 
-(file_descriptor) @number
+(file_descriptor) @constant.number
 
 [
   (command_substitution)
   (process_substitution)
   (expansion)
-]@embedded
+] @embedded
 
 [
   "$"

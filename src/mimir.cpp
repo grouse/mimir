@@ -623,13 +623,14 @@ void init_app(Array<String> args)
     ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
 
 
-    //u32 fg = bgr_pack(app.fg);
-    //set(&app.syntax_colors, "unused", fg);
-    //set(&app.syntax_colors, "_parent", fg);
-    //set(&app.syntax_colors, "label", fg);
-    //set(&app.syntax_colors, "parameter", fg);
-    //set(&app.syntax_colors, "namespace", fg);
-    //set(&app.syntax_colors, "variable", fg);
+    u32 fg = bgr_pack(app.fg);
+    set(&app.syntax_colors, "unused", fg);
+    set(&app.syntax_colors, "_parent", fg);
+    set(&app.syntax_colors, "label", fg);
+    set(&app.syntax_colors, "parameter", fg);
+    set(&app.syntax_colors, "property", fg);
+    set(&app.syntax_colors, "variable", fg);
+    set(&app.syntax_colors, "identifier", fg);
 
     set(&app.syntax_colors, "preproc", 0xFE8019u);
     set(&app.syntax_colors, "include", 0xFE8019u);
@@ -640,7 +641,6 @@ void init_app(Array<String> args)
     set(&app.syntax_colors, "punctuation", 0xfcedcfu);
     set(&app.syntax_colors, "type", 0xbcbf91u);
     set(&app.syntax_colors, "constant", 0xe9e4c6u);
-    //set(&app.syntax_colors, "constant.identifier", 0xff0000u);//0xe9e4c6u);
     set(&app.syntax_colors, "keyword", 0xd36e2au);
     set(&app.syntax_colors, "namespace", 0xd36e2au);
     set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
@@ -2578,8 +2578,8 @@ void update_and_render()
 
     gui_window("open file", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
         GuiId id = GUI_ID(0);
+        
         GuiEditboxAction edit_action = gui_editbox_id(id, "");
-
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
@@ -2665,21 +2665,27 @@ next_node:;
                 quick_sort(scores, app.lister.filtered);
             }
         }
+        
+        if (edit_action == GUI_EDITBOX_FINISH && 
+            (app.lister.selected_item < 0 || app.lister.selected_item >= app.lister.filtered.count))
+        {
+            gui.focused = id;
+        }
 
         GuiListerAction lister_action = gui_lister_id(id, app.lister.filtered, &app.lister.selected_item);
-        if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count &&
-            (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH))
-        {
-            String file = app.lister.filtered[app.lister.selected_item];
-            String path = absolute_path(file);
+        if (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH) {
+            if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count) {
+                String file = app.lister.filtered[app.lister.selected_item];
+                String path = absolute_path(file);
 
-            BufferId buffer = find_buffer(path);
-            if (!buffer) buffer = create_buffer(path);
+                BufferId buffer = find_buffer(path);
+                if (!buffer) buffer = create_buffer(path);
 
-            view_set_buffer(buffer);
+                view_set_buffer(buffer);
 
-            app.lister.active = false;
-            gui.focused = GUI_ID_INVALID;
+                app.lister.active = false;
+                gui.focused = GUI_ID_INVALID;
+            }
         } else if (lister_action == GUI_LISTER_CANCEL) {
             // TODO(jesper): this results in 1 frame of empty lister window being shown because
             // we don't really have a good way to close windows from within the window

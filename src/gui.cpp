@@ -286,8 +286,7 @@ void gui_end_frame()
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
     if (!gui.mouse.left_pressed) gui.pressed = GUI_ID_INVALID;
-    gui.last_focused = gui.focused;
-
+    
     if (false && gui.hot != gui.next_hot) {
         LOG_INFO(
             "next hot id: { %d, %d, %d }",
@@ -338,6 +337,10 @@ void gui_end_frame()
 
     if (gui.hot_window == GUI_ID_INVALID) {
         gui.hot_window = gui.windows[GUI_BACKGROUND].id;
+    }
+    
+    if (gui.focused_window == GUI_ID_INVALID) {
+        gui.focused_window = gui.windows[GUI_BACKGROUND].id;
     }
 
     if (false && old != gui.hot_window) {
@@ -2631,10 +2634,12 @@ GuiListerAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item)
                     next_selected_item = MAX((*selected_item)-1, 0);
                     break;
                 case KC_ESC:
-                    return GUI_LISTER_CANCEL;
+                    result = GUI_LISTER_CANCEL;
+                    break;
                 case KC_ENTER:
                     *selected_item = next_selected_item;
-                    return GUI_LISTER_FINISH;
+                    result = GUI_LISTER_FINISH;
+                    break;
                 default: break;
                 }
                 break;

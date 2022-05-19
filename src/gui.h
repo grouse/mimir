@@ -192,7 +192,6 @@ struct GuiContext {
     GuiId pressed = GUI_ID_INVALID;
 
     GuiId next_hot = GUI_ID_INVALID;
-    GuiId last_focused = GUI_ID_INVALID;
 
     GuiId focused_window = GUI_ID_INVALID;
     GuiId hot_window = GUI_ID_INVALID;
@@ -231,7 +230,6 @@ struct GuiContext {
 
     struct {
         Vector3 fg = bgr_unpack(0xFFFFFFFF);
-        //Vector3 fg_hot = rgb_unpack(0xFFFD8433);
 
         Vector3 bg = bgr_unpack(0x333333u);
         Vector3 bg_hot = bgr_unpack(0x3F3F3Fu);

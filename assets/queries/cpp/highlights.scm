@@ -204,8 +204,6 @@
   "__declspec"
 ] @keyword.attribute
 
-(ERROR) @error
-
 (function_declarator declarator: (field_identifier) @function.decl)
 
 (case_statement value: (qualified_identifier (identifier) @constant))
@@ -235,3 +233,5 @@
 ; Why doesn't this work? It's only supposed to match upper case identifiers
 ; but it's matching all of them
 ;((identifier) @constant (#lua-match? @constant "^[A-Z][A-Z0-9_]+$"))
+
+(ERROR) @error
