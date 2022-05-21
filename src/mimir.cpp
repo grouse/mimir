@@ -1210,63 +1210,43 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
-
-    i32 start_line, old_end_line;
-    i64 start_column, old_end_column;
-    if (view.buffer == buffer_id) {
-        start_line = unwrapped_line_from_offset(byte_start, view.lines, view.caret.line);
-        start_column = unwrapped_column_from_offset(byte_start, view.lines, start_line);
-
-        old_end_line = unwrapped_line_from_offset(byte_end, view.lines, view.caret.line);
-        old_end_column = unwrapped_column_from_offset(byte_end, view.lines, old_end_line);
-    }
+    
+    String text_removed{};
 
     switch (buffer->type) {
-    case BUFFER_FLAT:
-        byte_start = MAX(0, byte_start);
-        byte_end = MIN(byte_end, buffer->flat.size);
+    case BUFFER_FLAT: {
+            byte_start = MAX(0, byte_start);
+            byte_end = MIN(byte_end, buffer->flat.size);
 
-        i64 num_bytes = byte_end-byte_start;
-        if (record_history) {
-            BufferHistory h{
-                .type = BUFFER_REMOVE,
-                .offset = byte_start,
-                .text = { &buffer->flat.data[byte_start], (i32)num_bytes }
-            };
-            buffer_history(buffer_id, h);
-        }
+            i64 num_bytes = byte_end-byte_start;
+            if (record_history) text_removed = { &buffer->flat.data[byte_start], (i32)num_bytes };
 
-        memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
-        buffer->flat.size -= num_bytes;
+            memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
+            buffer->flat.size -= num_bytes;
+            
+            // TODO(jesper): multi-view support
+            if (view.buffer == buffer_id) {
+                i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
+                i64 start_offset = view.lines[line].offset;
+                for (i32 i = line+1; i < view.lines.count; i++) {
+                    view.lines[i].offset -= num_bytes;
 
-        if (view.buffer == buffer_id) {
-            i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
-            i64 start_offset = view.lines[line].offset;
-            for (i32 i = line+1; i < view.lines.count; i++) {
-                view.lines[i].offset -= num_bytes;
+                    if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
+                }
 
-                if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
+                recalc_line_wrap(
+                    &view.lines,
+                    prev_unwrapped_line(line, view.lines),
+                    next_unwrapped_line(line, view.lines),
+                    view.buffer);
             }
-
-            recalc_line_wrap(
-                &view.lines,
-                prev_unwrapped_line(line, view.lines),
-                next_unwrapped_line(line, view.lines),
-                view.buffer);
-
 
             if (auto lang = app.languages[buffer->language]; lang) {
                 if (buffer->syntax_tree) {
-                    i32 new_end_line = unwrapped_line_from_offset(byte_start, view.lines, start_line);
-                    i64 new_end_column = unwrapped_column_from_offset(byte_start, view.lines, new_end_line);
-
                     TSInputEdit edit{
                         .start_byte = (u32)byte_start,
                         .old_end_byte = (u32)byte_end,
                         .new_end_byte = (u32)byte_start,
-                        .start_point = { .row = (u32)start_line, .column = (u32)start_column},
-                        .old_end_point = { .row = (u32)old_end_line, .column = (u32)old_end_column},
-                        .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
                     };
 
                     ts_tree_edit(buffer->syntax_tree, &edit);
@@ -1274,19 +1254,22 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
                 TSParser *parser = ts_parser_new();
                 defer { ts_parser_delete(parser); };
-
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
             }
-        } else {
-            if (buffer->syntax_tree) ts_tree_delete(buffer->syntax_tree);
-            buffer->syntax_tree = nullptr;
-        }
-
-        return true;
+        } break;
+    }
+    
+    if (record_history) {
+        BufferHistory h{
+            .type = BUFFER_REMOVE,
+            .offset = byte_start,
+            .text = text_removed,
+        };
+        buffer_history(buffer_id, h);
     }
 
-    return false;
+    return true;
 }
 
 String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator mem = mem_tmp)
@@ -1489,15 +1472,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return offset;
 
-    i32 at_line;
-    i64 at_column;
-    if (view.buffer == buffer_id) {
-        at_line = unwrapped_line_from_offset(offset, view.lines, view.caret.line);
-        at_column = unwrapped_column_from_offset(offset, view.lines, at_line);
-    }
-
     i64 end_offset = offset;
-
     String nl = buffer_newline_str(buffer);
 
     i32 required_extra_space = 0;
@@ -1542,47 +1517,38 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
             memcpy(buffer->flat.data+offset, text.data, text.length);
             buffer->flat.size += required_extra_space;
             end_offset += required_extra_space;
-        } break;
-    }
+            
+            // TODO(jesper): multi-view support
+            if (view.buffer == buffer_id) {
+                i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
+                for (i32 i = line+1; i < view.lines.count; i++) {
+                    view.lines[i].offset += required_extra_space;
+                }
 
-    // TODO(jesper): multi-view support
-    if (view.buffer == buffer_id) {
-        i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
-        for (i32 i = line+1; i < view.lines.count; i++) {
-            view.lines[i].offset += required_extra_space;
-        }
-
-        recalc_line_wrap(
-            &view.lines,
-            calc_unwrapped_line(line, view.lines),
-            next_unwrapped_line(line, view.lines),
-            view.buffer);
-
-        i32 new_end_line = unwrapped_line_from_offset(offset+required_extra_space, view.lines, view.caret.line);
-        i64 new_end_column = unwrapped_column_from_offset(offset+required_extra_space, view.lines, new_end_line);
-
-        if (auto lang = app.languages[buffer->language]; lang) {
-            if (buffer->syntax_tree) {
-                TSInputEdit edit{
-                    .start_byte = (u32)offset,
-                    .old_end_byte = (u32)offset,
-                    .new_end_byte = (u32)(offset+required_extra_space),
-                    .start_point = { .row = (u32)at_line, .column = (u32)at_column },
-                    .old_end_point = { .row = (u32)at_line, .column = (u32)at_column },
-                    .new_end_point = { .row = (u32)new_end_line, .column = (u32)new_end_column },
-                };
-
-                ts_tree_edit(buffer->syntax_tree, &edit);
+                recalc_line_wrap(
+                    &view.lines,
+                    calc_unwrapped_line(line, view.lines),
+                    next_unwrapped_line(line, view.lines),
+                    view.buffer);
             }
 
-            TSParser *parser = ts_parser_new();
-            defer { ts_parser_delete(parser); };
-            ts_parser_set_language(parser, lang);
-            buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
-        }
-    } else {
-        if (buffer->syntax_tree) ts_tree_delete(buffer->syntax_tree);
-        buffer->syntax_tree = nullptr;
+            if (auto lang = app.languages[buffer->language]; lang) {
+                if (buffer->syntax_tree) {
+                    TSInputEdit edit{
+                        .start_byte = (u32)offset,
+                        .old_end_byte = (u32)offset,
+                        .new_end_byte = (u32)(offset+required_extra_space),
+                    };
+
+                    ts_tree_edit(buffer->syntax_tree, &edit);
+                }
+
+                TSParser *parser = ts_parser_new();
+                defer { ts_parser_delete(parser); };
+                ts_parser_set_language(parser, lang);
+                buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+            }
+        } break;
     }
 
     if (record_history) {
