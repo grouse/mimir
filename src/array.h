@@ -372,8 +372,9 @@ void exchange_sort(Array<T> arr, Array<Tail>... tail)
     }
 
 }
+
 template<typename T, typename... Tail>
-void quick_sort(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
+void quick_sort_desc(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
 {
     if (l < 0 || r < 0 || l >= r) return;
 
@@ -397,15 +398,51 @@ void quick_sort(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
 
     ASSERT(pi >= 0);
 
-    quick_sort(arr, l, pi, tail...);
-    quick_sort(arr, pi+1, r, tail...);
+    quick_sort_desc(arr, l, pi, tail...);
+    quick_sort_desc(arr, pi+1, r, tail...);
 }
 
 template<typename T, typename... Tail>
-void quick_sort(Array<T> arr, Array<Tail>... tail)
+void quick_sort_asc(Array<T> arr, i32 l, i32 r, Array<Tail>... tail)
 {
-    quick_sort(arr, 0, arr.count-1, tail...);
+    if (l < 0 || r < 0 || l >= r) return;
+
+    T pivot = arr[(r+l)/2];
+
+    i32 i = l-1;
+    i32 j = r+1;
+
+    i32 pi = -1;
+    while (true) {
+        do i += 1; while(arr[i] < pivot);
+        do j -= 1; while(arr[j] > pivot);
+
+        if (i >= j) {
+            pi = j;
+            break;
+        }
+
+        array_swap(arr, i, j, tail...);
+    }
+
+    ASSERT(pi >= 0);
+
+    quick_sort_asc(arr, l, pi, tail...);
+    quick_sort_asc(arr, pi+1, r, tail...);
 }
+
+template<typename T, typename... Tail>
+void quick_sort_desc(Array<T> arr, Array<Tail>... tail)
+{
+    quick_sort_desc(arr, 0, arr.count-1, tail...);
+}
+
+template<typename T, typename... Tail>
+void quick_sort_asc(Array<T> arr, Array<Tail>... tail)
+{
+    quick_sort_asc(arr, 0, arr.count-1, tail...);
+}
+
 
 
 
