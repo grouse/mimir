@@ -17,6 +17,7 @@ SET TS_RS_DIR=%ROOT%\external\tree-sitter-rust-0.20.1
 SET TS_BASH_DIR=%ROOT%\external\tree-sitter-bash-master
 SET TS_CS_DIR=%ROOT%\external\tree-sitter-c-sharp-0.19.1
 SET TS_LUA_DIR=%ROOT%\external\tree-sitter-lua-master
+SET TS_COMMENT_DIR=%ROOT%\external\tree-sitter-comment-master
 
 SET INCLUDE_DIR=-I%ROOT% -I%TS_DIR%\lib\include
 SET LIBS=-luser32.lib -lShell32.lib -lopengl32.lib -lgdi32.lib -lshlwapi.lib
@@ -46,7 +47,11 @@ REM clang -O3 -g -w -c -I%TS_LUA_DIR%\src -o tree_sitter_lua_parser.obj %TS_LUA_
 REM clang -O3 -g -w -c -I%TS_LUA_DIR%\src -o tree_sitter_lua_scanner.obj %TS_LUA_DIR%\src\scanner.c
 SET TS_LUA_OBJ=tree_sitter_lua_parser.obj tree_sitter_lua_scanner.obj
 
-SET TS_OBJ=tree_sitter.obj %TS_CPP_OBJ% %TS_RS_OBJ% %TS_BASH_OBJ% %TS_CS_OBJ% %TS_LUA_OBJ%
+REM clang -O3 -g -w -c -I%TS_COMMENT_DIR%\src -o tree_sitter_comment_parser.obj %TS_COMMENT_DIR%\src\parser.c 
+REM clang -O3 -g -w -c -I%TS_COMMENT_DIR%\src -o tree_sitter_comment_scanner.obj %TS_COMMENT_DIR%\src\scanner.c
+SET TS_COMMENT_OBJ=tree_sitter_comment_parser.obj tree_sitter_comment_scanner.obj
+
+SET TS_OBJ=tree_sitter.obj %TS_CPP_OBJ% %TS_RS_OBJ% %TS_BASH_OBJ% %TS_CS_OBJ% %TS_LUA_OBJ% %TS_COMMENT_OBJ%
 
 clang -O0 %FLAGS% %INCLUDE_DIR% %LIBS% -o mimir.exe %ROOT%\src\win32_mimir.cpp %TS_OBJ%
 POPD

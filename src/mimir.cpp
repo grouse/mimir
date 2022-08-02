@@ -22,10 +22,13 @@ extern "C" const TSLanguage* tree_sitter_rust();
 extern "C" const TSLanguage* tree_sitter_bash();
 extern "C" const TSLanguage* tree_sitter_c_sharp();
 extern "C" const TSLanguage* tree_sitter_lua();
+extern "C" const TSLanguage* tree_sitter_comment();
 
 
 #define DEBUG_LINE_WRAP_RECALC 0
-#define DEBUG_TREE_SITTER_QUERY 0
+#define DEBUG_TREE_SITTER_SYNTAX_TREE 0
+#define DEBUG_TREE_SITTER_COLORS 0
+#define DEBUG_TREE_SITTER_INJECTIONS 0
 
 enum EditMode {
     MODE_EDIT,
@@ -48,6 +51,7 @@ enum Language {
     LANGUAGE_BASH,
     LANGUAGE_CS,
     LANGUAGE_LUA,
+    LANGUAGE_COMMENT,
     LANGUAGE_COUNT,
 };
 
@@ -235,6 +239,41 @@ struct RangeColor {
     bool operator<(const RangeColor &rhs) { return start < rhs.start; }
 };
 
+String string_from_enum(NewlineMode mode)
+{
+    switch (mode) {
+    case NEWLINE_LF: return "LF";
+    case NEWLINE_CR: return "CR";
+    case NEWLINE_CRLF: return "CRLF";
+    case NEWLINE_LFCR: return "LFCR";
+    }
+}
+
+String string_from_enum(Language lang)
+{
+    switch (lang) {
+    case LANGUAGE_CPP: return "CPP";
+    case LANGUAGE_RUST: return "RUST";
+    case LANGUAGE_BASH: return "BASH";
+    case LANGUAGE_CS: return "CS";
+    case LANGUAGE_LUA: return "LUA";
+    case LANGUAGE_COMMENT: return "COMMENT";
+
+    case LANGUAGE_NONE: 
+    case LANGUAGE_COUNT: return "invalid";
+    }
+};
+
+String buffer_newline_str(Buffer *buffer)
+{
+    switch (buffer->newline_mode) {
+    case NEWLINE_LF: return "\n";
+    case NEWLINE_CR: return "\r";
+    case NEWLINE_CRLF: return "\r\n";
+    case NEWLINE_LFCR: return "\n\r";
+    }
+}
+
 Application app{};
 View view{};
 DynamicArray<Buffer> buffers{};
@@ -248,9 +287,223 @@ Buffer* get_buffer(BufferId buffer_id)
     return &buffers[buffer_id.index];
 }
 
+String buffer_newline_str(BufferId buffer_id)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    return buffer_newline_str(buffer);
+}
+
 bool buffer_valid(BufferId buffer_id)
 {
     return buffer_id.index >= 0;
+}
+
+Allocator ts_custom_alloc;
+
+struct ts_alloc_header {
+    size_t size;
+    size_t pad;
+};
+
+void* ts_custom_malloc(size_t size)
+{
+    if (size == 0) return nullptr;
+
+    void *ptr = ALLOC(ts_custom_alloc, size+sizeof(ts_alloc_header));
+    auto header = (ts_alloc_header*)ptr;
+    header->size = size;
+    return (u8*)header + sizeof *header;
+}
+
+void* ts_custom_calloc(size_t count, size_t size)
+{
+    if (size == 0) return nullptr;
+
+    void *ptr = ts_custom_malloc(count*size);
+    memset(ptr, 0, count*size);
+    return ptr;
+}
+
+void* ts_custom_realloc(void *ptr, size_t size)
+{
+    if (size == 0) return nullptr;
+    if (ptr == nullptr) return ts_custom_malloc(size);
+
+    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
+    void *nptr = REALLOC(ts_custom_alloc, header, header->size+sizeof(ts_alloc_header), size+sizeof(ts_alloc_header));
+
+    header = (ts_alloc_header*)nptr;
+    header->size = size;
+    return (u8*)header + sizeof *header;
+
+}
+
+void ts_custom_free(void *ptr)
+{
+    if (!ptr) return;
+
+    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
+    FREE(ts_custom_alloc, header);
+}
+
+TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
+{
+    if (auto a = find_asset(highlights); a) {
+        u32 error_loc;
+        TSQueryError error;
+        TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
+
+        if (error != TSQueryErrorNone) {
+            String s = "";
+            switch (error) {
+            case TSQueryErrorNone: s = "none"; break;
+            case TSQueryErrorSyntax: s = "syntax"; break;
+            case TSQueryErrorNodeType: s = "node_type"; break;
+            case TSQueryErrorField: s = "field"; break;
+            case TSQueryErrorCapture: s = "capture"; break;
+            case TSQueryErrorStructure: s = "structure"; break;
+            case TSQueryErrorLanguage: s = "language"; break;
+            }
+
+            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
+            return nullptr;
+        }
+
+        return query;
+    }
+
+    return nullptr;
+}
+
+HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
+    Buffer *buffer, 
+    TSQuery *injection_query, 
+    Allocator mem = mem_tmp)
+{
+    if (!buffer) return {};
+    if (!buffer->syntax_tree) return {};
+
+    ASSERT(injection_query);
+
+    HashTable<u32, DynamicArray<TSRange>> lang_range_map{ .alloc = mem };
+
+    TSNode root = ts_tree_root_node(buffer->syntax_tree);
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    defer { ts_query_cursor_delete(cursor); };
+
+    ts_query_cursor_set_byte_range(cursor, 0, buffer->flat.size);
+    ts_query_cursor_exec(cursor, injection_query, root);
+
+
+    TSQueryMatch match;
+    u32 capture_index;
+    while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+        auto *capture = &match.captures[capture_index];
+
+        u32 capture_name_length;
+        const char *tmp = ts_query_capture_name_for_id(injection_query, capture->index, &capture_name_length);
+        String capture_name{ (char*)tmp, (i32)capture_name_length };
+
+        if (Language *l = find(&app.language_map, capture_name); l) {
+            DynamicArray<TSRange> *ranges = find_emplace(&lang_range_map, (u32)*l, { .alloc = mem_tmp });
+
+            u32 start_byte = ts_node_start_byte(capture->node);
+            u32 end_byte = ts_node_end_byte(capture->node);
+
+            array_add(
+                ranges, 
+                {
+                    .start_point = ts_node_start_point(capture->node),
+                    .end_point = ts_node_end_point(capture->node),
+                    .start_byte = start_byte,
+                    .end_byte = end_byte,
+                });
+        }
+    }
+
+    return lang_range_map;
+}
+
+void get_syntax_colors(
+    DynamicArray<RangeColor> *colors,
+    i64 byte_start, 
+    i64 byte_end, 
+    TSTree *syntax_tree, 
+    Language language)
+{
+    if (auto query = app.highlights[language]; query && syntax_tree) {
+        i32 insert_at = 0;
+        i32 parent_index = 0;
+
+        TSNode root = ts_tree_root_node(syntax_tree);
+
+        TSQueryCursor *cursor = ts_query_cursor_new();
+        defer { ts_query_cursor_delete(cursor); };
+
+        ts_query_cursor_set_byte_range(cursor, (u32)byte_start, (u32)byte_end);
+        ts_query_cursor_exec(cursor, query, root);
+
+        TSQueryMatch match;
+        u32 capture_index;
+
+        while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+            auto *capture = &match.captures[capture_index];
+            u32 start_byte = ts_node_start_byte(capture->node);
+            u32 end_byte = ts_node_end_byte(capture->node);
+
+            i32 old_parent_index = parent_index;
+            while (parent_index < colors->count && 
+                   (start_byte < colors->at(parent_index).start || end_byte > colors->at(parent_index).end))
+            {
+                parent_index++;
+            }
+
+            if (old_parent_index != parent_index) {
+                insert_at = MIN(colors->count, parent_index+1);
+            }
+
+            u32 capture_name_length;
+            const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
+            String capture_name{ (char*)tmp, (i32)capture_name_length };
+
+#if DEBUG_TREE_SITTER_COLORS
+            if (false) {
+                const char *node_type = ts_node_type(capture->node);
+                LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
+                LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
+                LOG_INFO("capture name: %.*s", STRFMT(capture_name));
+            }
+#endif
+            String str = capture_name;
+            u32 *color = nullptr;
+            do {
+                color = find(&app.syntax_colors, str);
+                i32 p = last_of(str, '.');
+                if (p > 0) str = slice(str, 0, p);
+                else str.length = 0;
+            } while(color == nullptr && str.length > 0);
+
+            if (color) {
+#if DEBUG_TREE_SITTER_COLORS
+                LOG_INFO("highlight color[%d] '%.*s' in [%d, %d]", insert_at, STRFMT(capture_name), start_byte, end_byte);
+#endif
+                array_insert(colors, insert_at++, { start_byte, end_byte, *color });
+
+                if (parent_index < colors->count && parent_index != insert_at-1) {
+                    if (colors->at(parent_index).end> start_byte) {
+                        auto parent_end = colors->at(parent_index).end;
+                        colors->at(parent_index).end = start_byte;
+
+                        if (parent_end - end_byte > 0) {
+                            array_insert(colors, insert_at++, { end_byte, parent_end, colors->at(parent_index).color });
+                            parent_index = insert_at-1;
+                        }
+
+                    }
+                }
+            }
+        }
+    }
 }
 
 void buffer_history(BufferId buffer_id, BufferHistory entry)
@@ -366,32 +619,6 @@ void calculate_num_visible_lines()
     view.lines_visible = lines_visible;
 }
 
-String string_from_enum(NewlineMode mode)
-{
-    switch (mode) {
-    case NEWLINE_LF: return "LF";
-    case NEWLINE_CR: return "CR";
-    case NEWLINE_CRLF: return "CRLF";
-    case NEWLINE_LFCR: return "LFCR";
-    }
-}
-
-String buffer_newline_str(Buffer *buffer)
-{
-    switch (buffer->newline_mode) {
-    case NEWLINE_LF: return "\n";
-    case NEWLINE_CR: return "\r";
-    case NEWLINE_CRLF: return "\r\n";
-    case NEWLINE_LFCR: return "\n\r";
-    }
-}
-
-String buffer_newline_str(BufferId buffer_id)
-{
-    Buffer *buffer = get_buffer(buffer_id);
-    return buffer_newline_str(buffer);
-}
-
 BufferId create_buffer(String file)
 {
     // TODO(jesper): do something to try and figure out/guess file type,
@@ -452,37 +679,7 @@ BufferId create_buffer(String file)
             b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
             
             if (auto inj = app.injections[b.language]; inj) {
-                TSNode root = ts_tree_root_node(b.syntax_tree);
-                TSQueryCursor *cursor = ts_query_cursor_new();
-                defer { ts_query_cursor_delete(cursor); };
-                
-                ts_query_cursor_set_byte_range(cursor, 0, b.flat.size);
-                ts_query_cursor_exec(cursor, inj, root);
-                
-                HashTable<u32, DynamicArray<TSRange>> lang_range_map;
-                
-                TSQueryMatch match;
-                u32 capture_index;
-                while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
-                    auto *capture = &match.captures[capture_index];
-                    
-                    u32 capture_name_length;
-                    const char *tmp = ts_query_capture_name_for_id(inj, capture->index, &capture_name_length);
-                    String capture_name{ (char*)tmp, (i32)capture_name_length };
-                    
-                    if (Language *l = find(&app.language_map, capture_name); l) {
-                        
-                        auto *capture = &match.captures[capture_index];
-                        
-                        DynamicArray<TSRange> *ranges = find_emplace(&lang_range_map, (u32)*l, { .alloc = mem_tmp });
-                        array_add(
-                            ranges, 
-                            {
-                                ts_node_start_point(capture->node), ts_node_end_point(capture->node),
-                                ts_node_start_byte(capture->node), ts_node_end_byte(capture->node),
-                            });
-                    }
-                }
+                HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(&b, inj);
                 
                 for (i32 i = 0; i < lang_range_map.capacity; i++) {
                     auto kv = lang_range_map.slots[i];
@@ -493,6 +690,14 @@ BufferId create_buffer(String file)
                     
                     TSTree *subtree = ts_parser_parse_string(parser, nullptr, b.flat.data, b.flat.size);
                     array_add(&b.subtrees, { (Language)kv.key, subtree });
+                    
+#if DEBUG_TREE_SITTER_SYNTAX_TREE
+                    TSNode subroot = ts_tree_root_node(subtree);
+                    char *str = ts_node_string(subroot);
+                    String lstr = string_from_enum((Language)kv.key);
+                    LOG_INFO("sub-syntax tree language %.*s :\n--start\n%s\n--end", STRFMT(lstr), str);
+                    //free(str);
+#endif
                 }
             }
             
@@ -577,132 +782,6 @@ void view_set_buffer(BufferId buffer)
     view.lines_dirty = true;
 }
 
-Allocator ts_custom_alloc;
-
-struct ts_alloc_header {
-    size_t size;
-    size_t pad;
-};
-
-void* ts_custom_malloc(size_t size)
-{
-    if (size == 0) return nullptr;
-
-    void *ptr = ALLOC(ts_custom_alloc, size+sizeof(ts_alloc_header));
-    auto header = (ts_alloc_header*)ptr;
-    header->size = size;
-    return (u8*)header + sizeof *header;
-}
-
-void* ts_custom_calloc(size_t count, size_t size)
-{
-    if (size == 0) return nullptr;
-
-    void *ptr = ts_custom_malloc(count*size);
-    memset(ptr, 0, count*size);
-    return ptr;
-}
-
-void* ts_custom_realloc(void *ptr, size_t size)
-{
-    if (size == 0) return nullptr;
-    if (ptr == nullptr) return ts_custom_malloc(size);
-
-    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
-    void *nptr = REALLOC(ts_custom_alloc, header, header->size+sizeof(ts_alloc_header), size+sizeof(ts_alloc_header));
-
-    header = (ts_alloc_header*)nptr;
-    header->size = size;
-    return (u8*)header + sizeof *header;
-
-}
-
-void ts_custom_free(void *ptr)
-{
-    if (!ptr) return;
-
-    auto header = (ts_alloc_header*)((u8*)ptr - sizeof(ts_alloc_header));
-    FREE(ts_custom_alloc, header);
-}
-
-TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
-{
-    if (auto a = find_asset(highlights); a) {
-        u32 error_loc;
-        TSQueryError error;
-        TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
-
-        if (error != TSQueryErrorNone) {
-            String s = "";
-            switch (error) {
-            case TSQueryErrorNone: s = "none"; break;
-            case TSQueryErrorSyntax: s = "syntax"; break;
-            case TSQueryErrorNodeType: s = "node_type"; break;
-            case TSQueryErrorField: s = "field"; break;
-            case TSQueryErrorCapture: s = "capture"; break;
-            case TSQueryErrorStructure: s = "structure"; break;
-            case TSQueryErrorLanguage: s = "language"; break;
-            }
-
-            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
-            return nullptr;
-        }
-
-        return query;
-    }
-
-    return nullptr;
-}
-
-void get_syntax_colors(
-    DynamicArray<RangeColor> *colors, 
-    i64 byte_start, 
-    i64 byte_end, 
-    TSTree *syntax_tree, 
-    Language language)
-{
-    if (auto query = app.highlights[language]; query && syntax_tree) {
-        TSNode root = ts_tree_root_node(syntax_tree);
-        
-        TSQueryCursor *cursor = ts_query_cursor_new();
-        defer { ts_query_cursor_delete(cursor); };
-
-        ts_query_cursor_set_byte_range(cursor, (u32)byte_start, (u32)byte_end);
-        ts_query_cursor_exec(cursor, query, root);
-
-        TSQueryMatch match;
-        u32 capture_index;
-
-        while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
-            auto *capture = &match.captures[capture_index];
-            u32 start_byte = ts_node_start_byte(capture->node);
-            u32 end_byte = ts_node_end_byte(capture->node);
-
-            u32 capture_name_length;
-            const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
-            String capture_name{ (char*)tmp, (i32)capture_name_length };
-
-#if DEBUG_TREE_SITTER_QUERY
-            const char *node_type = ts_node_type(capture->node);
-            LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
-            LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
-            LOG_INFO("capture name: %.*s", STRFMT(capture_name));
-#endif
-            String str = capture_name;
-            u32 *color = nullptr;
-            do {
-                color = find(&app.syntax_colors, str);
-                i32 p = last_of(str, '.');
-                if (p > 0) str = slice(str, 0, p);
-                else str.length = 0;
-            } while(color == nullptr && str.length > 0);
-
-            if (color) array_add(colors, { start_byte, end_byte, *color });
-        }
-    }
-
-}
-
 void init_app(Array<String> args)
 {
     fzy_init_table();
@@ -720,19 +799,22 @@ void init_app(Array<String> args)
     init_gui();
     
     set(&app.language_map, "cpp", LANGUAGE_CPP);
+    set(&app.language_map, "comment", LANGUAGE_COMMENT);
 
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
     app.languages[LANGUAGE_CS] = tree_sitter_c_sharp();
     app.languages[LANGUAGE_RUST] = tree_sitter_rust();
     app.languages[LANGUAGE_BASH] = tree_sitter_bash(); 
     app.languages[LANGUAGE_LUA] = tree_sitter_lua(); 
+    app.languages[LANGUAGE_COMMENT] = tree_sitter_comment(); 
 
     app.highlights[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/highlights.scm");
     app.highlights[LANGUAGE_RUST] = ts_create_query(app.languages[LANGUAGE_RUST], "queries/rust/highlights.scm");
     app.highlights[LANGUAGE_BASH] = ts_create_query(app.languages[LANGUAGE_BASH], "queries/bash/highlights.scm");
     app.highlights[LANGUAGE_CS] = ts_create_query(app.languages[LANGUAGE_CS], "queries/cs/highlights.scm");
     app.highlights[LANGUAGE_LUA] = ts_create_query(app.languages[LANGUAGE_LUA], "queries/lua/highlights.scm");
-    
+    app.highlights[LANGUAGE_COMMENT] = ts_create_query(app.languages[LANGUAGE_COMMENT], "queries/comment/highlights.scm");
+
     app.injections[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/injections.scm");
 
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
@@ -747,6 +829,8 @@ void init_app(Array<String> args)
     set(&app.syntax_colors, "property", fg);
     set(&app.syntax_colors, "variable", fg);
     set(&app.syntax_colors, "identifier", fg);
+    
+    set(&app.syntax_colors, "text.warning", 0xff0000u);
 
     set(&app.syntax_colors, "preproc", 0xFE8019u);
     set(&app.syntax_colors, "include", 0xFE8019u);
@@ -1358,20 +1442,46 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             }
 
             if (auto lang = app.languages[buffer->language]; lang) {
-                if (buffer->syntax_tree) {
-                    TSInputEdit edit{
-                        .start_byte = (u32)byte_start,
-                        .old_end_byte = (u32)byte_end,
-                        .new_end_byte = (u32)byte_start,
-                    };
-
-                    ts_tree_edit(buffer->syntax_tree, &edit);
-                }
+                TSInputEdit edit{
+                    .start_byte = (u32)byte_start,
+                    .old_end_byte = (u32)byte_end,
+                    .new_end_byte = (u32)byte_start,
+                };
+                
+                if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
+                for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
 
                 TSParser *parser = ts_parser_new();
                 defer { ts_parser_delete(parser); };
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+                
+                if (auto inj = app.injections[buffer->language]; inj) {
+                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
+                    for (i32 i = 0; i < lang_range_map.capacity; i++) {
+                        auto kv = lang_range_map.slots[i];
+                        if (!kv.occupied) continue;
+
+                        ts_parser_set_language(parser, app.languages[kv.key]);
+                        ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
+                        
+                        SyntaxTree *existing = nullptr;
+                        for (auto &st : buffer->subtrees) {
+                            if (st.language == kv.key) {
+                                existing = &st;
+                                break;
+                            }
+                        }
+
+                        if (existing) {
+                            existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
+                        } else {
+                            TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
+                            array_add(&buffer->subtrees, { (Language)kv.key, subtree });
+                        }
+                    }
+                }
+
             }
         } break;
     }
@@ -1649,20 +1759,44 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
             }
 
             if (auto lang = app.languages[buffer->language]; lang) {
-                if (buffer->syntax_tree) {
                     TSInputEdit edit{
                         .start_byte = (u32)offset,
                         .old_end_byte = (u32)offset,
                         .new_end_byte = (u32)(offset+required_extra_space),
                     };
-
-                    ts_tree_edit(buffer->syntax_tree, &edit);
-                }
+                if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
+                for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
 
                 TSParser *parser = ts_parser_new();
                 defer { ts_parser_delete(parser); };
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+                
+                if (auto inj = app.injections[buffer->language]; inj) {
+                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
+                    for (i32 i = 0; i < lang_range_map.capacity; i++) {
+                        auto kv = lang_range_map.slots[i];
+                        if (!kv.occupied) continue;
+
+                        ts_parser_set_language(parser, app.languages[kv.key]);
+                        ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
+
+                        SyntaxTree *existing = nullptr;
+                        for (auto &st : buffer->subtrees) {
+                            if (st.language == kv.key) {
+                                existing = &st;
+                                break;
+                            }
+                        }
+
+                        if (existing) {
+                            existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
+                        } else {
+                            TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
+                            array_add(&buffer->subtrees, { (Language)kv.key, subtree });
+                        }
+                    }
+                }
             }
         } break;
     }
@@ -2957,7 +3091,7 @@ next_node:;
             } else if (app.incremental_search.str.length > 0) {
             }
 
-            if (false) {
+            if (true) {
                 Vector2 size{ 0, 15.0f };
                 Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
                 gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
@@ -3077,10 +3211,24 @@ next_node:;
         i64 byte_start = line_start_offset(view.line_offset, view.lines);
         i64 byte_end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
         
+        if (DEBUG_TREE_SITTER_COLORS) LOG_INFO("-- highlight query start --");
         DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
-        for (auto st : buffer->subtrees) get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
+
+#if DEBUG_TREE_SITTER_COLORS
+        String l = string_from_enum(buffer->language);
+        LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
+#endif
         get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
-        quick_sort_asc(colors);
+        
+        for (auto st : buffer->subtrees) {
+#if DEBUG_TREE_SITTER_COLORS
+            String l = string_from_enum(st.language);
+            LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
+#endif
+            get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
+        }
+        
+        if (DEBUG_TREE_SITTER_COLORS) for (auto c : colors) LOG_INFO("color range [%d, %d]", c.start, c.end);
         
         ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
 

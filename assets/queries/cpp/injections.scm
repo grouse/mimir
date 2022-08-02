@@ -1,2 +1,2 @@
 (preproc_arg) @cpp
-;(comment) @comment
+(comment) @comment
