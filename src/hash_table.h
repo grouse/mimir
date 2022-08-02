@@ -15,10 +15,10 @@ struct HashTable {
         bool occupied;
     };
 
-    Pair *slots;
-    i32 count;
-    i32 capacity;
-    Allocator alloc;
+    Pair *slots = nullptr;
+    i32 count = 0;
+    i32 capacity = 0;
+    Allocator alloc = {};
 };
 
 template<typename K, typename V>

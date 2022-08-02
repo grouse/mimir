@@ -11,8 +11,8 @@
 
 template<typename T>
 struct Array {
-    T *data;
-    i32 count;
+    T *data = nullptr;
+    i32 count = 0;
 
 
     T& operator[](i32 i)
@@ -26,16 +26,15 @@ struct Array {
         ASSERT(i < count && i >= 0);
         return data[i];
     }
-
-
+    
     T* begin() { return &data[0]; }
     T* end() { return &data[count]; }
 };
 
 template<typename T>
 struct DynamicArray : Array<T> {
-    i32 capacity;
-    Allocator alloc;
+    i32 capacity = 0;
+    Allocator alloc = {};
 };
 
 template<typename T>
