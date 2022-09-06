@@ -162,6 +162,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
 		if (event.key.keycode != KC_BACKSPACE &&
 		    event.key.keycode != KC_ESC &&
 		    event.key.keycode != KC_DELETE &&
+		    event.key.keycode != KC_ENTER &&
 		    input.text_input_enabled)
 		{
 			WindowEvent t{ .type = WE_TEXT };
