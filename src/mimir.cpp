@@ -167,7 +167,7 @@ struct Application {
     const TSLanguage *languages[LANGUAGE_COUNT];
     TSQuery *highlights[LANGUAGE_COUNT];
     TSQuery *injections[LANGUAGE_COUNT];
-    
+
     EditMode mode, next_mode;
 
     DynamicArray<String> process_command_names;
@@ -234,7 +234,7 @@ struct View {
 struct RangeColor {
     i64 start, end;
     u32 color;
-    
+
     bool operator>(const RangeColor &rhs) { return start > rhs.start; }
     bool operator<(const RangeColor &rhs) { return start < rhs.start; }
 };
@@ -259,7 +259,7 @@ String string_from_enum(Language lang)
     case LANGUAGE_LUA: return "LUA";
     case LANGUAGE_COMMENT: return "COMMENT";
 
-    case LANGUAGE_NONE: 
+    case LANGUAGE_NONE:
     case LANGUAGE_COUNT: return "invalid";
     }
 };
@@ -376,8 +376,8 @@ TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
 }
 
 HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
-    Buffer *buffer, 
-    TSQuery *injection_query, 
+    Buffer *buffer,
+    TSQuery *injection_query,
     Allocator mem = mem_tmp)
 {
     if (!buffer) return {};
@@ -411,7 +411,7 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
             u32 end_byte = ts_node_end_byte(capture->node);
 
             array_add(
-                ranges, 
+                ranges,
                 {
                     .start_point = ts_node_start_point(capture->node),
                     .end_point = ts_node_end_point(capture->node),
@@ -426,9 +426,9 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
 
 void get_syntax_colors(
     DynamicArray<RangeColor> *colors,
-    i64 byte_start, 
-    i64 byte_end, 
-    TSTree *syntax_tree, 
+    i64 byte_start,
+    i64 byte_end,
+    TSTree *syntax_tree,
     Language language)
 {
     if (auto query = app.highlights[language]; query && syntax_tree) {
@@ -452,7 +452,7 @@ void get_syntax_colors(
             u32 end_byte = ts_node_end_byte(capture->node);
 
             i32 old_parent_index = parent_index;
-            while (parent_index < colors->count && 
+            while (parent_index < colors->count &&
                    (start_byte < colors->at(parent_index).start || end_byte > colors->at(parent_index).end))
             {
                 parent_index++;
@@ -677,20 +677,20 @@ BufferId create_buffer(String file)
             TSParser *parser = ts_parser_new();
             ts_parser_set_language(parser, lang);
             b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
-            
+
             if (auto inj = app.injections[b.language]; inj) {
                 HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(&b, inj);
-                
+
                 for (i32 i = 0; i < lang_range_map.capacity; i++) {
                     auto kv = lang_range_map.slots[i];
                     if (!kv.occupied) continue;
-                    
+
                     ts_parser_set_language(parser, app.languages[kv.key]);
                     ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
-                    
+
                     TSTree *subtree = ts_parser_parse_string(parser, nullptr, b.flat.data, b.flat.size);
                     array_add(&b.subtrees, { (Language)kv.key, subtree });
-                    
+
 #if DEBUG_TREE_SITTER_SYNTAX_TREE
                     TSNode subroot = ts_tree_root_node(subtree);
                     char *str = ts_node_string(subroot);
@@ -700,7 +700,7 @@ BufferId create_buffer(String file)
 #endif
                 }
             }
-            
+
             ts_parser_delete(parser);
 #if 0
             TSNode root = ts_tree_root_node(b.syntax_tree);
@@ -797,16 +797,16 @@ void init_app(Array<String> args)
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
 
     init_gui();
-    
+
     set(&app.language_map, "cpp", LANGUAGE_CPP);
     set(&app.language_map, "comment", LANGUAGE_COMMENT);
 
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
     app.languages[LANGUAGE_CS] = tree_sitter_c_sharp();
     app.languages[LANGUAGE_RUST] = tree_sitter_rust();
-    app.languages[LANGUAGE_BASH] = tree_sitter_bash(); 
-    app.languages[LANGUAGE_LUA] = tree_sitter_lua(); 
-    app.languages[LANGUAGE_COMMENT] = tree_sitter_comment(); 
+    app.languages[LANGUAGE_BASH] = tree_sitter_bash();
+    app.languages[LANGUAGE_LUA] = tree_sitter_lua();
+    app.languages[LANGUAGE_COMMENT] = tree_sitter_comment();
 
     app.highlights[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/highlights.scm");
     app.highlights[LANGUAGE_RUST] = ts_create_query(app.languages[LANGUAGE_RUST], "queries/rust/highlights.scm");
@@ -829,7 +829,7 @@ void init_app(Array<String> args)
     set(&app.syntax_colors, "property", fg);
     set(&app.syntax_colors, "variable", fg);
     set(&app.syntax_colors, "identifier", fg);
-    
+
     set(&app.syntax_colors, "text.warning", 0xff0000u);
 
     set(&app.syntax_colors, "preproc", 0xFE8019u);
@@ -865,9 +865,11 @@ void init_app(Array<String> args)
     glGenBuffers(1, &view.glyph_data_ssbo);
 
     if (args.count > 0) {
-        String dir = directory_of(args[0]);
-        if (dir.length > 0) set_working_dir(dir);
-        view_set_buffer(create_buffer(args[0]));
+	    bool is_dir = is_directory(args[0]);
+	    String dir = is_dir ? args[0] : directory_of(args[0]);
+		set_working_dir(dir);
+
+		if (!is_dir) view_set_buffer(create_buffer(args[0]));
     }
 
     Array<String> files = list_files(get_working_dir());
@@ -1410,7 +1412,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
-    
+
     String text_removed{};
 
     switch (buffer->type) {
@@ -1423,7 +1425,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
             memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
             buffer->flat.size -= num_bytes;
-            
+
             // TODO(jesper): multi-view support
             if (view.buffer == buffer_id) {
                 i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
@@ -1447,7 +1449,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                     .old_end_byte = (u32)byte_end,
                     .new_end_byte = (u32)byte_start,
                 };
-                
+
                 if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
                 for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
 
@@ -1455,7 +1457,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 defer { ts_parser_delete(parser); };
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
-                
+
                 if (auto inj = app.injections[buffer->language]; inj) {
                     HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
                     for (i32 i = 0; i < lang_range_map.capacity; i++) {
@@ -1464,7 +1466,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
                         ts_parser_set_language(parser, app.languages[kv.key]);
                         ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
-                        
+
                         SyntaxTree *existing = nullptr;
                         for (auto &st : buffer->subtrees) {
                             if (st.language == kv.key) {
@@ -1485,7 +1487,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             }
         } break;
     }
-    
+
     if (record_history) {
         BufferHistory h{
             .type = BUFFER_REMOVE,
@@ -1743,7 +1745,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
             memcpy(buffer->flat.data+offset, text.data, text.length);
             buffer->flat.size += required_extra_space;
             end_offset += required_extra_space;
-            
+
             // TODO(jesper): multi-view support
             if (view.buffer == buffer_id) {
                 i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
@@ -1771,7 +1773,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                 defer { ts_parser_delete(parser); };
                 ts_parser_set_language(parser, lang);
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
-                
+
                 if (auto inj = app.injections[buffer->language]; inj) {
                     HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
                     for (i32 i = 0; i < lang_range_map.capacity; i++) {
@@ -2794,7 +2796,7 @@ void update_and_render()
 
     gui_window("open file", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
         GuiId id = GUI_ID(0);
-        
+
         GuiEditboxAction edit_action = gui_editbox_id(id, "");
         if (edit_action & (GUI_EDITBOX_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
@@ -2881,8 +2883,8 @@ next_node:;
                 quick_sort_desc(scores, app.lister.filtered);
             }
         }
-        
-        if (edit_action == GUI_EDITBOX_FINISH && 
+
+        if (edit_action == GUI_EDITBOX_FINISH &&
             (app.lister.selected_item < 0 || app.lister.selected_item >= app.lister.filtered.count))
         {
             gui.focused = id;
@@ -3210,7 +3212,7 @@ next_node:;
 
         i64 byte_start = line_start_offset(view.line_offset, view.lines);
         i64 byte_end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
-        
+
         if (DEBUG_TREE_SITTER_COLORS) LOG_INFO("-- highlight query start --");
         DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
 
@@ -3219,7 +3221,7 @@ next_node:;
         LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
 #endif
         get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
-        
+
         for (auto st : buffer->subtrees) {
 #if DEBUG_TREE_SITTER_COLORS
             String l = string_from_enum(st.language);
@@ -3227,9 +3229,9 @@ next_node:;
 #endif
             get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
         }
-        
+
         if (DEBUG_TREE_SITTER_COLORS) for (auto c : colors) LOG_INFO("color range [%d, %d]", c.start, c.end);
-        
+
         ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
 
         void *mapped = nullptr;
