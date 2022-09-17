@@ -74,8 +74,10 @@ void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem)
             	char *fp = join_path(sz_path, it->d_name, mem);
             	array_add(dst, String{ fp, (i32)strlen(fp) });
         	} else if (it->d_type == DT_DIR && flags & FILE_LIST_RECURSIVE) {
-            	char *fp = join_path(sz_path, it->d_name, mem);
-            	array_add(&folders, fp);
+        	    if (flags & FILE_LIST_RECURSIVE) {
+                	char *fp = join_path(sz_path, it->d_name, mem);
+                	array_add(&folders, fp);
+            	}
 			} else if (it->d_type == DT_UNKNOWN) {
 				LOG_ERROR("unknown d_type value from readdir, supposed to fall back to stat");
 			} else {

@@ -163,6 +163,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
 		    event.key.keycode != KC_ESC &&
 		    event.key.keycode != KC_DELETE &&
 		    event.key.keycode != KC_ENTER &&
+		    event.key.keycode != KC_TAB &&
 		    input.text_input_enabled)
 		{
 			WindowEvent t{ .type = WE_TEXT };
@@ -180,7 +181,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, XIC ic, XEvent xevent)
 
 
 
-		if (false && event.key.keycode == KC_UNKNOWN) LOG_INFO("unknown x11 keycode: 0x%X", xevent.xkey.keycode);
+		if (true && event.key.keycode == KC_UNKNOWN) LOG_INFO("unknown x11 keycode: 0x%X", xevent.xkey.keycode);
 
 		break;
 
