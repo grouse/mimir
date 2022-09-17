@@ -166,20 +166,39 @@ void set_working_dir(String path)
 	}
 }
 
-FileHandle open_file(String /*path*/, FileOpenMode /*mode*/)
+FileHandle open_file(String path, FileOpenMode mode)
 {
-	LOG_ERROR("unimplemented");
-	return nullptr;
+	char *sz_path = sz_string(path);
+
+	int flags = O_RDWR;
+	if (mode == FILE_OPEN_CREATE) flags |= O_CREAT;
+	if (mode == FILE_OPEN_TRUNCATE) flags |= O_TRUNC;
+
+	int fd = open(sz_path, flags);
+
+	if (fd == -1) {
+		LOG_ERROR("unhandled error opening file '%s', errono: %d: '%s'", sz_path, errno, strerror(errno));
+		return nullptr;
+	}
+
+	return (FileHandle)(i64)fd;
 }
 
-void write_file(FileHandle /*handle*/, char * /*data*/, i32 /*bytes*/)
+void write_file(FileHandle handle, char *data, i32 bytes)
 {
-	LOG_ERROR("unimplemented");
+	int fd = (int)(i64)handle;
+	ASSERT(fd != -1);
+
+	ssize_t res = write(fd, data, bytes);
+	if (res == -1) {
+		LOG_ERROR("unhandled write error %d: '%s'", errno, strerror(errno));
+	}
 }
 
-void close_file(FileHandle /*handle*/)
+void close_file(FileHandle handle)
 {
-	LOG_ERROR("unimplemented");
+	int fd = (int)(i64)handle;
+	close(fd);
 }
 
 String select_folder_dialog(Allocator /*mem*/)
