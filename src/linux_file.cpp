@@ -50,28 +50,41 @@ DynamicArray<String> list_files(String dir, u32 flags, Allocator mem)
 }
 
 
-void list_files(DynamicArray<String> *dst, String dir, u32 /*flags*/, Allocator mem)
+void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem)
 {
-    char *sz_path = sz_string(dir);
-    DIR *d = opendir(sz_path);
+    if (flags & FILE_LIST_ABSOLUTE) LOG_ERROR("unimplemented");
 
-    if (!d) {
-        LOG_ERROR("unable to open directory: %s", sz_path);
-        return;
-    }
+	DynamicArray<char*> folders{ .alloc = mem_tmp };
+	array_add(&folders, sz_string(dir));
 
-    // TODO(jesper): recursive
-    struct dirent *it;
-    while ((it = readdir(d)) != nullptr) {
-        if (it->d_name[0] == '.') continue;
+	for (i32 i = 0; i < folders.count; i++) {
+		char *sz_path = folders[i];
+    	DIR *d = opendir(sz_path);
 
-        if (it->d_type == DT_REG) {
-            String fp = join_path(dir, String{ it->d_name, (i32)strlen(it->d_name) }, mem);
-            array_add(dst, fp);
-        }
-    }
+    	if (!d) {
+        	LOG_ERROR("unable to open directory: %s", sz_path);
+        	continue;
+    	}
 
-    closedir(d);
+    	struct dirent *it;
+    	while ((it = readdir(d)) != nullptr) {
+        	if (it->d_name[0] == '.') continue;
+
+        	if (it->d_type == DT_REG) {
+            	char *fp = join_path(sz_path, it->d_name, mem);
+            	array_add(dst, String{ fp, (i32)strlen(fp) });
+        	} else if (it->d_type == DT_DIR && flags & FILE_LIST_RECURSIVE) {
+            	char *fp = join_path(sz_path, it->d_name, mem);
+            	array_add(&folders, fp);
+			} else if (it->d_type == DT_UNKNOWN) {
+				LOG_ERROR("unknown d_type value from readdir, supposed to fall back to stat");
+			} else {
+				LOG_INFO("unhandled d_type for %s", it->d_name);
+			}
+    	}
+
+    	closedir(d);
+	}
 }
 
 
@@ -121,7 +134,7 @@ bool is_directory(String path)
 		return false;
 	}
 
-	return st.st_mode == S_IFDIR;
+	return st.st_mode & S_IFDIR;
 }
 
 String get_exe_folder(Allocator mem)
