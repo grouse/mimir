@@ -1413,15 +1413,21 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
 
-    String text_removed{};
-
     switch (buffer->type) {
     case BUFFER_FLAT: {
             byte_start = MAX(0, byte_start);
             byte_end = MIN(byte_end, buffer->flat.size);
 
             i64 num_bytes = byte_end-byte_start;
-            if (record_history) text_removed = { &buffer->flat.data[byte_start], (i32)num_bytes };
+    		if (record_history) {
+        		BufferHistory h{
+            		.type = BUFFER_REMOVE,
+            		.offset = byte_start,
+            		.text = { &buffer->flat.data[byte_start], (i32)num_bytes }
+        		};
+        		buffer_history(buffer_id, h);
+    		}
+
 
             memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
             buffer->flat.size -= num_bytes;
@@ -1488,14 +1494,6 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
         } break;
     }
 
-    if (record_history) {
-        BufferHistory h{
-            .type = BUFFER_REMOVE,
-            .offset = byte_start,
-            .text = text_removed,
-        };
-        buffer_history(buffer_id, h);
-    }
 
     return true;
 }
