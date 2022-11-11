@@ -107,6 +107,7 @@ struct BufferHistory {
             String text;
         };
         struct {
+            i32 view_id;
             i64 caret;
             i64 mark;
         };
@@ -144,6 +145,49 @@ struct ProcessCommand {
     Process *process;
 };
 
+struct Caret {
+    i64 byte_offset = 0;
+
+    i64 wrapped_column = 0;
+    i64 column = 0;
+    i64 preferred_column = 0;
+
+    i32 line = 0;
+    i32 wrapped_line = 0;
+};
+
+struct ViewBufferState {
+    BufferId buffer;
+    Caret caret, mark;
+
+    f32 voffset;
+    i32 line_offset;
+};
+
+struct View {
+    i32 id = -1;
+    GuiId gui_id = GUI_ID(0);
+
+    GLuint glyph_data_ssbo;
+    DynamicArray<BufferId> buffers;
+    DynamicArray<ViewBufferState> saved_buffer_state;
+    DynamicArray<BufferLine> lines;
+
+    f32 voffset;
+    i32 line_offset;
+    i32 lines_visible;
+
+    Rect rect;
+    BufferId buffer;
+    Caret caret, mark;
+
+    struct {
+        u64 lines_dirty : 1;
+        u64 caret_dirty : 1;
+        u64 defer_move_view_to_caret : 1;
+    };
+};
+
 struct Application {
     FontAtlas mono;
     bool animating = true;
@@ -155,6 +199,9 @@ struct Application {
 
         i32 selected_item;
     } lister;
+
+    View views[5];
+    View *current_view = &views[0];
 
     struct {
         String str;
@@ -186,49 +233,6 @@ struct Application {
     struct {
         GLuint build;
     } icons;
-};
-
-struct Caret {
-    i64 byte_offset = 0;
-
-    i64 wrapped_column = 0;
-    i64 column = 0;
-    i64 preferred_column = 0;
-
-    i32 line = 0;
-    i32 wrapped_line = 0;
-};
-
-struct ViewBufferState {
-    BufferId buffer;
-    Caret caret, mark;
-
-    f32 voffset;
-    i32 line_offset;
-};
-
-struct View {
-    GuiId gui_id = GUI_ID(0);
-
-    DynamicArray<BufferId> buffers;
-    DynamicArray<ViewBufferState> saved_buffer_state;
-    DynamicArray<BufferLine> lines;
-
-    f32 voffset;
-    i32 line_offset;
-    i32 lines_visible;
-
-    Rect rect;
-    BufferId buffer;
-    Caret caret, mark;
-
-    GLuint glyph_data_ssbo;
-
-    struct {
-        u64 lines_dirty : 1;
-        u64 caret_dirty : 1;
-        u64 defer_move_view_to_caret : 1;
-    };
 };
 
 struct RangeColor {
@@ -275,10 +279,9 @@ String buffer_newline_str(Buffer *buffer)
 }
 
 Application app{};
-View view{};
 DynamicArray<Buffer> buffers{};
 
-void move_view_to_caret();
+void move_view_to_caret(View *view);
 
 
 Buffer* get_buffer(BufferId buffer_id)
@@ -612,11 +615,11 @@ i64 prev_byte(Buffer *b, i64 i)
     }
 }
 
-void calculate_num_visible_lines()
+void calculate_num_visible_lines(View *view)
 {
     i32 lines_visible = (i32)ceilf(gfx.resolution.y / (f32)app.mono.line_height);
-    view.lines_dirty = view.lines_dirty || lines_visible != view.lines_visible;
-    view.lines_visible = lines_visible;
+    view->lines_dirty = view->lines_dirty || lines_visible != view->lines_visible;
+    view->lines_visible = lines_visible;
 }
 
 BufferId create_buffer(String file)
@@ -734,52 +737,52 @@ BufferId find_buffer(String file)
     return BUFFER_INVALID;
 }
 
-void view_set_buffer(BufferId buffer)
+void view_set_buffer(View *view, BufferId buffer)
 {
-    if (view.buffer == buffer) return;
+    if (view->buffer == buffer) return;
 
-    auto find = [](BufferId buffer) -> ViewBufferState*
+    auto find_buffer_state = [](View *view, BufferId buffer) -> ViewBufferState*
     {
-        for (auto &state : view.saved_buffer_state) {
+        for (auto &state : view->saved_buffer_state) {
             if (state.buffer == buffer) return &state;
         }
         return nullptr;
     };
 
     ViewBufferState state{
-        .buffer = view.buffer,
-        .caret = view.caret,
-        .mark = view.mark,
-        .voffset = view.voffset,
-        .line_offset = view.line_offset,
+        .buffer = view->buffer,
+        .caret = view->caret,
+        .mark = view->mark,
+        .voffset = view->voffset,
+        .line_offset = view->line_offset,
     };
 
-    ViewBufferState *it = find(view.buffer);
-    if (!it) array_add(&view.saved_buffer_state, state);
+    ViewBufferState *it = find_buffer_state(view, view->buffer);
+    if (!it) array_add(&view->saved_buffer_state, state);
     else *it = state;
 
-    it = find(buffer);
+    it = find_buffer_state(view, buffer);
     if (it) {
-        view.caret = it->caret;
-        view.mark = it->mark;
-        view.voffset = it->voffset;
-        view.line_offset = it->line_offset;
+        view->caret = it->caret;
+        view->mark = it->mark;
+        view->voffset = it->voffset;
+        view->line_offset = it->line_offset;
     } else {
-        view.caret = view.mark = {};
-        view.voffset = 0;
-        view.line_offset = 0;
+        view->caret = view->mark = {};
+        view->voffset = 0;
+        view->line_offset = 0;
     }
 
-    view.buffer = buffer;
+    view->buffer = buffer;
 
-    i32 idx = array_find_index(view.buffers, view.buffer);
-    if (idx >= 0) array_remove(&view.buffers, idx);
-    array_insert(&view.buffers, 0, view.buffer);
+    i32 idx = array_find_index(view->buffers, view->buffer);
+    if (idx >= 0) array_remove(&view->buffers, idx);
+    array_insert(&view->buffers, 0, view->buffer);
 
     // NOTE(jesper): not storing line wrap data (for now). Computing it is super quick, and storing
     // it will add up pretty quick. Especially if we start serialising the views and their state
     // to disk
-    view.lines_dirty = true;
+    view->lines_dirty = true;
 }
 
 void init_app(Array<String> args)
@@ -861,15 +864,18 @@ void init_app(Array<String> args)
 
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18, true);
 
-    calculate_num_visible_lines();
-    glGenBuffers(1, &view.glyph_data_ssbo);
+    for (View &view : app.views) {
+        calculate_num_visible_lines(&view);
+        glGenBuffers(1, &view.glyph_data_ssbo);
+    }
+    app.current_view->id = 0;
 
     if (args.count > 0) {
 	    bool is_dir = is_directory(args[0]);
 	    String dir = is_dir ? args[0] : directory_of(args[0]);
 		set_working_dir(dir);
 
-		if (!is_dir) view_set_buffer(create_buffer(args[0]));
+		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
     }
 
     Array<String> files = list_files(get_working_dir());
@@ -895,7 +901,9 @@ void init_app(Array<String> args)
 bool app_change_resolution(Vector2 resolution)
 {
     if (!gfx_change_resolution(resolution)) return false;
-    calculate_num_visible_lines();
+    for (View &view : app.views) {
+        if (view.id != -1) calculate_num_visible_lines(&view);
+    }
     return true;
 }
 
@@ -1296,12 +1304,12 @@ void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array
     }
 }
 
-void recalc_line_wrap(DynamicArray<BufferLine> *lines, i32 start_line, i32 end_line, BufferId buffer_id)
+void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_line, i32 end_line, BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
 
-    Rect r = view.rect;
+    Rect r = view->rect;
     f32 base_x = r.pos.x;
 
     start_line = MAX(start_line, 0);
@@ -1433,7 +1441,9 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             buffer->flat.size -= num_bytes;
 
             // TODO(jesper): multi-view support
-            if (view.buffer == buffer_id) {
+            for (View &view : app.views) {
+                if (view.buffer != buffer_id) continue;
+
                 i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
                 i64 start_offset = view.lines[line].offset;
                 for (i32 i = line+1; i < view.lines.count; i++) {
@@ -1443,6 +1453,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 }
 
                 recalc_line_wrap(
+                    &view,
                     &view.lines,
                     prev_unwrapped_line(line, view.lines),
                     next_unwrapped_line(line, view.lines),
@@ -1744,14 +1755,16 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
             buffer->flat.size += required_extra_space;
             end_offset += required_extra_space;
 
-            // TODO(jesper): multi-view support
-            if (view.buffer == buffer_id) {
+            for (View &view : app.views) {
+                if (view.buffer != buffer_id) continue;
+
                 i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
                 for (i32 i = line+1; i < view.lines.count; i++) {
                     view.lines[i].offset += required_extra_space;
                 }
 
                 recalc_line_wrap(
+                    &view,
                     &view.lines,
                     calc_unwrapped_line(line, view.lines),
                     next_unwrapped_line(line, view.lines),
@@ -1826,9 +1839,13 @@ void buffer_undo(BufferId buffer_id)
             buffer_insert(buffer_id, h.offset, h.text, false);
             break;
         case BUFFER_CURSOR_POS:
-            view.caret.byte_offset = h.caret;
-            view.mark.byte_offset = h.mark;
-            view.caret_dirty = true;
+            // TODO(jesper): this is broken if views change between history
+            // entries
+            if (app.views[h.view_id].buffer != buffer_id) continue;
+
+            app.views[h.view_id].caret.byte_offset = h.caret;
+            app.views[h.view_id].mark.byte_offset = h.mark;
+            app.views[h.view_id].caret_dirty = true;
             break;
         case BUFFER_HISTORY_GROUP_START:
             group_level++;
@@ -1840,7 +1857,9 @@ void buffer_undo(BufferId buffer_id)
     } while (group_level < 0);
 
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
-    move_view_to_caret();
+    for (View &view : app.views) {
+        if (view.buffer == buffer_id) move_view_to_caret(&view);
+    }
 }
 
 void buffer_redo(BufferId buffer_id)
@@ -1861,9 +1880,13 @@ void buffer_redo(BufferId buffer_id)
             buffer_remove(buffer_id, h.offset, h.offset+h.text.length, false);
             break;
         case BUFFER_CURSOR_POS:
-            view.caret.byte_offset = h.caret;
-            view.mark.byte_offset = h.mark;
-            view.caret_dirty = true;
+            // TODO(jesper): this is broken if views change between history
+            // entries
+            if (app.views[h.view_id].buffer != buffer_id) continue;
+
+            app.views[h.view_id].caret.byte_offset = h.caret;
+            app.views[h.view_id].mark.byte_offset = h.mark;
+            app.views[h.view_id].caret_dirty = true;
             break;
         case BUFFER_HISTORY_GROUP_START:
             group_level++;
@@ -1875,7 +1898,9 @@ void buffer_redo(BufferId buffer_id)
     } while (group_level > 0);
 
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
-    move_view_to_caret();
+    for (View &view : app.views) {
+        if (view.buffer == buffer_id) move_view_to_caret(&view);
+    }
 }
 
 bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
@@ -2105,9 +2130,10 @@ String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line
 
 bool app_needs_render()
 {
-    return app.next_mode != app.mode || app.animating || view.lines_dirty || view.caret_dirty;
+    if (app.next_mode != app.mode || app.animating) return true;
+    for (View &view : app.views) if (view.lines_dirty || view.caret_dirty) return true;
+    return false;
 }
-
 
 Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines)
 {
@@ -2143,9 +2169,9 @@ Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines
     return caret;
 }
 
-void move_view_to_caret()
+void move_view_to_caret(View *view)
 {
-    view.defer_move_view_to_caret = 1;
+    view->defer_move_view_to_caret = 1;
 }
 
 // NOTE(jesper): this is poorly named. It starts/stops a history group and records the active view's
@@ -2156,100 +2182,106 @@ struct BufferHistoryScope {
     BufferHistoryScope(BufferId buffer) : buffer(buffer)
     {
         buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_START });
-        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+        for (View &view : app.views) {
+            if (view.buffer != buffer) continue;
+            buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+        }
     }
 
     ~BufferHistoryScope()
     {
-        buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+        for (View &view : app.views) {
+            if (view.buffer != buffer) continue;
+            buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+        }
         buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_END });
     }
 };
 
-void view_seek_line(i32 wrapped_line)
+void view_seek_line(View *view, i32 wrapped_line)
 {
-    ASSERT(!view.lines_dirty);
-    Buffer *buffer = get_buffer(view.buffer);
+    ASSERT(!view->lines_dirty);
+    Buffer *buffer = get_buffer(view->buffer);
 
-    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
-    if (buffer && wrapped_line != view.caret.wrapped_line) {
-        i32 l = CLAMP(view.caret.wrapped_line, 0, view.lines.count-1);
+    wrapped_line = CLAMP(wrapped_line, 0, view->lines.count-1);
+    if (buffer && wrapped_line != view->caret.wrapped_line) {
+        i32 l = CLAMP(view->caret.wrapped_line, 0, view->lines.count-1);
         while (l > 0 && l > wrapped_line) {
-            if (!view.lines[l--].wrapped) view.caret.line--;
+            if (!view->lines[l--].wrapped) view->caret.line--;
         }
 
-        while (l < view.lines.count-1 && l < wrapped_line) {
-            if (!view.lines[++l].wrapped) view.caret.line++;
+        while (l < view->lines.count-1 && l < wrapped_line) {
+            if (!view->lines[++l].wrapped) view->caret.line++;
         }
 
-        view.caret.wrapped_line = l;
-        view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, view.caret.preferred_column, view.lines, buffer);
-        view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-        view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+        view->caret.wrapped_line = l;
+        view->caret.wrapped_column = calc_wrapped_column(view->caret.wrapped_line, view->caret.preferred_column, view->lines, buffer);
+        view->caret.column = calc_unwrapped_column(view->caret.wrapped_line, view->caret.wrapped_column, view->lines, buffer);
+        view->caret.byte_offset = calc_byte_offset(view->caret.wrapped_column, view->caret.wrapped_line, view->lines, buffer);
 
-        move_view_to_caret();
+        move_view_to_caret(view);
 
         app.animating = true;
     }
 }
 
-void view_seek_byte_offset(i64 byte_offset)
+void view_seek_byte_offset(View *view, i64 byte_offset)
 {
-    byte_offset = CLAMP(byte_offset, 0, buffer_end(view.buffer));
+    byte_offset = CLAMP(byte_offset, 0, buffer_end(view->buffer));
 
-    if (byte_offset != view.caret.byte_offset) {
-        view.caret.byte_offset = byte_offset;
+    if (byte_offset != view->caret.byte_offset) {
+        view->caret.byte_offset = byte_offset;
 
-        ASSERT(!view.lines_dirty);
-        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+        ASSERT(!view->lines_dirty);
+        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+        view->mark = recalculate_caret(view->mark, view->buffer, view->lines);
 
-        move_view_to_caret();
+        move_view_to_caret(view);
 
         app.animating = true;
     }
 }
 
-void write_string(BufferId buffer_id, String str, u32 flags = 0)
+void write_string(View *view, BufferId buffer_id, String str, u32 flags = 0)
 {
     if (!buffer_valid(buffer_id)) return;
-    if (flags & VIEW_SET_MARK) view.mark = view.caret;
+    if (flags & VIEW_SET_MARK) view->mark = view->caret;
 
     BufferHistoryScope h(buffer_id);
-    view.caret.byte_offset = buffer_insert(buffer_id, view.caret.byte_offset, str);
-    ASSERT(!view.lines_dirty);
-    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+    view->caret.byte_offset = buffer_insert(buffer_id, view->caret.byte_offset, str);
+    ASSERT(!view->lines_dirty);
+    view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+    view->mark = recalculate_caret(view->mark, view->buffer, view->lines);
 
-    move_view_to_caret();
+    move_view_to_caret(view);
 
     app.animating = true;
 }
 
-void set_caret_xy(i64 x, i64 y)
+void set_caret_xy(View *view, i64 x, i64 y)
 {
-    Buffer *buffer = get_buffer(view.buffer);
+    Buffer *buffer = get_buffer(view->buffer);
     if (!buffer) return;
 
-    ASSERT(!view.lines_dirty);
-    i64 wrapped_line = view.line_offset + (y - view.rect.pos.y + view.voffset) / app.mono.line_height;
-    wrapped_line = CLAMP(wrapped_line, 0, view.lines.count-1);
+    ASSERT(!view->lines_dirty);
+    i64 wrapped_line = view->line_offset + (y - view->rect.pos.y + view->voffset) / app.mono.line_height;
+    wrapped_line = CLAMP(wrapped_line, 0, view->lines.count-1);
 
-    while (view.caret.wrapped_line > wrapped_line) {
-        if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line--;
-        view.caret.wrapped_line--;
+    while (view->caret.wrapped_line > wrapped_line) {
+        if (!view->lines[view->caret.wrapped_line].wrapped) view->caret.line--;
+        view->caret.wrapped_line--;
     }
 
-    while (view.caret.wrapped_line < wrapped_line) {
-        if (!view.lines[view.caret.wrapped_line].wrapped) view.caret.line++;
-        view.caret.wrapped_line++;
+    while (view->caret.wrapped_line < wrapped_line) {
+        if (!view->lines[view->caret.wrapped_line].wrapped) view->caret.line++;
+        view->caret.wrapped_line++;
     }
 
-    i64 wrapped_column = (x - view.rect.pos.x) / app.mono.space_width;
-    view.caret.wrapped_column = calc_wrapped_column(view.caret.wrapped_line, wrapped_column, view.lines, buffer);
-    view.caret.preferred_column = view.caret.wrapped_column;
-    view.caret.column = calc_unwrapped_column(view.caret.wrapped_line, view.caret.wrapped_column, view.lines, buffer);
-    view.caret.byte_offset = calc_byte_offset(view.caret.wrapped_column, view.caret.wrapped_line, view.lines, buffer);
+    i64 wrapped_column = (x - view->rect.pos.x) / app.mono.space_width;
+    view->caret.wrapped_column = calc_wrapped_column(view->caret.wrapped_line, wrapped_column, view->lines, buffer);
+    view->caret.preferred_column = view->caret.wrapped_column;
+    view->caret.column = calc_unwrapped_column(view->caret.wrapped_line, view->caret.wrapped_column, view->lines, buffer);
+    view->caret.byte_offset = calc_byte_offset(view->caret.wrapped_column, view->caret.wrapped_line, view->lines, buffer);
 }
 
 void exec_process_command()
@@ -2270,6 +2302,8 @@ void app_event(WindowEvent event)
         return;
     }
 
+    View *view = app.current_view;
+
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
     // management in order to record the cursor position in the history groups, so that when
     // a user undo/redo the cursor is repositioned to where it was before/after the edit
@@ -2284,7 +2318,7 @@ void app_event(WindowEvent event)
         break;
     case WE_TEXT:
         if (app.mode == MODE_INSERT) {
-            write_string(view.buffer, String{ (char*)&event.text.c[0], event.text.length });
+            write_string(view, view->buffer, String{ (char*)&event.text.c[0], event.text.length });
             app.animating = true;
         }
         break;
@@ -2294,29 +2328,29 @@ void app_event(WindowEvent event)
         if (app.mode == MODE_EDIT) {
             switch (event.key.keycode) {
             case KC_SLASH:
-                app.incremental_search.start_caret = view.caret.byte_offset;
-                app.incremental_search.start_mark = view.mark.byte_offset;
+                app.incremental_search.start_caret = view->caret.byte_offset;
+                app.incremental_search.start_mark = view->mark.byte_offset;
                 app.incremental_search.active = true;
                 app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
                 break;
             case KC_GRAVE:
                 // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
                 // textual fall-back version which doesn't handle comments or strings
-                if (auto buffer = get_buffer(view.buffer); buffer) {
-                    i64 f = buffer_seek_first_forward(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset-1);
-                    i64 b = buffer_seek_first_back(view.buffer, {'{','}', '[',']', '(',')'}, view.caret.byte_offset+1);
+                if (auto buffer = get_buffer(view->buffer); buffer) {
+                    i64 f = buffer_seek_first_forward(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset-1);
+                    i64 b = buffer_seek_first_back(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset+1);
 
-                    if (f != -1 && f != view.caret.byte_offset &&
-                        (b < line_start_offset(view.caret.wrapped_line, view.lines) ||
-                         b > line_end_offset(view.caret.wrapped_line, view.lines, view.buffer)))
+                    if (f != -1 && f != view->caret.byte_offset &&
+                        (b < line_start_offset(view->caret.wrapped_line, view->lines) ||
+                         b > line_end_offset(view->caret.wrapped_line, view->lines, view->buffer)))
                     {
-                        view.caret.byte_offset = f;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                        view->caret.byte_offset = f;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                         break;
                     }
 
-                    i64 offset = b == -1 || f-view.caret.byte_offset < view.caret.byte_offset-b ? f : b;
+                    i64 offset = b == -1 || f-view->caret.byte_offset < view->caret.byte_offset-b ? f : b;
                     if (offset == -1) break;
 
                     char l = char_at(buffer, offset);
@@ -2337,8 +2371,8 @@ void app_event(WindowEvent event)
                     i32 level = 1;
                     while (level >= 1) {
                         offset = forward ?
-                            buffer_seek_first_forward(view.buffer, {l, r}, offset) :
-                            buffer_seek_first_back(view.buffer, {l, r}, offset);
+                            buffer_seek_first_forward(view->buffer, {l, r}, offset) :
+                            buffer_seek_first_back(view->buffer, {l, r}, offset);
 
                         char c = char_at(buffer, offset);
                         if (c == l) level++;
@@ -2346,9 +2380,9 @@ void app_event(WindowEvent event)
                     }
 
                     if (offset >= 0) {
-                        view.caret.byte_offset = offset;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
+                        view->caret.byte_offset = offset;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     }
                 } break;
             case KC_ESC:
@@ -2357,30 +2391,30 @@ void app_event(WindowEvent event)
                 break;
             case KC_F5: exec_process_command(); break;
             case KC_Q:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                ASSERT(!view.lines_dirty);
-                view_seek_byte_offset(buffer_seek_beginning_of_line(view.buffer, view.lines, view.caret.wrapped_line));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                ASSERT(!view->lines_dirty);
+                view_seek_byte_offset(view, buffer_seek_beginning_of_line(view->buffer, view->lines, view->caret.wrapped_line));
                 break;
             case KC_E:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                ASSERT(!view.lines_dirty);
-                view_seek_byte_offset(buffer_seek_end_of_line(view.buffer, view.lines, view.caret.wrapped_line));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                ASSERT(!view->lines_dirty);
+                view_seek_byte_offset(view, buffer_seek_end_of_line(view->buffer, view->lines, view->caret.wrapped_line));
                 break;
             case KC_RBRACKET:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                ASSERT(!view.lines_dirty);
-                view_seek_line(buffer_seek_next_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                ASSERT(!view->lines_dirty);
+                view_seek_line(view, buffer_seek_next_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
                 break;
             case KC_LBRACKET:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                ASSERT(!view.lines_dirty);
-                view_seek_line(buffer_seek_prev_empty_line(view.buffer, view.lines, view.caret.wrapped_line));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                ASSERT(!view->lines_dirty);
+                view_seek_line(view, buffer_seek_prev_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
                 break;
-            case KC_U: buffer_undo(view.buffer); break;
-            case KC_R: buffer_redo(view.buffer); break;
+            case KC_U: buffer_undo(view->buffer); break;
+            case KC_R: buffer_redo(view->buffer); break;
             case KC_M:
-                if (event.key.modifiers == MF_CTRL) SWAP(view.mark, view.caret);
-                else view.mark = view.caret;
+                if (event.key.modifiers == MF_CTRL) SWAP(view->mark, view->caret);
+                else view->mark = view->caret;
                 break;
             case KC_O:
                 app.lister.active = true;
@@ -2393,122 +2427,123 @@ void app_event(WindowEvent event)
                 array_copy(&app.lister.filtered, app.lister.values);
                 break;
             case KC_D:
-                if (buffer_valid(view.buffer)) {
-                    ASSERT(!view.lines_dirty);
-                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
+                if (buffer_valid(view->buffer)) {
+                    ASSERT(!view->lines_dirty);
+                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
                     if (r.end == r.start) break;
 
-                    BufferHistoryScope h(view.buffer);
-                    if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.caret;
-                        move_view_to_caret();
+                    BufferHistoryScope h(view->buffer);
+                    if (buffer_remove(view->buffer, r.start, r.end)) {
+                        view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        view->mark = view->caret;
+                        move_view_to_caret(view);
                     }
                 } break;
             case KC_X: {
-                    BufferHistoryScope h(view.buffer);
+                    BufferHistoryScope h(view->buffer);
 
-                    ASSERT(!view.lines_dirty);
-                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
-                    String str = buffer_read(view.buffer, r.start, r.end);
+                    ASSERT(!view->lines_dirty);
+                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+                    String str = buffer_read(view->buffer, r.start, r.end);
                     set_clipboard_data(str);
 
-                    if (buffer_remove(view.buffer, r.start, r.end)) {
-                        view.caret = view.caret.byte_offset > view.mark.byte_offset ? view.mark : view.caret;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        view.mark = view.caret;
-                        move_view_to_caret();
+                    if (buffer_remove(view->buffer, r.start, r.end)) {
+                        view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        view->mark = view->caret;
+                        move_view_to_caret(view);
                     }
                 } break;
             case KC_Y: {
-                    ASSERT(!view.lines_dirty);
-                    Range_i64 r = caret_range(view.caret, view.mark, view.lines, view.buffer, event.key.modifiers == MF_CTRL);
-                    set_clipboard_data(buffer_read(view.buffer, r.start, r.end));
+                    ASSERT(!view->lines_dirty);
+                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+                    set_clipboard_data(buffer_read(view->buffer, r.start, r.end));
                 } break;
             case KC_N:
                 if (app.incremental_search.str.length > 0) {
                     i64 offset = event.key.modifiers == MF_CTRL ?
-                        buffer_seek_back(view.buffer, app.incremental_search.str, view.caret.byte_offset) :
-                        buffer_seek_forward(view.buffer, app.incremental_search.str, view.caret.byte_offset);
+                        buffer_seek_back(view->buffer, app.incremental_search.str, view->caret.byte_offset) :
+                        buffer_seek_forward(view->buffer, app.incremental_search.str, view->caret.byte_offset);
 
-                    if (offset != view.caret.byte_offset) {
-                        view.caret.byte_offset = offset;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        if (app.incremental_search.set_mark) view.mark = view.caret;
+                    if (offset != view->caret.byte_offset) {
+                        view->caret.byte_offset = offset;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        if (app.incremental_search.set_mark) view->mark = view->caret;
 
-                        move_view_to_caret();
+                        move_view_to_caret(view);
                     }
                 } break;
             case KC_P:
-                write_string(view.buffer, read_clipboard_str(), VIEW_SET_MARK);
+                write_string(view, view->buffer, read_clipboard_str(), VIEW_SET_MARK);
                 break;
             case KC_W:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_byte_offset(buffer_seek_next_word(view.buffer, view.caret.byte_offset));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_byte_offset(view, buffer_seek_next_word(view->buffer, view->caret.byte_offset));
                 break;
             case KC_B:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_byte_offset(buffer_seek_prev_word(view.buffer, view.caret.byte_offset));
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_byte_offset(view, buffer_seek_prev_word(view->buffer, view->caret.byte_offset));
                 break;
             case KC_J:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_line(view.caret.wrapped_line+1);
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_line(view, view->caret.wrapped_line+1);
                 break;
             case KC_K:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_line(view.caret.wrapped_line-1);
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_line(view, view->caret.wrapped_line-1);
                 break;
             case KC_I:
                 app.next_mode = MODE_INSERT;
-                view.mark = view.caret;
+                view->mark = view->caret;
                 break;
             case KC_L:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
-                ASSERT(!view.lines_dirty);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                ASSERT(!view->lines_dirty);
+                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                move_view_to_caret(view);
                 break;
             case KC_H:
-                if (event.key.modifiers != MF_SHIFT) view.mark = view.caret;
-                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
-                ASSERT(!view.lines_dirty);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
+                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
+                ASSERT(!view->lines_dirty);
+                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                move_view_to_caret(view);
                 break;
             case KC_S:
-                if (event.key.modifiers == MF_CTRL) buffer_save(view.buffer);
+                // TODO(jesper): save all?
+                if (event.key.modifiers == MF_CTRL) buffer_save(view->buffer);
                 break;
             case KC_TAB:
-                if (auto buffer = get_buffer(view.buffer); buffer) {
-                    i32 line = calc_unwrapped_line(view.caret.wrapped_line, view.lines);
+                if (auto buffer = get_buffer(view->buffer); buffer) {
+                    i32 line = calc_unwrapped_line(view->caret.wrapped_line, view->lines);
                     Range_i32 r{ line, line };
                     if (event.key.modifiers & MF_CTRL) {
-                        r = range_i32(line, calc_unwrapped_line(view.mark.wrapped_line, view.lines));
+                        r = range_i32(line, calc_unwrapped_line(view->mark.wrapped_line, view->lines));
                     }
 
                     bool recalc_caret = false, recalc_mark = false;
                     defer {
                         if (recalc_caret) {
-                            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                            move_view_to_caret();
+                            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            move_view_to_caret(view);
                         }
 
                         if (recalc_mark) {
-                            view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                            view->mark = recalculate_caret(view->mark, view->buffer, view->lines);
                         }
                     };
 
-                    BufferHistoryScope h(view.buffer);
+                    BufferHistoryScope h(view->buffer);
 
                     if (event.key.modifiers & MF_SHIFT) {
                         struct Edit { i64 offset; i32 bytes_to_remove; };
                         DynamicArray<Edit> edits{ .alloc = mem_tmp };
-                        for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view.lines)) {
-                            i64 line_start = line_start_offset(l, view.lines);
+                        for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view->lines)) {
+                            i64 line_start = line_start_offset(l, view->lines);
 
-                            String current_indent = get_indent_for_line(view.buffer, view.lines, l);
+                            String current_indent = get_indent_for_line(view->buffer, view->lines, l);
 
                             i32 vcol = 0;
                             i32 i;
@@ -2524,27 +2559,27 @@ void app_event(WindowEvent event)
                         for (i32 i = edits.count-1; i >= 0; i--) {
                             Edit edit = edits[i];
 
-                            if (buffer_remove(view.buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
-                                if (view.caret.byte_offset >= edit.offset) {
-                                    view.caret.byte_offset -= edit.bytes_to_remove;
+                            if (buffer_remove(view->buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
+                                if (view->caret.byte_offset >= edit.offset) {
+                                    view->caret.byte_offset -= edit.bytes_to_remove;
                                     recalc_caret = true;
                                 }
 
-                                if (view.mark.byte_offset > edit.offset) {
-                                    view.mark.byte_offset -= edit.bytes_to_remove;
+                                if (view->mark.byte_offset > edit.offset) {
+                                    view->mark.byte_offset -= edit.bytes_to_remove;
                                     recalc_mark = true;
                                 }
                             }
                         }
 
                     } else {
-                        for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view.lines)) {
-                            i64 line_start = line_start_offset(l, view.lines);
+                        for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view->lines)) {
+                            i64 line_start = line_start_offset(l, view->lines);
 
                             i64 new_offset;
-                            if (buffer->indent_with_tabs) new_offset = buffer_insert(view.buffer, line_start, "\t");
+                            if (buffer->indent_with_tabs) new_offset = buffer_insert(view->buffer, line_start, "\t");
                             else {
-                                String current_indent = get_indent_for_line(view.buffer, view.lines, l);
+                                String current_indent = get_indent_for_line(view->buffer, view->lines, l);
 
                                 i32 vcol = 0;
                                 for (i32 i = 0; i < current_indent.length; i++) {
@@ -2555,16 +2590,16 @@ void app_event(WindowEvent event)
                                 i32 w = buffer->tab_width - vcol % buffer->tab_width;
                                 char *spaces = ALLOC_ARR(mem_tmp, char, w);
                                 memset(spaces, ' ', w);
-                                new_offset = buffer_insert(view.buffer, line_start, { spaces, w });
+                                new_offset = buffer_insert(view->buffer, line_start, { spaces, w });
                             }
 
-                            if (view.caret.byte_offset >= line_start) {
-                                view.caret.byte_offset += new_offset - line_start;
+                            if (view->caret.byte_offset >= line_start) {
+                                view->caret.byte_offset += new_offset - line_start;
                                 recalc_caret = true;
                             }
 
-                            if (view.mark.byte_offset > line_start) {
-                                view.mark.byte_offset += new_offset - line_start;
+                            if (view->mark.byte_offset > line_start) {
+                                view->mark.byte_offset += new_offset - line_start;
                                 recalc_mark = true;
                             }
                         }
@@ -2578,30 +2613,30 @@ void app_event(WindowEvent event)
                 app.next_mode = MODE_EDIT;
                 break;
             case KC_LEFT:
-                view.caret.byte_offset = buffer_prev_offset(view.buffer, view.caret.byte_offset);
-                ASSERT(!view.lines_dirty);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
+                view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
+                ASSERT(!view->lines_dirty);
+                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                move_view_to_caret(view);
                 break;
             case KC_RIGHT:
-                view.caret.byte_offset = buffer_next_offset(view.buffer, view.caret.byte_offset);
-                ASSERT(!view.lines_dirty);
-                view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                move_view_to_caret();
+                view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                ASSERT(!view->lines_dirty);
+                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                move_view_to_caret(view);
                 break;
             case KC_ENTER:
-                if (buffer_valid(view.buffer)) {
-                    BufferHistoryScope h(view.buffer);
-                    ASSERT(!view.lines_dirty);
-                    String indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
-                    write_string(view.buffer, buffer_newline_str(view.buffer));
-                    write_string(view.buffer, indent);
+                if (buffer_valid(view->buffer)) {
+                    BufferHistoryScope h(view->buffer);
+                    ASSERT(!view->lines_dirty);
+                    String indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line);
+                    write_string(view, view->buffer, buffer_newline_str(view->buffer));
+                    write_string(view, view->buffer, indent);
                 } break;
             case KC_TAB:
-                if (Buffer *buffer = get_buffer(view.buffer); buffer) {
-                    if (buffer->indent_with_tabs) write_string(view.buffer, "\t");
+                if (Buffer *buffer = get_buffer(view->buffer); buffer) {
+                    if (buffer->indent_with_tabs) write_string(view, view->buffer, "\t");
                     else {
-                        String current_indent = get_indent_for_line(view.buffer, view.lines, view.caret.wrapped_line);
+                        String current_indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line);
 
                         i32 vcol = 0;
                         for (i32 i = 0; i < current_indent.length; i++) {
@@ -2613,27 +2648,27 @@ void app_event(WindowEvent event)
                         i32 w = buffer->tab_width - vcol % buffer->tab_width;
                         char *spaces = ALLOC_ARR(mem_tmp, char, w);
                         memset(spaces, ' ', w);
-                        write_string(view.buffer, { spaces, w });
+                        write_string(view, view->buffer, { spaces, w });
                     }
 
                 } break;
             case KC_BACKSPACE:
-                if (buffer_valid(view.buffer)) {
-                    BufferHistoryScope h(view.buffer);
-                    i64 start = buffer_prev_offset(view.buffer, view.caret.byte_offset);
-                    if (buffer_remove(view.buffer, start, view.caret.byte_offset)) {
-                        view.caret.byte_offset = start;
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        move_view_to_caret();
+                if (buffer_valid(view->buffer)) {
+                    BufferHistoryScope h(view->buffer);
+                    i64 start = buffer_prev_offset(view->buffer, view->caret.byte_offset);
+                    if (buffer_remove(view->buffer, start, view->caret.byte_offset)) {
+                        view->caret.byte_offset = start;
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        move_view_to_caret(view);
                     }
                 } break;
             case KC_DELETE:
-                if (buffer_valid(view.buffer)) {
-                    BufferHistoryScope h(view.buffer);
-                    i64 end = buffer_next_offset(view.buffer, view.caret.byte_offset);
-                    if (buffer_remove(view.buffer, view.caret.byte_offset, end)) {
-                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                        move_view_to_caret();
+                if (buffer_valid(view->buffer)) {
+                    BufferHistoryScope h(view->buffer);
+                    i64 end = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                    if (buffer_remove(view->buffer, view->caret.byte_offset, end)) {
+                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                        move_view_to_caret(view);
                     }
                 } break;
 
@@ -2646,34 +2681,34 @@ void app_event(WindowEvent event)
             case KC_PAGE_DOWN:
                 // TODO(jesper: page up/down should take current caret line into account when moving
                 // view to caret, so that it remains where it was proportionally
-                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_line(view.caret.wrapped_line+view.lines_visible-1);
+                if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_line(view, view->caret.wrapped_line+view->lines_visible-1);
                 break;
             case KC_PAGE_UP:
                 // TODO(jesper: page up/down should take current caret line into account when moving
                 // view to caret, so that it remains where it was proportionally
-                if (event.text.modifiers != MF_SHIFT) view.mark = view.caret;
-                view_seek_line(view.caret.wrapped_line-view.lines_visible-1);
+                if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
+                view_seek_line(view, view->caret.wrapped_line-view->lines_visible-1);
                 break;
             default: break;
             }
         }
         break;
     case WE_MOUSE_MOVE:
-        if (gui.hot == view.gui_id &&
+        if (gui.hot == view->gui_id &&
             event.mouse.button == MB_PRIMARY &&
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
         {
-            set_caret_xy(event.mouse.x, event.mouse.y);
+            set_caret_xy(view, event.mouse.x, event.mouse.y);
             app.animating = true;
         } break;
     case WE_MOUSE_PRESS:
-        if (gui.hot == view.gui_id &&
+        if (gui.hot == view->gui_id &&
             event.mouse.button == MB_PRIMARY &&
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view.rect))
+            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
         {
-            set_caret_xy(event.mouse.x, event.mouse.y);
-            view.mark = view.caret;
+            set_caret_xy(view, event.mouse.x, event.mouse.y);
+            view->mark = view->caret;
             app.animating = true;
         } break;
     case WE_MOUSE_WHEEL:
@@ -2682,21 +2717,21 @@ void app_event(WindowEvent event)
         // kind of temporary scroll back to check on something, that you then get
         // taken back to the current caret when you type something
 
-        view.voffset += event.mouse_wheel.delta;
-        if (view.line_offset == 0 && view.voffset > 0) view.voffset = 0;
+        view->voffset += event.mouse_wheel.delta;
+        if (view->line_offset == 0 && view->voffset > 0) view->voffset = 0;
 
-        if (view.voffset > app.mono.line_height) {
-            f32 div = view.voffset / app.mono.line_height;
-            view.line_offset = MAX(0, view.line_offset-1*div);
-            view.voffset -= app.mono.line_height*div;
-        } else if (view.voffset < -app.mono.line_height) {
-            f32 div = view.voffset / -app.mono.line_height;
-            view.line_offset += 1*div;
-            view.voffset += app.mono.line_height*div;
+        if (view->voffset > app.mono.line_height) {
+            f32 div = view->voffset / app.mono.line_height;
+            view->line_offset = MAX(0, view->line_offset-1*div);
+            view->voffset -= app.mono.line_height*div;
+        } else if (view->voffset < -app.mono.line_height) {
+            f32 div = view->voffset / -app.mono.line_height;
+            view->line_offset += 1*div;
+            view->voffset += app.mono.line_height*div;
         }
 
-        ASSERT(!view.lines_dirty);
-        view.line_offset = MIN(view.line_offset, view.lines.count - 3);
+        ASSERT(!view->lines_dirty);
+        view->line_offset = MIN(view->line_offset, view->lines.count - 3);
 
         app.animating = true;
         break;
@@ -2721,10 +2756,10 @@ void update_and_render()
     // be deferred.
     if (app.mode != app.next_mode) {
         if (app.next_mode == MODE_INSERT) {
-            buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_START });
+            buffer_history(app.current_view->buffer, { .type = BUFFER_HISTORY_GROUP_START });
         } else if (app.mode == MODE_INSERT) {
-            buffer_history(view.buffer, { .type = BUFFER_HISTORY_GROUP_END });
-            if (view.mark.byte_offset > view.caret.byte_offset) view.mark = view.caret;
+            buffer_history(app.current_view->buffer, { .type = BUFFER_HISTORY_GROUP_END });
+            if (app.current_view->mark.byte_offset > app.current_view->caret.byte_offset) app.current_view->mark = app.current_view->caret;
         }
     }
 
@@ -2742,7 +2777,8 @@ void update_and_render()
 
     gui_menu() {
         gui_menu("file") {
-            if (gui_menu_button("save")) buffer_save(view.buffer);
+            // TODO(jesper): save all?
+            if (gui_menu_button("save")) buffer_save(app.current_view->buffer);
 
             if (gui_menu_button("select working dir...")) {
                 String wd = select_folder_dialog();
@@ -2763,7 +2799,7 @@ void update_and_render()
     gui_window("buffer history", &debug.buffer_history.wnd) {
         char str[256];
 
-		if (auto buffer = get_buffer(view.buffer); buffer) {
+		if (auto buffer = get_buffer(app.current_view->buffer); buffer) {
 			for (auto h : buffer->history) {
 				switch (h.type) {
 				case BUFFER_INSERT:
@@ -2897,7 +2933,7 @@ next_node:;
                 BufferId buffer = find_buffer(path);
                 if (!buffer) buffer = create_buffer(path);
 
-                view_set_buffer(buffer);
+                view_set_buffer(app.current_view, buffer);
 
                 app.lister.active = false;
                 gui.focused = GUI_ID_INVALID;
@@ -2915,8 +2951,13 @@ next_node:;
         }
     }
 
-    view.caret_dirty |= view.lines_dirty;
-    {
+    DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
+    for (View &view : app.views) {
+        if (view.id == -1) continue;
+
+        view.caret_dirty |= view.lines_dirty;
+
+        // TODO(jesper): store layout rect stuff in the view
         gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = gui_layout_widget_fill() });
         defer { gui_end_layout(); };
 
@@ -3051,7 +3092,8 @@ next_node:;
                 }
             }
 
-            view_set_buffer(active_buffer);
+            // TODO(jesper): why is this herer
+            view_set_buffer(&view, active_buffer);
         }
 
         if (auto buffer = get_buffer(view.buffer); buffer) {
@@ -3069,7 +3111,7 @@ next_node:;
                     view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
                     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
                     if (app.incremental_search.set_mark) view.mark = view.caret;
-                    move_view_to_caret();
+                    move_view_to_caret(&view);
                 }
 
                 if (action & GUI_EDITBOX_FINISH) {
@@ -3123,214 +3165,212 @@ next_node:;
             if (view.lines_dirty || text_rect != view.rect) {
                 view.rect = text_rect;
 
-                recalc_line_wrap(&view.lines, 0, view.lines.count, view.buffer);
+                recalc_line_wrap(&view, &view.lines, 0, view.lines.count, view.buffer);
 
                 view.lines_dirty = false;
             }
 
             gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size);
         }
-    }
 
-    // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
-    // make sense for this path to go away completely when they are, but I won't completely discount that
-    // we might still need a path to re-calculate it from scratch from a byte offset. But probably we
-    // need to do that immediately instead of deferring, which first relies on all the line wrapping
-    // recalculation to be done immediately as well
-    if (view.caret_dirty) {
-        ASSERT(!view.lines_dirty);
-        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-        view.caret_dirty = false;
-    }
-    view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+        // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
+        // make sense for this path to go away completely when they are, but I won't completely discount that
+        // we might still need a path to re-calculate it from scratch from a byte offset. But probably we
+        // need to do that immediately instead of deferring, which first relies on all the line wrapping
+        // recalculation to be done immediately as well
+        if (view.caret_dirty) {
+            ASSERT(!view.lines_dirty);
+            view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+            view.caret_dirty = false;
+        }
+        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
 
-    if (view.defer_move_view_to_caret) {
-        i32 line_padding = 3;
+        if (view.defer_move_view_to_caret) {
+            i32 line_padding = 3;
 
-        // TODO(jesper): do something sensible with the decimal vertical offset
-        if (view.caret.wrapped_line-line_padding < view.line_offset) {
-            view.line_offset = MAX(0, view.caret.wrapped_line-line_padding);
-        } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-4) {
-            view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+4);
+            // TODO(jesper): do something sensible with the decimal vertical offset
+            if (view.caret.wrapped_line-line_padding < view.line_offset) {
+                view.line_offset = MAX(0, view.caret.wrapped_line-line_padding);
+            } else if (view.caret.wrapped_line+line_padding > view.line_offset + view.lines_visible-4) {
+                view.line_offset = MIN(view.lines.count-1, view.caret.wrapped_line+line_padding - view.lines_visible+4);
+            }
+
+            view.defer_move_view_to_caret = 0;
         }
 
-        view.defer_move_view_to_caret = 0;
-    }
 
+        if (view.caret.wrapped_line >= view.line_offset &&
+            view.caret.wrapped_line < view.line_offset + view.lines_visible)
+        {
+            i32 y = view.caret.wrapped_line - view.line_offset;
+            f32 w = app.mono.space_width;
+            f32 h = app.mono.line_height - 2.0f;
 
-    if (view.caret.wrapped_line >= view.line_offset &&
-        view.caret.wrapped_line < view.line_offset + view.lines_visible)
-    {
-        i32 y = view.caret.wrapped_line - view.line_offset;
-        f32 w = app.mono.space_width;
-        f32 h = app.mono.line_height - 2.0f;
+            Vector2 p0{
+                view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
+                view.rect.pos.y + y*app.mono.line_height - view.voffset,
+            };
+            Vector2 p1{ p0.x, p0.y + h };
 
-        Vector2 p0{
-            view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
-            view.rect.pos.y + y*app.mono.line_height - view.voffset,
-        };
-        Vector2 p1{ p0.x, p0.y + h };
+            gui_draw_rect({ view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg, &gfx.frame_cmdbuf);
 
-        gui_draw_rect({ view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p0, { w, h }, app.caret_bg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p0, { 1.0f, h }, app.caret_fg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p0, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
+        }
 
-        gui_draw_rect(p0, { w, h }, app.caret_bg, &gfx.frame_cmdbuf);
-        gui_draw_rect(p0, { 1.0f, h }, app.caret_fg, &gfx.frame_cmdbuf);
-        gui_draw_rect(p0, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
-        gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
-    }
+        if (view.mark.wrapped_line >= view.line_offset &&
+            view.mark.wrapped_line < view.line_offset + view.lines_visible)
+        {
+            i32 y = view.mark.wrapped_line - view.line_offset;
+            f32 w = app.mono.space_width/2;
+            f32 h = app.mono.line_height - 2.0f;
 
-    if (view.mark.wrapped_line >= view.line_offset &&
-        view.mark.wrapped_line < view.line_offset + view.lines_visible)
-    {
-        i32 y = view.mark.wrapped_line - view.line_offset;
-        f32 w = app.mono.space_width/2;
-        f32 h = app.mono.line_height - 2.0f;
+            Vector2 p0{
+                view.rect.pos.x + view.mark.wrapped_column*app.mono.space_width,
+                view.rect.pos.y + y*app.mono.line_height - view.voffset,
+            };
+            Vector2 p1{ p0.x, p0.y + h };
 
-        Vector2 p0{
-            view.rect.pos.x + view.mark.wrapped_column*app.mono.space_width,
-            view.rect.pos.y + y*app.mono.line_height - view.voffset,
-        };
-        Vector2 p1{ p0.x, p0.y + h };
+            gui_draw_rect(p0, { 1.0f, h }, app.mark_fg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p0, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
+            gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
+        }
 
-        gui_draw_rect(p0, { 1.0f, h }, app.mark_fg, &gfx.frame_cmdbuf);
-        gui_draw_rect(p0, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
-        gui_draw_rect(p1, { w, 1.0f }, app.mark_fg, &gfx.frame_cmdbuf);
-    }
+        if (Buffer *buffer = get_buffer(view.buffer); buffer) {
+            FontAtlas *font = &app.mono;
 
-    Buffer *buffer = get_buffer(view.buffer);
+            Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
+            Vector2 size{ view.rect.size.x, view.rect.size.y };
 
-    if (buffer) {
-        FontAtlas *font = &app.mono;
+            i32 columns = (i32)ceilf(view.rect.size.x / font->space_width);
+            i32 rows = view.lines_visible;
 
-        Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
-        Vector2 size{ view.rect.size.x, view.rect.size.y };
+            i64 byte_start = line_start_offset(view.line_offset, view.lines);
+            i64 byte_end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
 
-        i32 columns = (i32)ceilf(view.rect.size.x / font->space_width);
-        i32 rows = view.lines_visible;
-
-        i64 byte_start = line_start_offset(view.line_offset, view.lines);
-        i64 byte_end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
-
-        if (DEBUG_TREE_SITTER_COLORS) LOG_INFO("-- highlight query start --");
-        DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
+            if (DEBUG_TREE_SITTER_COLORS) LOG_INFO("-- highlight query start --");
+            colors.count = 0;
 
 #if DEBUG_TREE_SITTER_COLORS
-        String l = string_from_enum(buffer->language);
-        LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
-#endif
-        get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
-
-        for (auto st : buffer->subtrees) {
-#if DEBUG_TREE_SITTER_COLORS
-            String l = string_from_enum(st.language);
+            String l = string_from_enum(buffer->language);
             LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
 #endif
-            get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
-        }
+            get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
 
-        if (DEBUG_TREE_SITTER_COLORS) for (auto c : colors) LOG_INFO("color range [%d, %d]", c.start, c.end);
-
-        ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
-
-        void *mapped = nullptr;
-        i32 buffer_size = 0;
-        //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size)
-        {
-            if (mapped) {
-                glUnmapNamedBuffer(view.glyph_data_ssbo);
-                mapped = nullptr;
+            for (auto st : buffer->subtrees) {
+#if DEBUG_TREE_SITTER_COLORS
+                String l = string_from_enum(st.language);
+                LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
+#endif
+                get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
             }
 
-            buffer_size = columns*rows*sizeof glyphs[0];
-            glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
-            glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
-        }
+            if (DEBUG_TREE_SITTER_COLORS) for (auto c : colors) LOG_INFO("color range [%d, %d]", c.start, c.end);
 
-        mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
-        glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
-        defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
+            ANON_ARRAY(u32 glyph_index; u32 fg) glyphs{};
 
-        Vector3 fg = linear_from_sRGB(app.fg);
-
-        for (auto &g : glyphs) {
-            g.glyph_index = 0xFFFFFFFF;
-            g.fg = bgr_pack(fg);
-        }
-
-        i32 current_color = 0;
-        for (i32 line_index = view.line_offset;
-             line_index < MIN(view.lines.count, view.line_offset+rows);
-             line_index++)
-        {
-            i32 i = line_index-view.line_offset;
-            i64 p = view.lines[line_index].offset;
-            i64 end = line_end_offset(line_index, view.lines, buffer);
-
-            i64 vcolumn = 0;
-            while (p < end) {
-                i64 pc = p;
-                i32 c = utf32_it_next(buffer, &p);
-                if (c == 0) break;
-
-                if (c == '\n' || c == '\r') {
-                    if (p < end && c == '\n' && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
-                    if (p < end && c == '\r' && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
-                    vcolumn = 0;
-                    continue;
-                }
-
-                if (c == ' ') {
-                    vcolumn++;
-                    continue;
-                }
-
-                if (c == '\t') {
-                    i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
-                    vcolumn += w;
-                    continue;
-                }
-
-                // TODO(jesper): this is broken if a glyph is larger than the cell whatever unicode esque reason
-                Glyph glyph = find_or_create_glyph(font, c);
-                u32 index = (u32(glyph.x0) & 0xFFFF) | (u32(glyph.y0) << 16);
-                glyphs[i*columns + vcolumn].glyph_index = index;
-
-                while (current_color < colors.count && colors[current_color].end <= pc) current_color++;
-                if (current_color < colors.count && pc >= colors[current_color].start) {
-                    glyphs[i*columns+vcolumn].fg = colors[current_color].color;
-                }
-
-                vcolumn++;
-            }
-        }
-
-        GfxCommand cmd{
-            .type = GFX_COMMAND_MONO_TEXT,
-            .mono_text = {
-                .vbo = gfx.vbos.frame,
-                .vbo_offset = gfx.frame_vertices.count,
-                .glyph_ssbo = view.glyph_data_ssbo,
-                .glyph_atlas = font->texture,
-                .cell_size = { app.mono.space_width, app.mono.line_height },
-                .pos = pos,
-                .offset = view.voffset,
-                .line_offset = view.line_offset,
-                .columns = columns,
-            }
-        };
-
-        array_add(
-            &gfx.frame_vertices,
+            void *mapped = nullptr;
+            i32 buffer_size = 0;
+            //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size)
             {
-                pos.x+size.x, pos.y,
-                pos.x       , pos.y,
-                pos.x       , pos.y+size.y,
-                pos.x       , pos.y+size.y,
-                pos.x+size.x, pos.y+size.y,
-                pos.x+size.x, pos.y,
-            });
+                if (mapped) {
+                    glUnmapNamedBuffer(view.glyph_data_ssbo);
+                    mapped = nullptr;
+                }
 
-        gfx_push_command(&gfx.frame_cmdbuf, cmd);
+                buffer_size = columns*rows*sizeof glyphs[0];
+                glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
+                glBufferData(GL_SHADER_STORAGE_BUFFER, buffer_size, nullptr, GL_STREAM_DRAW);
+            }
+
+            mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
+            glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
+            defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
+
+            Vector3 fg = linear_from_sRGB(app.fg);
+
+            for (auto &g : glyphs) {
+                g.glyph_index = 0xFFFFFFFF;
+                g.fg = bgr_pack(fg);
+            }
+
+            i32 current_color = 0;
+            for (i32 line_index = view.line_offset;
+                 line_index < MIN(view.lines.count, view.line_offset+rows);
+                 line_index++)
+            {
+                i32 i = line_index-view.line_offset;
+                i64 p = view.lines[line_index].offset;
+                i64 end = line_end_offset(line_index, view.lines, buffer);
+
+                i64 vcolumn = 0;
+                while (p < end) {
+                    i64 pc = p;
+                    i32 c = utf32_it_next(buffer, &p);
+                    if (c == 0) break;
+
+                    if (c == '\n' || c == '\r') {
+                        if (p < end && c == '\n' && char_at(buffer, p) == '\r') p = next_byte(buffer, p);
+                        if (p < end && c == '\r' && char_at(buffer, p) == '\n') p = next_byte(buffer, p);
+                        vcolumn = 0;
+                        continue;
+                    }
+
+                    if (c == ' ') {
+                        vcolumn++;
+                        continue;
+                    }
+
+                    if (c == '\t') {
+                        i32 w = buffer->tab_width - vcolumn % buffer->tab_width;
+                        vcolumn += w;
+                        continue;
+                    }
+
+                    // TODO(jesper): this is broken if a glyph is larger than the cell whatever unicode esque reason
+                    Glyph glyph = find_or_create_glyph(font, c);
+                    u32 index = (u32(glyph.x0) & 0xFFFF) | (u32(glyph.y0) << 16);
+                    glyphs[i*columns + vcolumn].glyph_index = index;
+
+                    while (current_color < colors.count && colors[current_color].end <= pc) current_color++;
+                    if (current_color < colors.count && pc >= colors[current_color].start) {
+                        glyphs[i*columns+vcolumn].fg = colors[current_color].color;
+                    }
+
+                    vcolumn++;
+                }
+            }
+
+            GfxCommand cmd{
+                .type = GFX_COMMAND_MONO_TEXT,
+                .mono_text = {
+                    .vbo = gfx.vbos.frame,
+                    .vbo_offset = gfx.frame_vertices.count,
+                    .glyph_ssbo = view.glyph_data_ssbo,
+                    .glyph_atlas = font->texture,
+                    .cell_size = { app.mono.space_width, app.mono.line_height },
+                    .pos = pos,
+                    .offset = view.voffset,
+                    .line_offset = view.line_offset,
+                    .columns = columns,
+                }
+            };
+
+            array_add(
+                &gfx.frame_vertices,
+                {
+                    pos.x+size.x, pos.y,
+                    pos.x       , pos.y,
+                    pos.x       , pos.y+size.y,
+                    pos.x       , pos.y+size.y,
+                    pos.x+size.x, pos.y+size.y,
+                    pos.x+size.x, pos.y,
+                });
+
+            gfx_push_command(&gfx.frame_cmdbuf, cmd);
+        }
     }
 
     Vector3 clear_color = linear_from_sRGB(app.bg);
