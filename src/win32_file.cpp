@@ -1,9 +1,21 @@
 #include "file.h"
-
 #include "win32_core.h"
 #include "win32_shlwapi.h"
 
 #include "gen/string.h"
+
+const char* win32_string_from_file_attribute(DWORD dwFileAttribute)
+{
+    switch (dwFileAttribute) {
+    case FILE_ATTRIBUTE_NORMAL: return "FILE_ATTRIBUTE_NORMAL";
+    case FILE_ATTRIBUTE_DIRECTORY: return "FILE_ATTRIBUTE_DIRECTORY";
+    case FILE_ATTRIBUTE_ARCHIVE: return "FILE_ATTRIBUTE_ARCHIVE";
+    default:
+        LOG_ERROR("unknown file attribute: 0x%x", dwFileAttribute);
+        return "unknown";
+    }
+}
+
 
 String absolute_path(String relative, Allocator mem)
 {
@@ -19,26 +31,12 @@ String absolute_path(String relative, Allocator mem)
     return String{ pstr, (i32)length };
 }
 
-String directory_of(String file, Allocator mem)
-{
-    String absolute = absolute_path(file, mem);
-    if (is_directory(absolute)) return absolute;
-
-    for (i32 i = absolute.length-1; i >= 0; i--) {
-        if (absolute[i] == '\\' || absolute[i] == '/') {
-            return slice(absolute, 0, i);
-        }
-    }
-
-    return absolute;
-}
-
 FileInfo read_file(String path, Allocator mem, i32 retry_count)
 {
-    FileInfo fi{};
     SArena scratch = tl_scratch_arena(mem);
-
     char *sz_path = sz_string(path, scratch);
+
+    FileInfo fi{};
 
     // TODO(jesper): when is this actually needed? read up on win32 file path docs
     char *ptr = sz_path;
@@ -165,16 +163,10 @@ bool is_directory(String path)
     return attribs == FILE_ATTRIBUTE_DIRECTORY;
 }
 
-DynamicArray<String> list_files(String dir, Allocator mem, u32 flags)
-{
-    DynamicArray<String> files{ .alloc = mem };
-    list_files(&files, dir, mem, flags);
-    return files;
-}
-
-void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags)
+void list_files(DynamicArray<String> *dst, String dir, String ext, Allocator mem, u32 flags)
 {
     SArena scratch = tl_scratch_arena(mem);
+
     DynamicArray<char*> folders{ .alloc = scratch };
     array_add(&folders, sz_string(dir, scratch));
 
@@ -198,6 +190,7 @@ void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags)
                 }
             } else if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
                 String filename{ ffd.cFileName, (i32)strlen(ffd.cFileName) };
+                if (ext && !ends_with(filename, ext)) continue;
 
                 String path;
                 if (flags & FILE_LIST_ABSOLUTE) {
@@ -209,7 +202,38 @@ void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags)
                 array_add(dst, path);
             } else {
                 LOG_ERROR("unsupported file attribute for file '%s': %s",
-                          ffd.cFileName, string_from_file_attribute(ffd.dwFileAttributes));
+                          ffd.cFileName, win32_string_from_file_attribute(ffd.dwFileAttributes));
+            }
+        } while (FindNextFileA(ff, &ffd));
+    }
+}
+
+void list_folders(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    if (flags & FILE_LIST_ABSOLUTE) LOG_ERROR("unimplemented");
+
+    DynamicArray<char*> folders{ .alloc = scratch };
+    array_add(&folders, sz_string(dir, scratch));
+
+    char f[WIN32_MAX_PATH];
+    for (i32 i = 0; i < folders.count; i++) {
+        char *folder = folders[i];
+
+        String fs = stringf(f, sizeof f, "%s/*", folder);
+        f[fs.length] = '\0';
+
+        WIN32_FIND_DATAA ffd{};
+        HANDLE ff = FindFirstFileA(f, &ffd);
+
+        do {
+            if (ffd.cFileName[0] == '.') continue;
+
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                char *subfolder = join_path(folder, ffd.cFileName, mem);
+                array_add(dst, String{ subfolder, (i32)strlen(subfolder) });
+                if (flags & FILE_LIST_RECURSIVE) array_add(&folders, subfolder);
             }
         } while (FindNextFileA(ff, &ffd));
     }
@@ -241,30 +265,21 @@ void write_file(String path, void *data, i32 size)
     WriteFile(file, data, size, NULL, NULL);
 }
 
-enum FileChangeType {
-    FILE_CHANGE_MODIFY,
-    FILE_CHANGE_ADD,
-    FILE_CHANGE_REMOVE,
-};
-
-struct FileChangeInfo {
-    String path;
-    FileChangeType type;
-};
-
-void win32_add_filewatch(String directory, DynamicArray<FileChangeInfo> *changes, HANDLE mutex)
+void create_filewatch(String folder, DynamicArray<FileEvent> *events, Mutex *events_mutex)
 {
+    String cfolders[] = { folder };
+    Array<String> folders = { .data = &cfolders[0], .count = ARRAY_COUNT(cfolders) };
+
     struct FileWatchThreadData {
-        String directory;
-        DynamicArray<FileChangeInfo> *changes;
-        HANDLE mutex;
+        String folder;
+        DynamicArray<FileEvent> *events;
+        Mutex *events_mutex;
     };
 
-    auto thread_proc = [](LPVOID lpParameter) -> DWORD
+    auto thread_proc = [](void *user_data) -> i32
     {
-        FileWatchThreadData *ftd = (FileWatchThreadData *)lpParameter;
-
-        char *sz_dir = sz_string(ftd->directory, mem_dynamic);
+        FileWatchThreadData *ftd = (FileWatchThreadData *)user_data;
+        char *sz_dir = sz_string(ftd->folder, mem_dynamic);
 
         HANDLE h = CreateFileA(
             sz_dir,
@@ -302,51 +317,46 @@ void win32_add_filewatch(String directory, DynamicArray<FileChangeInfo> *changes
 
             FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION*)buffer;
             String sub_path = string_from_utf16((u16*)fni->FileName, fni->FileNameLength/2, scratch);
-            String path = join_path(ftd->directory, sub_path, mem_dynamic);
+            String path = absolute_path(join_path(ftd->folder, sub_path, scratch), mem_dynamic);
 
             if (is_directory(path)) goto next_fni;
 
 handle_fni:
             if (fni->Action == FILE_ACTION_MODIFIED || fni->Action == FILE_ACTION_ADDED) {
-                WaitForSingleObject(ftd->mutex, TIMEOUT_INFINITE);
+                GUARD_MUTEX(ftd->events_mutex) {
+                    FileEvent event{};
+                    for (i32 i = 0; i < ftd->events->count; i++) {
+                        FileEvent fci = ftd->events->data[i];
 
-                FileChangeInfo add{};
-                for (i32 i = 0; i < ftd->changes->count; i++) {
-                    FileChangeInfo fci = ftd->changes->data[i];
-
-                    if (fci.path == path) {
-                        if (fci.type == FILE_CHANGE_REMOVE) array_remove_unsorted(ftd->changes, i);
-                        goto skip_add;
+                        if (fci.path == path) {
+                            if (fci.type == FE_DELETE) array_remove_unsorted(ftd->events, i);
+                            goto skip_add;
+                        }
                     }
+
+                    LOG_INFO("detected file %s: %.*s", fni->Action == FILE_ACTION_MODIFIED ? "modified" : "add", STRFMT(path));
+
+                    event = {
+                        .type = fni->Action == FILE_ACTION_ADDED ? FE_CREATE : FE_MODIFY,
+                        .path = path,
+                    };
+                    array_add(ftd->events, event);
+skip_add:;
                 }
-
-                LOG_INFO("detected file %s: %.*s", fni->Action == FILE_ACTION_MODIFIED ? "modified" : "add", STRFMT(path));
-
-                add.path = path;
-                add.type = fni->Action == FILE_ACTION_ADDED ? FILE_CHANGE_ADD : FILE_CHANGE_MODIFY;
-                array_add(ftd->changes, add);
-skip_add:
-                ReleaseMutex(ftd->mutex);
             } else if (fni->Action == FILE_ACTION_REMOVED) {
                 LOG_INFO("detected file removal: %.*s", STRFMT(path));
-
-                FileChangeInfo removal{};
-
-                WaitForSingleObject(ftd->mutex, TIMEOUT_INFINITE);
-                for (i32 i = 0; i < ftd->changes->count; i++) {
-                    FileChangeInfo fci = ftd->changes->data[i];
-                    if (fci.path == path) {
-                        if (fci.type != FILE_CHANGE_REMOVE) array_remove_unsorted(ftd->changes, i);
-                        goto skip_add_remove;
+                GUARD_MUTEX(ftd->events_mutex) {
+                    for (i32 i = 0; i < ftd->events->count; i++) {
+                        FileEvent fci = ftd->events->data[i];
+                        if (fci.path == path) {
+                            if (fci.type != FE_DELETE) array_remove_unsorted(ftd->events, i);
+                            goto skip_add_remove;
+                        }
                     }
+
+                    array_add(ftd->events, { .type = FE_DELETE, .path = path });
+skip_add_remove:;
                 }
-
-                removal.path = path;
-                removal.type = FILE_CHANGE_REMOVE;
-
-                array_add(ftd->changes, removal);
-skip_add_remove:
-                ReleaseMutex(ftd->mutex);
 
             }
 
@@ -361,22 +371,22 @@ next_fni:
         return 0;
     };
 
-    FileWatchThreadData *ftd = ALLOC_T(mem_dynamic, FileWatchThreadData);
-    *ftd = {
-        .directory = duplicate_string(directory, mem_dynamic),
-        .changes = changes,
-        .mutex = mutex,
-    };
+    for (String folder : folders) {
+        FileWatchThreadData *ftd = ALLOC_T(mem_dynamic, FileWatchThreadData) {
+            .folder = duplicate_string(folder, mem_dynamic),
+            .events = events,
+            .events_mutex = events_mutex,
+        };
 
-    HANDLE thread = CreateThread(NULL, 0, thread_proc, ftd, 0, NULL);
-    if (thread == NULL) LOG_ERROR("error creating file watch thread: (%d) %s", WIN32_ERR_STR);
-
+        create_thread(thread_proc, ftd);
+    }
 }
 
 u64 file_modified_timestamp(String path)
 {
     SArena scratch = tl_scratch_arena();
     char *sz_path = sz_string(path, scratch);
+
     HANDLE file = win32_open_file(sz_path, OPEN_EXISTING, GENERIC_READ);
 
     if (file == INVALID_HANDLE_VALUE) {
@@ -485,13 +495,15 @@ String get_working_dir(Allocator mem)
         length = GetCurrentDirectoryW(req_size, sw);
     }
 
-    return string_from_utf16(sw, length, mem);
+    String s = string_from_utf16(sw, length, mem);
+    return s;
 }
 
 void set_working_dir(String path)
 {
     SArena scratch = tl_scratch_arena();
     wchar_t *wsz_path = wsz_string(path, scratch);
+
     if (!SetCurrentDirectoryW(wsz_path)) {
         LOG_ERROR("unable to change working dir to '%S': (%d) %s", wsz_path, WIN32_ERR_STR);
     }

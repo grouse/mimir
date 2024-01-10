@@ -11,6 +11,7 @@ using FileHandle = FileHandle_*;
 
 #include "array.h"
 #include "string.h"
+#include "thread.h"
 
 struct FileInfo {
     u8 *data;
@@ -27,12 +28,44 @@ enum ListFileFlags : u32 {
     FILE_LIST_ABSOLUTE  = 1 << 1,
 };
 
+enum FileEventType {
+    FE_UNKNOWN = 0,
+    FE_MODIFY,
+    FE_CREATE,
+    FE_DELETE,
+};
+
+struct FileEvent {
+    FileEventType type;
+    String path;
+};
+
 FileInfo read_file(String path, Allocator mem, i32 retry_count = 0);
 
-DynamicArray<String> list_files(String dir, Allocator mem, u32 flags = 0);
-void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags = 0);
+void list_files(DynamicArray<String> *dst, String dir, String ext, Allocator mem, u32 flags = 0);
 
-String directory_of(String path, Allocator mem);
+inline void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags = 0)
+{
+    list_files(dst, dir, "", mem, flags);
+}
+
+inline DynamicArray<String> list_files(String dir, Allocator mem, u32 flags = 0)
+{
+    DynamicArray<String> files{ .alloc = mem };
+    list_files(&files, dir, "", mem, flags);
+    return files;
+}
+
+void list_folders(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags = 0);
+inline DynamicArray<String> list_folders(String dir, Allocator mem, u32 flags = 0)
+{
+	DynamicArray<String> dirs{ .alloc = mem };
+	list_folders(&dirs, dir, mem, flags);
+	return dirs;
+}
+
+void create_filewatch(String folder, DynamicArray<FileEvent> *events, Mutex *events_mutex);
+
 String absolute_path(String relative, Allocator mem);
 
 FileHandle open_file(String path, FileOpenMode mode);
@@ -51,6 +84,8 @@ void remove_file(String path);
 String get_exe_folder(Allocator mem);
 String get_working_dir(Allocator mem);
 void set_working_dir(String path);
+
+u64 file_modified_timestamp(String path);
 
 String select_folder_dialog(Allocator mem);
 

@@ -16,6 +16,8 @@
 #include "font.cpp"
 #include "fzy.cpp"
 
+#include "gen/string.h"
+
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
 extern "C" const TSLanguage* tree_sitter_rust();
@@ -878,7 +880,7 @@ void init_app(Array<String> args)
 
     if (args.count > 0) {
 	    bool is_dir = is_directory(args[0]);
-	    String dir = is_dir ? args[0] : directory_of(args[0], scratch);
+	    String dir = is_dir ? args[0] : directory_of(args[0]);
 		set_working_dir(dir);
 
 		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
