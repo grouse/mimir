@@ -1,3 +1,5 @@
+#include <X11/Xatom.h>
+
 struct {
 	bool init = false;
 
@@ -9,19 +11,6 @@ struct {
     Atom target_atom;
     bool pending = false;
 } clipboard;
-
-void init_clipboard(Display *dsp, Window /*parent_wnd*/)
-{
-    // TODO(jesper): I don't like the look of this. If Dsp can change somehow we're probably using an invalid dsp
-    // for the clipboard
-    clipboard.dsp = dsp;
-    clipboard.wnd = XCreateSimpleWindow(dsp, RootWindow(dsp, DefaultScreen(dsp)), -10, -10, 1, 1, 0, 0, 0);
-    PANIC_IF(!clipboard.wnd, "failed creading clipboard window");
-    LOG_INFO("created clipboard wnd: %p", clipboard.wnd);
-
-    clipboard.target_atom = XInternAtom(dsp, "RAY_CLIPBOARD", False);
-	clipboard.init = true;
-}
 
 void handle_clipboard_events(XEvent event)
 {
