@@ -8,8 +8,14 @@ executable("mimir") {
         "external",
     ]
 
+
     if (current_os == "win") {
-        sources += [ "src/win32_mimir.cpp" ]
+        sources += [
+            "src/win32_mimir.cpp",
+
+            "src/win32_memory.cpp",
+            "src/win32_file.cpp",
+        ]
         libs += ["user32", "shell32", "opengl32", "gdi32", "shlwapi"]
     }
 }

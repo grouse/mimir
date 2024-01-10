@@ -1,14 +1,17 @@
 #include "file.h"
+
+#include "win32_core.h"
 #include "win32_shlwapi.h"
 
 String absolute_path(String relative, Allocator mem)
 {
-    const char *sz_relative = sz_string(relative);
+    SArena scratch = tl_scratch_arena(mem);
+    const char *sz_relative = sz_string(relative, scratch);
 
     // NOTE(jesper): size is total size required including null terminator
     DWORD size = GetFullPathNameA(sz_relative, 0, NULL, NULL);
     char *pstr = ALLOC_ARR(mem, char, size);
-    
+
     // NOTE(jesper): length is size excluding null terminator
     DWORD length = GetFullPathNameA(sz_relative, size, pstr, NULL);
     return String{ pstr, (i32)length };
@@ -18,21 +21,22 @@ String directory_of(String file, Allocator mem)
 {
     String absolute = absolute_path(file, mem);
     if (is_directory(absolute)) return absolute;
-    
+
     for (i32 i = absolute.length-1; i >= 0; i--) {
         if (absolute[i] == '\\' || absolute[i] == '/') {
             return slice(absolute, 0, i);
         }
     }
-    
+
     return absolute;
 }
 
 FileInfo read_file(String path, Allocator mem, i32 retry_count)
 {
     FileInfo fi{};
-    
-    char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena(mem);
+
+    char *sz_path = sz_string(path, scratch);
 
     // TODO(jesper): when is this actually needed? read up on win32 file path docs
     char *ptr = sz_path;
@@ -52,11 +56,11 @@ FileInfo read_file(String path, Allocator mem, i32 retry_count)
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL,
         NULL);
-    
+
     if (file == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION) {
         for (i32 i = 0; file == INVALID_HANDLE_VALUE && i < retry_count; i++) {
             LOG_INFO("failed opening file '%s' due to sharing violation, sleeping and retrying", sz_path);
-            
+
             Sleep(5);
             file = CreateFileA(
                 sz_path,
@@ -68,7 +72,7 @@ FileInfo read_file(String path, Allocator mem, i32 retry_count)
                 NULL);
         }
     }
-    
+
     if (file == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND) {
         LOG_INFO("file not found: %s", sz_path);
         return {};
@@ -87,7 +91,7 @@ FileInfo read_file(String path, Allocator mem, i32 retry_count)
     }
 
     PANIC_IF(
-        file_size.QuadPart >= 0x7FFFFFFF, 
+        file_size.QuadPart >= 0x7FFFFFFF,
         "error opening file '%s': file size (%lld bytes) exceeds maximum supported %d", sz_path, file_size.QuadPart, 0x7FFFFFFF);
 
     fi.size = file_size.QuadPart;
@@ -114,7 +118,7 @@ HANDLE win32_open_file(char *sz_path, u32 creation_mode, u32 access_mode)
         FILE_ATTRIBUTE_NORMAL,
         nullptr);
 
-    if (file == INVALID_HANDLE_VALUE && 
+    if (file == INVALID_HANDLE_VALUE &&
         (creation_mode == CREATE_ALWAYS ||
          creation_mode == CREATE_NEW))
     {
@@ -132,9 +136,9 @@ HANDLE win32_open_file(char *sz_path, u32 creation_mode, u32 access_mode)
                     if (CreateDirectoryA(sz_path, NULL) == 0) {
                         DWORD create_dir_error = GetLastError();
                         if (create_dir_error != ERROR_ALREADY_EXISTS) {
-                            LOG_ERROR("failed creating folder: %s, code: %d, msg: '%s'", 
-                                      sz_path, 
-                                      create_dir_error, 
+                            LOG_ERROR("failed creating folder: %s, code: %d, msg: '%s'",
+                                      sz_path,
+                                      create_dir_error,
                                       win32_system_error_message(create_dir_error));
                             return INVALID_HANDLE_VALUE;
                         }
@@ -153,39 +157,41 @@ HANDLE win32_open_file(char *sz_path, u32 creation_mode, u32 access_mode)
 
 bool is_directory(String path)
 {
-    char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
     DWORD attribs = GetFileAttributesA(sz_path);
     return attribs == FILE_ATTRIBUTE_DIRECTORY;
 }
-                   
-DynamicArray<String> list_files(String dir, u32 flags, Allocator mem)
+
+DynamicArray<String> list_files(String dir, Allocator mem, u32 flags)
 {
     DynamicArray<String> files{ .alloc = mem };
-    list_files(&files, dir, flags, mem);
+    list_files(&files, dir, mem, flags);
     return files;
 }
-    
-void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem) 
+
+void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags)
 {
-    DynamicArray<char*> folders{ .alloc = mem_tmp };
-    array_add(&folders, sz_string(dir));
-    
+    SArena scratch = tl_scratch_arena(mem);
+    DynamicArray<char*> folders{ .alloc = scratch };
+    array_add(&folders, sz_string(dir, scratch));
+
     char f[WIN32_MAX_PATH];
     for (i32 i = 0; i < folders.count; i++) {
         char *folder = folders[i];
-        
+
         String fs = stringf(f, sizeof f, "%s/*", folder);
         f[fs.length] = '\0';
-        
+
         WIN32_FIND_DATAA ffd{};
         HANDLE ff = FindFirstFileA(f, &ffd);
 
         do {
             if (ffd.cFileName[0] == '.') continue;
-                
+
             if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 if (flags & FILE_LIST_RECURSIVE) {
-                    char *child = join_path(folder, ffd.cFileName);
+                    char *child = join_path(folder, ffd.cFileName, scratch);
                     array_add(&folders, child);
                 }
             } else if (ffd.dwFileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) {
@@ -193,14 +199,14 @@ void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem)
 
                 String path;
                 if (flags & FILE_LIST_ABSOLUTE) {
-                    path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem_tmp);
+                    path = join_path(String{ folder, (i32)strlen(folder) }, filename, scratch);
                     path = absolute_path(path, mem);
                 } else {
                     path = join_path(String{ folder, (i32)strlen(folder) }, filename, mem);
                 }
                 array_add(dst, path);
             } else {
-                LOG_ERROR("unsupported file attribute for file '%s': %s", 
+                LOG_ERROR("unsupported file attribute for file '%s': %s",
                           ffd.cFileName, string_from_file_attribute(ffd.dwFileAttributes));
             }
         } while (FindNextFileA(ff, &ffd));
@@ -209,11 +215,12 @@ void list_files(DynamicArray<String> *dst, String dir, u32 flags, Allocator mem)
 
 void write_file(String path, StringBuilder *sb)
 {
-    char *sz_path = sz_string(path);
-    
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
+
     HANDLE file = win32_open_file(sz_path, CREATE_ALWAYS, GENERIC_WRITE);
     defer{ CloseHandle(file); };
-    
+
     StringBuilder::Block *block = &sb->head;
     while (block && block->written > 0) {
         WriteFile(file, block->data, block->written, nullptr, nullptr);
@@ -223,7 +230,8 @@ void write_file(String path, StringBuilder *sb)
 
 void write_file(String path, void *data, i32 size)
 {
-    char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
 
     HANDLE file = win32_open_file(sz_path, CREATE_ALWAYS, GENERIC_WRITE);
     defer{ CloseHandle(file); };
@@ -249,12 +257,11 @@ void win32_add_filewatch(String directory, DynamicArray<FileChangeInfo> *changes
         DynamicArray<FileChangeInfo> *changes;
         HANDLE mutex;
     };
-    
+
     auto thread_proc = [](LPVOID lpParameter) -> DWORD
     {
         FileWatchThreadData *ftd = (FileWatchThreadData *)lpParameter;
 
-        mem_tmp = linear_allocator(10*1024*1024);
         char *sz_dir = sz_string(ftd->directory, mem_dynamic);
 
         HANDLE h = CreateFileA(
@@ -273,7 +280,7 @@ void win32_add_filewatch(String directory, DynamicArray<FileChangeInfo> *changes
 
         DWORD buffer[sizeof(FILE_NOTIFY_INFORMATION)*2];
         while (true) {
-            RESET_ALLOC(mem_tmp);
+            SArena scratch = tl_scratch_arena();
 
             DWORD num_bytes;
             BOOL result = ReadDirectoryChangesW(
@@ -292,7 +299,7 @@ void win32_add_filewatch(String directory, DynamicArray<FileChangeInfo> *changes
             }
 
             FILE_NOTIFY_INFORMATION *fni = (FILE_NOTIFY_INFORMATION*)buffer;
-            String sub_path = string_from_utf16((u16*)fni->FileName, fni->FileNameLength/2);
+            String sub_path = string_from_utf16((u16*)fni->FileName, fni->FileNameLength/2, scratch);
             String path = join_path(ftd->directory, sub_path, mem_dynamic);
 
             if (is_directory(path)) goto next_fni;
@@ -358,7 +365,7 @@ next_fni:
         .changes = changes,
         .mutex = mutex,
     };
-    
+
     HANDLE thread = CreateThread(NULL, 0, thread_proc, ftd, 0, NULL);
     if (thread == NULL) LOG_ERROR("error creating file watch thread: (%d) %s", WIN32_ERR_STR);
 
@@ -366,27 +373,29 @@ next_fni:
 
 u64 file_modified_timestamp(String path)
 {
-    char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
     HANDLE file = win32_open_file(sz_path, OPEN_EXISTING, GENERIC_READ);
-    
-    if (file == INVALID_HANDLE_VALUE) { 
+
+    if (file == INVALID_HANDLE_VALUE) {
         LOG_ERROR("unable to open file to get modified timestamp: '%.*s' - (%d) '%s'", STRFMT(path), WIN32_ERR_STR);
         return -1;
     }
-    
+
     defer { CloseHandle(file); };
-    
+
     FILETIME last_write_time;
     if (GetFileTime(file, nullptr, nullptr, &last_write_time)) {
         return last_write_time.dwLowDateTime | ((u64)last_write_time.dwHighDateTime << 32);
     }
-    
+
     return -1;
 }
 
 void remove_file(String path)
 {
-    char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
     DeleteFileA(sz_path);
 }
 
@@ -397,14 +406,16 @@ bool file_exists_sz(const char *path)
 
 bool file_exists(String path)
 {
-    const char *sz_path = sz_string(path);
+    SArena scratch = tl_scratch_arena();
+    const char *sz_path = sz_string(path, scratch);
     return file_exists_sz(sz_path);
 }
 
 FileHandle open_file(String path, FileOpenMode mode)
 {
-    char *sz_path = sz_string(path);
-    
+    SArena scratch = tl_scratch_arena();
+    char *sz_path = sz_string(path, scratch);
+
     u32 creation_mode = 0;
     switch (mode) {
     case FILE_OPEN_CREATE:
@@ -414,7 +425,7 @@ FileHandle open_file(String path, FileOpenMode mode)
         creation_mode = CREATE_ALWAYS;
         break;
     }
-    
+
     PANIC_IF(creation_mode == 0, "invalid creation mode");
     return win32_open_file(sz_path, creation_mode, GENERIC_WRITE|GENERIC_READ);
 }
@@ -433,14 +444,14 @@ String get_exe_folder(Allocator mem)
 {
     wchar_t buffer[255];
     i32 size = ARRAY_COUNT(buffer);
-    
+
     wchar_t *sw = buffer;
     i32 length = GetModuleFileNameW(NULL, sw, size);
 
     while (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
         if (sw == buffer) sw = ALLOC_ARR(mem, wchar_t, size+10);
         else sw = REALLOC_ARR(mem, wchar_t, sw, size, size+10);
-        
+
         size += 10;
         length = GetModuleFileNameW(NULL, sw, size);
     }
@@ -451,32 +462,34 @@ String get_exe_folder(Allocator mem)
             break;
         }
     }
-    
+
     String s = string_from_utf16(sw, length, mem);
     return s;
 }
 
 String get_working_dir(Allocator mem)
 {
+    SArena scratch = tl_scratch_arena(mem);
+
     wchar_t buffer[255];
     i32 size = ARRAY_COUNT(buffer);
-    
+
     wchar_t *sw = buffer;
-    i32 length = GetCurrentDirectoryW(size, sw); 
-    
+    i32 length = GetCurrentDirectoryW(size, sw);
+
     if (length > size) {
         i32 req_size = length;
-        sw = ALLOC_ARR(mem_tmp, wchar_t, req_size);
+        sw = ALLOC_ARR(*scratch, wchar_t, req_size);
         length = GetCurrentDirectoryW(req_size, sw);
     }
-    
-    String s = string_from_utf16(sw, length, mem);
-    return s;
+
+    return string_from_utf16(sw, length, mem);
 }
 
 void set_working_dir(String path)
 {
-    wchar_t *wsz_path = wsz_string(path);
+    SArena scratch = tl_scratch_arena();
+    wchar_t *wsz_path = wsz_string(path, scratch);
     if (!SetCurrentDirectoryW(wsz_path)) {
         LOG_ERROR("unable to change working dir to '%S': (%d) %s", wsz_path, WIN32_ERR_STR);
     }
@@ -485,7 +498,9 @@ void set_working_dir(String path)
 String select_folder_dialog(Allocator mem)
 {
     extern HWND win32_root_window;
-    
+
+    SArena scratch = tl_scratch_arena(mem);
+
     wchar_t display_name_buffer[WIN32_MAX_PATH];
     BROWSEINFOW bi{
         .hwndOwner = win32_root_window,
@@ -496,17 +511,17 @@ String select_folder_dialog(Allocator mem)
 
     PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
     if (pidl == NULL) return "";
-    
+
     wchar_t buffer[WIN32_MAX_PATH];
-    
+
     wchar_t *dst = buffer;
     i32 dst_count = ARRAY_COUNT(buffer);
-    
+
     while (!SHGetPathFromIDListEx(pidl, dst, dst_count, 0)) {
-        if (dst == buffer) dst = ALLOC_ARR(mem_tmp, wchar_t, dst_count+10);
-        else dst = REALLOC_ARR(mem_tmp, wchar_t, dst, dst_count, dst_count+10);
+        if (dst == buffer) dst = ALLOC_ARR(*scratch, wchar_t, dst_count+10);
+        else dst = REALLOC_ARR(*scratch, wchar_t, dst, dst_count, dst_count+10);
         dst_count += 10;
     }
-    
+
     return string_from_utf16(dst, wcslen(dst), mem);
 }

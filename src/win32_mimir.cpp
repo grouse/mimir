@@ -4,7 +4,6 @@
 #include "mimir.cpp"
 
 #include "win32_opengl.cpp"
-#include "win32_file.cpp"
 #include "win32_process.cpp"
 #include "win32_thread.cpp"
 
@@ -30,9 +29,10 @@ bool has_init = false;
 
 LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-    DynamicArray<WindowEvent> events{ .alloc = mem_tmp };
+    SArena scratch = tl_scratch_arena();
+    DynamicArray<WindowEvent> events{ .alloc = scratch };
     array_reserve(&events, 2);
-              
+
     win32_input_event(&events, hwnd, message, wparam, lparam);
     for (auto e : events) app_event(e);
 
@@ -62,7 +62,7 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     case WM_MBUTTONUP:
         app.animating = true;
         break;
-        
+
     case WM_RBUTTONDOWN:
     case WM_RBUTTONUP:
     case WM_MOUSEWHEEL:
@@ -72,7 +72,7 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
     case WM_ENTERSIZEMOVE:
     case WM_EXITSIZEMOVE:
         return 0;
-        
+
     case WM_SIZE: {
             // NOTE(jesper): we end up here as soon as the window is created
             if (!has_init) break;
@@ -102,7 +102,6 @@ LRESULT win32_event_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 
                 // TODO(jesper): this feels super iffy. I kind of want some arena push/restore
                 // points or something that can be used for local reset of the allocators
-                RESET_ALLOC(mem_tmp);
                 RESET_ALLOC(mem_frame);
 
                 update_and_render();
@@ -141,7 +140,7 @@ int WINAPI wWinMain(
     init_cursors();
 
     init_gfx(resolution);
-    
+
     Array<String> args{};
 
     // NOTE(jesper): CommandLineToArgvW sets the first argument string to the executable
@@ -180,13 +179,10 @@ int WINAPI wWinMain(
     LARGE_INTEGER frequency, last_time;
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&last_time);
-    
+
     while (true) {
-        defer { 
-            RESET_ALLOC(mem_tmp);
-            RESET_ALLOC(mem_frame);
-        };
-        
+        defer { RESET_ALLOC(mem_frame); };
+
         LARGE_INTEGER current_time;
         QueryPerformanceCounter(&current_time);
         i64 elapsed = current_time.QuadPart - last_time.QuadPart;
@@ -194,7 +190,7 @@ int WINAPI wWinMain(
 
         f32 dt = (f32)elapsed / frequency.QuadPart;
         if (debugger_attached()) dt = MIN(dt, 0.1f);
-        
+
         u16 old_x = g_mouse.x;
         u16 old_y = g_mouse.y;
         g_mouse.left_was_pressed = g_mouse.left_pressed;
@@ -212,7 +208,6 @@ int WINAPI wWinMain(
 
             if (app_needs_render()) {
                 update_and_render();
-                RESET_ALLOC(mem_tmp);
                 RESET_ALLOC(mem_frame);
                 did_render = true;
             }
@@ -227,20 +222,18 @@ int WINAPI wWinMain(
         gui.mouse.dy = g_mouse.dy;
         gui.mouse.left_pressed = g_mouse.left_pressed;
         gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
-        
+
         if (app_needs_render()) {
             update_and_render();
             did_render = true;
         }
-        
+
         if (did_render) SwapBuffers(wnd.hdc);
 
         SetCursor(cursors[current_cursor]);
         push_cursor(MC_NORMAL);
-        
+
     }
 
     return 0;
 }
-
-    

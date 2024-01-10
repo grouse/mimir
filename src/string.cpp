@@ -107,7 +107,8 @@ i32 i32_from_string(String s)
 
 bool f32_from_string(String s, f32 *dst)
 {
-    char *sz_s = sz_string(s);
+    SArena scratch = tl_scratch_arena();
+    char *sz_s = sz_string(s, scratch);
     int r = sscanf(sz_s, "%f", dst);
     return r == 1;
 }
@@ -462,7 +463,7 @@ end:
     return;
 }
 
-u16* utf16_from_string(String str, i32 *utf16_length, Allocator mem = mem_tmp)
+u16* utf16_from_string(String str, i32 *utf16_length, Allocator mem)
 {
     i32 length = 0;
     i32 capacity = str.length;
@@ -855,6 +856,8 @@ void append_string(StringBuilder *sb, String str)
 
 void append_stringf(StringBuilder *sb, const char *fmt, ...)
 {
+    SArena scratch = tl_scratch_arena(sb->alloc);
+
     va_list args;
     va_start(args, fmt);
 
@@ -863,7 +866,7 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
     va_end(args);
 
     if (length > available-1) {
-        char *buffer = (char*)ALLOC(mem_tmp, length+1);
+        char *buffer = (char*)ALLOC(*scratch, length+1);
 
         va_start(args, fmt);
         vsnprintf(buffer, length+1, fmt, args);

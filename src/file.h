@@ -2,6 +2,7 @@
 #define FILE_H
 
 #ifdef _WIN32
+#include "win32_lite.h"
 using FileHandle = HANDLE;
 #else
 struct FileHandle_;
@@ -26,13 +27,13 @@ enum ListFileFlags : u32 {
     FILE_LIST_ABSOLUTE  = 1 << 1,
 };
 
-FileInfo read_file(String path, Allocator mem = mem_tmp, i32 retry_count = 0);
+FileInfo read_file(String path, Allocator mem, i32 retry_count = 0);
 
-DynamicArray<String> list_files(String dir, u32 flags = 0, Allocator mem = mem_tmp);
-void list_files(DynamicArray<String> *dst, String dir, u32 flags = 0, Allocator mem = mem_tmp);
+DynamicArray<String> list_files(String dir, Allocator mem, u32 flags = 0);
+void list_files(DynamicArray<String> *dst, String dir, Allocator mem, u32 flags = 0);
 
-String directory_of(String path, Allocator mem = mem_tmp);
-String absolute_path(String relative, Allocator mem = mem_tmp);
+String directory_of(String path, Allocator mem);
+String absolute_path(String relative, Allocator mem);
 
 FileHandle open_file(String path, FileOpenMode mode);
 void write_file(FileHandle handle, char *data, i32 bytes);
@@ -47,10 +48,10 @@ bool file_exists(String path);
 
 void remove_file(String path);
 
-String get_exe_folder(Allocator mem = mem_tmp);
-String get_working_dir(Allocator mem = mem_tmp);
+String get_exe_folder(Allocator mem);
+String get_working_dir(Allocator mem);
 void set_working_dir(String path);
 
-String select_folder_dialog(Allocator mem = mem_tmp);
+String select_folder_dialog(Allocator mem);
 
 #endif //FILE_H

@@ -52,11 +52,11 @@ bool starts_with(String lhs, String rhs);
 bool starts_with(const char *lhs, const char *rhs);
 bool ends_with(String lhs, String rhs);
 
-String create_string(char *str, i32 length, Allocator mem = mem_tmp);
-String duplicate_string(String other, Allocator mem = mem_tmp);
-void string_copy(String *dst, String src, Allocator mem = mem_tmp);
+String create_string(char *str, i32 length, Allocator mem);
+String duplicate_string(String other, Allocator mem);
+void string_copy(String *dst, String src, Allocator mem);
 
-String to_lower(String s, Allocator mem = mem_tmp);
+String to_lower(String s, Allocator mem);
 char to_lower(char c);
 
 bool is_whitespace(i32 c);
@@ -70,15 +70,15 @@ bool f32_from_string(String s, f32 *dst);
 String filename_of(String path);
 String extension_of(String path);
 String path_relative_to(String path, String root);
-String join_path(String root, String filename, Allocator mem = mem_tmp);
+String join_path(String root, String filename, Allocator mem);
 
 String slice(String str, i32 start, i32 end);
 String slice(String str, i32 start);
 
 i32 last_of(String str, char c);
 
-char* sz_string(String str, Allocator mem = mem_tmp);
-char* join_path(const char *sz_root, const char *sz_filename, Allocator mem = mem_tmp);
+char* sz_string(String str, Allocator mem);
+char* join_path(const char *sz_root, const char *sz_filename, Allocator mem);
 char* last_of(char *str, char c);
 
 i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit);
@@ -89,7 +89,7 @@ i32 utf8_from_utf32(u8 utf8[4], i32 utf32);
 i32 utf16_length(String str);
 void utf16_from_string(u16 *dst, i32 capacity, String src);
 
-String string_from_utf16(const u16 *in_str, i32 length, Allocator mem = mem_tmp);
+String string_from_utf16(const u16 *in_str, i32 length, Allocator mem);
 
 i32 utf32_next(char **p, char *end);
 i32 utf32_it_next(char **utf8, char *end);
@@ -105,10 +105,10 @@ void append_string(StringBuilder *sb, String str);
 void append_stringf(StringBuilder *sb, const char *fmt, ...);
 
 #if defined(_WIN32)
-wchar_t* wsz_string(String str, Allocator mem = mem_tmp);
+wchar_t* wsz_string(String str, Allocator mem);
 i32 utf8_length(const wchar_t *str, i32 utf16_len);
 i32 utf8_from_utf16(u8 *dst, i32 capacity, const wchar_t *src, i32 length);
-String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem = mem_tmp);
+String string_from_utf16(const wchar_t *in_str, i32 length, Allocator mem);
 #endif // defined(WIN32)
 
 #endif // STRING_H

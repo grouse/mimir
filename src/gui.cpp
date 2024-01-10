@@ -3,6 +3,7 @@
 #include "core.h"
 #include "file.h"
 #include "assets.h"
+#include "src/memory.h"
 
 extern Allocator mem_frame;
 
@@ -101,7 +102,7 @@ bool gui_hot_rect(GuiId id, Vector2 pos, Vector2 size)
         gui_hot(id);
         return true;
     }
-    
+
     return false;
 }
 
@@ -286,7 +287,7 @@ void gui_end_frame()
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
     if (!gui.mouse.left_pressed) gui.pressed = GUI_ID_INVALID;
-    
+
     if (false && gui.hot != gui.next_hot) {
         LOG_INFO(
             "next hot id: { %d, %d, %d }",
@@ -308,7 +309,7 @@ void gui_end_frame()
 
     GuiId old_focused = gui.focused_window;
     GuiId old = gui.hot_window;
-    
+
     for (GuiWindow &wnd : gui.windows) {
         if (!wnd.active && gui.focused_window == wnd.id) {
             gui.focused_window = GUI_ID_INVALID;
@@ -338,7 +339,7 @@ void gui_end_frame()
     if (gui.hot_window == GUI_ID_INVALID) {
         gui.hot_window = gui.windows[GUI_BACKGROUND].id;
     }
-    
+
     if (gui.focused_window == GUI_ID_INVALID) {
         gui.focused_window = gui.windows[GUI_BACKGROUND].id;
     }
@@ -346,7 +347,7 @@ void gui_end_frame()
     if (false && old != gui.hot_window) {
         LOG_INFO("hot window: %d, %d, %d", gui.hot_window.owner, gui.hot_window.index, gui.hot_window.internal);
     }
-    
+
     if (false && old_focused != gui.focused_window) {
         LOG_INFO("focused window: %d, %d, %d", gui.focused_window.owner, gui.focused_window.index, gui.focused_window.internal);
         LOG_INFO("old focused window: %d, %d, %d", old_focused.owner, old_focused.index, old_focused.internal);
@@ -523,7 +524,7 @@ void gui_draw_rect(
     gui_draw_rect(pos, size, color, cmdbuf, draw_index);
 }
 
-TextQuadsAndBounds calc_text_quads_and_bounds(String text, FontAtlas *font, Allocator alloc = mem_tmp)
+TextQuadsAndBounds calc_text_quads_and_bounds(String text, FontAtlas *font, Allocator alloc)
 {
     TextQuadsAndBounds r{};
     r.bounds.size.y = font->line_height;
@@ -551,7 +552,7 @@ TextQuadsAndBounds calc_text_quads_and_bounds(String text, FontAtlas *font, Allo
     return r;
 }
 
-DynamicArray<GlyphRect> calc_text_quads(String text, FontAtlas *font, Allocator alloc = mem_tmp)
+DynamicArray<GlyphRect> calc_text_quads(String text, FontAtlas *font, Allocator alloc)
 {
     DynamicArray<GlyphRect> glyphs{};
     array_reset(&glyphs, alloc, text.length);
@@ -662,7 +663,8 @@ void gui_textbox(String str, FontAtlas *font = &gui.style.text.font)
 {
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font, scratch);
     Vector2 pos = gui_layout_widget({ td.bounds.size.x, MAX(td.bounds.size.y, font->line_height) });
 
     gui_draw_text(td.glyphs, pos, wnd->clip_rect, gui.style.text.color, font);
@@ -670,15 +672,17 @@ void gui_textbox(String str, FontAtlas *font = &gui.style.text.font)
 
 void gui_textbox(String str, Vector2 pos, FontAtlas *font = &gui.style.text.font)
 {
+    SArena scratch = tl_scratch_arena();
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font, scratch);
     gui_draw_text(td.glyphs, pos, wnd->clip_rect, gui.style.text.color, font);
 }
 
 void gui_textbox(String str, Vector2 pos, Rect clip_rect, FontAtlas *font = &gui.style.text.font)
 {
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(str, font, scratch);
     gui_draw_text(td.glyphs, pos, clip_rect, gui.style.text.color, font);
 }
 
@@ -857,13 +861,15 @@ bool gui_button_id(GuiId id, FontAtlas *font, TextQuadsAndBounds td, Vector2 siz
 
 bool gui_button_id(GuiId id, String text, Vector2 size)
 {
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(text, &gui.style.button.font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(text, &gui.style.button.font, scratch);
     return gui_button_id(id, &gui.style.button.font, td, size);
 }
 
 bool gui_button_id(GuiId id, String text)
 {
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(text, &gui.style.button.font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(text, &gui.style.button.font, scratch);
     return gui_button_id(id, &gui.style.button.font, td, td.bounds.size + Vector2{ 24.0f, 12.0f });
 }
 
@@ -876,7 +882,8 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font, scratch);
 
     Vector2 btn_margin{ 5.0f, 0.0f };
     Vector2 btn_size{ 16.0f, 16.0f };
@@ -910,6 +917,7 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked)
 
 GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Vector2 size)
 {
+    SArena scratch = tl_scratch_arena();
     u32 action = GUI_EDITBOX_NONE;
 
     GuiWindow *wnd = &gui.windows[gui.current_window];
@@ -964,7 +972,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 
                         i32 limit = sizeof gui.edit.buffer - (gui.edit.length - (end-start));
 
-                        String str = read_clipboard_str();
+                        String str = read_clipboard_str(scratch);
                         str.length = utf8_truncate(str, limit);
 
                         if (str.length > (end-start)) {
@@ -1083,7 +1091,7 @@ GuiEditboxAction gui_editbox_id(GuiId id, String initial_string, Vector2 pos, Ve
 #endif
 
     String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : initial_string;
-    Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font);
+    Array<GlyphRect> glyphs = calc_text_quads(str, &gui.style.text.font, scratch);
 
     gui_draw_rect(pos, size, wnd->clip_rect, border_col);
     gui_draw_rect(pos+border, size-2*border, wnd->clip_rect, bg);
@@ -2019,7 +2027,8 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
     f32 margin = 4.0f;
     Vector2 border{ 1.0f, 1.0f };
 
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(labels[current_index], font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(labels[current_index], font, scratch);
     Vector2 total_size = { td.bounds.size.x+margin+16+2*border.x, font->line_height };
     Vector2 pos = gui_layout_widget(&total_size);
 
@@ -2071,10 +2080,10 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
 
         i32 old_window = gui.current_window;
         gui.current_window = GUI_OVERLAY;
-        
+
         auto cmdbuf = &gui_current_window()->command_buffer;
         i32 draw_index = gui_current_window()->command_buffer.commands.count;
-        
+
         gui_begin_layout(
             GuiLayout{
                 .type = GUI_LAYOUT_ROW,
@@ -2085,24 +2094,24 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
                 .margin.y = 4,
                 .column.spacing = 2,
             });
-        
-        defer { 
-            gui.current_window = old_window; 
+
+        defer {
+            gui.current_window = old_window;
             gui_end_layout();
         };
 
         FontAtlas *font = &gui.style.text.font;
 
         // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
-        
+
         bool hot_label = false;
         Vector2 hot_p;
-        
+
         for (i32 i = 0; i < labels.count; i++) {
             String label = labels[i];
             GuiId label_id = GUI_ID_INTERNAL(id, i);
-            
-            TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font);
+
+            TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font, scratch);
             Vector2 size{ td.bounds.size.x, font->line_height };
             Vector2 pos = gui_layout_widget(&size);
 
@@ -2120,16 +2129,16 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index)
                 gui.focused = GUI_ID_INVALID;
             }
         }
-        
+
         GuiLayout* cl = gui_current_layout();
-        
+
         gui_draw_rect(cl->pos, cl->size, border_col, cmdbuf, draw_index++);
         gui_draw_rect(cl->pos+border, cl->size-2*border, gui.style.bg_dark0, cmdbuf, draw_index++);
         if (hot_label) {
             gui_draw_rect(
-                { cl->pos.x+border.x, hot_p.y }, 
-                { cl->size.x-2*border.x, font->line_height }, 
-                gui.style.bg_hot, 
+                { cl->pos.x+border.x, hot_p.y },
+                { cl->size.x-2*border.x, font->line_height },
+                gui.style.bg_hot,
                 cmdbuf, draw_index++);
         }
 
@@ -2263,7 +2272,8 @@ bool gui_begin_menu_id(GuiId id, String label)
     GuiMenu *menu = gui_find_or_create_menu(id, { 100.0f, 0.0f });
     menu->draw_index = gui.windows[GUI_OVERLAY].command_buffer.commands.count;
 
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, &gui.style.text.font, scratch);
     Vector2 text_offset{ 0.0f, 5.0f };
 
     Vector2 size{ td.bounds.size.x + 2.0f*text_offset.x, gui.style.text.font.line_height + 2.0f*text_offset.y };
@@ -2353,7 +2363,8 @@ bool gui_menu_button_id(GuiId id, String label)
     GuiWindow *wnd = &gui.windows[gui.current_window];
 
     FontAtlas *font = &gui.style.text.font;
-    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font);
+    SArena scratch = tl_scratch_arena();
+    TextQuadsAndBounds td = calc_text_quads_and_bounds(label, font, scratch);
     Vector2 text_offset{ 0.0f, 0.0f };
 
     // TODO(jesper): I need something here to essentially get the entire row/column rectangle

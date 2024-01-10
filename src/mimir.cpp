@@ -380,10 +380,12 @@ TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
 HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
     Buffer *buffer,
     TSQuery *injection_query,
-    Allocator mem = mem_tmp)
+    Allocator mem)
 {
     if (!buffer) return {};
     if (!buffer->syntax_tree) return {};
+
+    SArena scratch = tl_scratch_arena(mem);
 
     ASSERT(injection_query);
 
@@ -407,7 +409,7 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
         String capture_name{ (char*)tmp, (i32)capture_name_length };
 
         if (Language *l = find(&app.language_map, capture_name); l) {
-            DynamicArray<TSRange> *ranges = find_emplace(&lang_range_map, (u32)*l, { .alloc = mem_tmp });
+            DynamicArray<TSRange> *ranges = find_emplace(&lang_range_map, (u32)*l, { .alloc = scratch });
 
             u32 start_byte = ts_node_start_byte(capture->node);
             u32 end_byte = ts_node_end_byte(capture->node);
@@ -623,6 +625,8 @@ void calculate_num_visible_lines(View *view)
 
 BufferId create_buffer(String file)
 {
+    SArena scratch = tl_scratch_arena();
+
     // TODO(jesper): do something to try and figure out/guess file type,
     // in particular try to detect whether the file is a binary so that we can
     // write a binary blob visualiser, or at least something that won't choke or
@@ -681,7 +685,7 @@ BufferId create_buffer(String file)
             b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
 
             if (auto inj = app.injections[b.language]; inj) {
-                HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(&b, inj);
+                HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(&b, inj, scratch);
 
                 for (i32 i = 0; i < lang_range_map.capacity; i++) {
                     auto kv = lang_range_map.slots[i];
@@ -786,15 +790,17 @@ void view_set_buffer(View *view, BufferId buffer)
 
 void init_app(Array<String> args)
 {
+    SArena scratch = tl_scratch_arena();
+
     fzy_init_table();
 
-    String exe_folder = get_exe_folder();
+    String exe_folder = get_exe_folder(scratch);
 
     String asset_folders[] = {
         exe_folder,
         ASSETS_DIR,
-        join_path(exe_folder, "/assets"),
-        join_path(exe_folder, "../assets"),
+        join_path(exe_folder, "/assets", scratch),
+        join_path(exe_folder, "../assets", scratch),
     };
 
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
@@ -872,13 +878,13 @@ void init_app(Array<String> args)
 
     if (args.count > 0) {
 	    bool is_dir = is_directory(args[0]);
-	    String dir = is_dir ? args[0] : directory_of(args[0]);
+	    String dir = is_dir ? args[0] : directory_of(args[0], scratch);
 		set_working_dir(dir);
 
 		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
     }
 
-    Array<String> files = list_files(get_working_dir());
+    Array<String> files = list_files(get_working_dir(scratch), scratch);
     for (String s : files) {
 #ifdef _WIN32
         if (extension_of(s) == ".bat") {
@@ -1309,6 +1315,8 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
 
+    SArena scratch = tl_scratch_arena(lines->alloc);
+
     Rect r = view->rect;
     f32 base_x = r.pos.x;
 
@@ -1325,7 +1333,7 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
     i64 word_start = p;
     i64 line_start = p;
 
-    DynamicArray<BufferLine> tmp_lines{ .alloc = mem_tmp };
+    DynamicArray<BufferLine> tmp_lines{ .alloc = scratch };
     DynamicArray<BufferLine> *new_lines = &tmp_lines;
 
     if (lines->count == 0 || (start_line == 0 && end_line == lines->count)) {
@@ -1418,6 +1426,8 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
 
 bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record_history = true)
 {
+    SArena scratch = tl_scratch_arena();
+
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
 
@@ -1461,6 +1471,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
             }
 
             if (auto lang = app.languages[buffer->language]; lang) {
+
                 TSInputEdit edit{
                     .start_byte = (u32)byte_start,
                     .old_end_byte = (u32)byte_end,
@@ -1476,7 +1487,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
 
                 if (auto inj = app.injections[buffer->language]; inj) {
-                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
+                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
                     for (i32 i = 0; i < lang_range_map.capacity; i++) {
                         auto kv = lang_range_map.slots[i];
                         if (!kv.occupied) continue;
@@ -1509,7 +1520,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     return true;
 }
 
-String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator mem = mem_tmp)
+String buffer_read(BufferId buffer_id, i64 byte_start, i64 byte_end, Allocator mem)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return {};
@@ -1704,6 +1715,8 @@ bool buffer_unsaved_changes(BufferId buffer_id)
 
 i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_history = true)
 {
+    SArena scratch = tl_scratch_arena();
+
     if (in_text.length <= 0) return offset;
 
     Buffer *buffer = get_buffer(buffer_id);
@@ -1725,7 +1738,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
 
     String text = in_text;
     if (required_extra_space != in_text.length) {
-        text.data = ALLOC_ARR(mem_tmp, char, required_extra_space);
+        text.data = ALLOC_ARR(*scratch, char, required_extra_space);
         text.length = required_extra_space;
 
         i32 s = 0;
@@ -1786,7 +1799,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                 buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
 
                 if (auto inj = app.injections[buffer->language]; inj) {
-                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj);
+                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
                     for (i32 i = 0; i < lang_range_map.capacity; i++) {
                         auto kv = lang_range_map.slots[i];
                         if (!kv.occupied) continue;
@@ -2120,12 +2133,13 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
     return byte_offset;
 }
 
-String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line, Allocator mem)
 {
     line = seek_non_empty_line_back(buffer_id, lines, line);
     i64 line_start = buffer_seek_beginning_of_line(buffer_id, lines, line);
     i64 abs_start = line_start_offset(line, lines);
-    return buffer_read(buffer_id, abs_start, line_start);
+
+    return buffer_read(buffer_id, abs_start, line_start, mem);
 }
 
 bool app_needs_render()
@@ -2302,6 +2316,8 @@ void app_event(WindowEvent event)
         return;
     }
 
+    SArena scratch = tl_scratch_arena();
+
     View *view = app.current_view;
 
     // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
@@ -2423,7 +2439,7 @@ void app_event(WindowEvent event)
                 for (String s : app.lister.values) FREE(mem_dynamic, s.data);
                 app.lister.values.count = 0;
 
-                list_files(&app.lister.values, "./", FILE_LIST_RECURSIVE, mem_dynamic);
+                list_files(&app.lister.values, "./", mem_dynamic, FILE_LIST_RECURSIVE);
                 array_copy(&app.lister.filtered, app.lister.values);
                 break;
             case KC_D:
@@ -2445,7 +2461,7 @@ void app_event(WindowEvent event)
 
                     ASSERT(!view->lines_dirty);
                     Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
-                    String str = buffer_read(view->buffer, r.start, r.end);
+                    String str = buffer_read(view->buffer, r.start, r.end, scratch);
                     set_clipboard_data(str);
 
                     if (buffer_remove(view->buffer, r.start, r.end)) {
@@ -2458,7 +2474,7 @@ void app_event(WindowEvent event)
             case KC_Y: {
                     ASSERT(!view->lines_dirty);
                     Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
-                    set_clipboard_data(buffer_read(view->buffer, r.start, r.end));
+                    set_clipboard_data(buffer_read(view->buffer, r.start, r.end, scratch));
                 } break;
             case KC_N:
                 if (app.incremental_search.str.length > 0) {
@@ -2475,7 +2491,7 @@ void app_event(WindowEvent event)
                     }
                 } break;
             case KC_P:
-                write_string(view, view->buffer, read_clipboard_str(), VIEW_SET_MARK);
+                write_string(view, view->buffer, read_clipboard_str(scratch), VIEW_SET_MARK);
                 break;
             case KC_W:
                 if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
@@ -2539,11 +2555,11 @@ void app_event(WindowEvent event)
 
                     if (event.key.modifiers & MF_SHIFT) {
                         struct Edit { i64 offset; i32 bytes_to_remove; };
-                        DynamicArray<Edit> edits{ .alloc = mem_tmp };
+                        DynamicArray<Edit> edits{ .alloc = scratch };
                         for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view->lines)) {
                             i64 line_start = line_start_offset(l, view->lines);
 
-                            String current_indent = get_indent_for_line(view->buffer, view->lines, l);
+                            String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
 
                             i32 vcol = 0;
                             i32 i;
@@ -2579,7 +2595,7 @@ void app_event(WindowEvent event)
                             i64 new_offset;
                             if (buffer->indent_with_tabs) new_offset = buffer_insert(view->buffer, line_start, "\t");
                             else {
-                                String current_indent = get_indent_for_line(view->buffer, view->lines, l);
+                                String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
 
                                 i32 vcol = 0;
                                 for (i32 i = 0; i < current_indent.length; i++) {
@@ -2588,7 +2604,7 @@ void app_event(WindowEvent event)
                                 }
 
                                 i32 w = buffer->tab_width - vcol % buffer->tab_width;
-                                char *spaces = ALLOC_ARR(mem_tmp, char, w);
+                                char *spaces = ALLOC_ARR(*scratch, char, w);
                                 memset(spaces, ' ', w);
                                 new_offset = buffer_insert(view->buffer, line_start, { spaces, w });
                             }
@@ -2628,7 +2644,7 @@ void app_event(WindowEvent event)
                 if (buffer_valid(view->buffer)) {
                     BufferHistoryScope h(view->buffer);
                     ASSERT(!view->lines_dirty);
-                    String indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line);
+                    String indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
                     write_string(view, view->buffer, buffer_newline_str(view->buffer));
                     write_string(view, view->buffer, indent);
                 } break;
@@ -2636,7 +2652,7 @@ void app_event(WindowEvent event)
                 if (Buffer *buffer = get_buffer(view->buffer); buffer) {
                     if (buffer->indent_with_tabs) write_string(view, view->buffer, "\t");
                     else {
-                        String current_indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line);
+                        String current_indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
 
                         i32 vcol = 0;
                         for (i32 i = 0; i < current_indent.length; i++) {
@@ -2646,7 +2662,7 @@ void app_event(WindowEvent event)
 
 
                         i32 w = buffer->tab_width - vcol % buffer->tab_width;
-                        char *spaces = ALLOC_ARR(mem_tmp, char, w);
+                        char *spaces = ALLOC_ARR(*scratch, char, w);
                         memset(spaces, ' ', w);
                         write_string(view, view->buffer, { spaces, w });
                     }
@@ -2748,6 +2764,8 @@ struct {
 
 void update_and_render()
 {
+    SArena scratch = tl_scratch_arena();
+
     //LOG_INFO("------- frame --------");
     //defer { LOG_INFO("-------- frame end -------\n\n"); };
 
@@ -2781,7 +2799,7 @@ void update_and_render()
             if (gui_menu_button("save")) buffer_save(app.current_view->buffer);
 
             if (gui_menu_button("select working dir...")) {
-                String wd = select_folder_dialog();
+                String wd = select_folder_dialog(scratch);
                 if (wd.length > 0) set_working_dir(wd);
             }
         }
@@ -2837,19 +2855,19 @@ void update_and_render()
             if (needle.length == 0) {
                 array_copy(&app.lister.filtered, app.lister.values);
             } else {
-                String lneedle = to_lower(needle);
+                String lneedle = to_lower(needle, scratch);
 
-                DynamicArray<fzy_score_t> scores{ .alloc = mem_tmp };
+                DynamicArray<fzy_score_t> scores{ .alloc = scratch };
                 array_reserve(&scores, app.lister.values.count);
 
                 app.lister.filtered.count = 0;
 
-                DynamicArray<fzy_score_t> D{ .alloc = mem_tmp };
-                DynamicArray<fzy_score_t> M{ .alloc = mem_tmp };
-                DynamicArray<fzy_score_t> match_bonus{ .alloc = mem_tmp };
+                DynamicArray<fzy_score_t> D{ .alloc = scratch };
+                DynamicArray<fzy_score_t> M{ .alloc = scratch };
+                DynamicArray<fzy_score_t> match_bonus{ .alloc = scratch };
 
                 i32 lower_buffer_size = 100;
-                char *lower_buffer = ALLOC_ARR(mem_tmp, char, lower_buffer_size);
+                char *lower_buffer = ALLOC_ARR(*scratch, char, lower_buffer_size);
 
                 for (String s : app.lister.values) {
                     fzy_score_t match_score;
@@ -2863,7 +2881,7 @@ void update_and_render()
                     array_resize(&match_bonus, s.length);
 
                     if (s.length >= lower_buffer_size) {
-                        lower_buffer = REALLOC_ARR(mem_tmp, char, lower_buffer, lower_buffer_size, s.length);
+                        lower_buffer = REALLOC_ARR(*scratch, char, lower_buffer, lower_buffer_size, s.length);
                         lower_buffer_size = s.length;
                     }
                     memcpy(lower_buffer, s.data, s.length);
@@ -2928,7 +2946,7 @@ next_node:;
         if (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH) {
             if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count) {
                 String file = app.lister.filtered[app.lister.selected_item];
-                String path = absolute_path(file);
+                String path = absolute_path(file, scratch);
 
                 BufferId buffer = find_buffer(path);
                 if (!buffer) buffer = create_buffer(path);
@@ -2951,7 +2969,7 @@ next_node:;
         }
     }
 
-    DynamicArray<RangeColor> colors{ .alloc = mem_tmp };
+    DynamicArray<RangeColor> colors{ .alloc = scratch };
     for (View &view : app.views) {
         if (view.id == -1) continue;
 
@@ -2991,7 +3009,7 @@ next_node:;
 
                 GuiId id = GUI_ID_INDEX(parent, i);
 
-                TextQuadsAndBounds td = calc_text_quads_and_bounds(b->name, font);
+                TextQuadsAndBounds td = calc_text_quads_and_bounds(b->name, font, scratch);
                 Vector2 size = td.bounds.size + Vector2{ 14.0f, 2.0f };
                 if (gui_current_layout()->available_space.x < size.x) {
                     cutoff = i;

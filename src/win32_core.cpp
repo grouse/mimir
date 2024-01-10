@@ -19,11 +19,7 @@ void log(String path, u32 line, String func, LogType type, const char *fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    i32 length = vsnprintf(buffer0, sizeof buffer0-1, fmt, args);
-    if (length >= (i32)sizeof buffer0) {
-        msg = (char*)ALLOC(mem_tmp, length);
-        vsnprintf(msg, length, fmt, args);
-    }
+    vsnprintf(buffer0, sizeof buffer0-1, fmt, args);
 
     va_end(args);
 
@@ -43,21 +39,17 @@ void log(String path, u32 line, String func, LogType type, const char *fmt, ...)
         break;
     }
 
-    // NOTE(jesper): this is basically just to appease the jump buffer parsing in 4coder, but it was possible to grab this 
+    // NOTE(jesper): this is basically just to appease the jump buffer parsing in 4coder, but it was possible to grab this
     // number from the source caller somehow
     i32 column = 0;
 
     constexpr const char* LOG_FMT = "%.*s:%d:%d in %.*s: %s %s\n";
     String filename = filename_of(path);
-    length = snprintf(buffer1, sizeof buffer1-1, LOG_FMT, STRFMT(filename), line, column, STRFMT(func), log_type_str, msg);
-    if (length >= (i32)sizeof buffer1) {
-        final = (char*)ALLOC(mem_tmp, length);
-        snprintf(final, length, LOG_FMT, STRFMT(filename), line, column, STRFMT(func), log_type_str, msg);
-    }
+    snprintf(buffer1, sizeof buffer1-1, LOG_FMT, STRFMT(filename), line, column, STRFMT(func), log_type_str, msg);
 
     if (debugger_attached()) {
         OutputDebugStringA(final);
-    } else { 
+    } else {
         printf("%s", final);
     }
 }
@@ -70,16 +62,12 @@ void log(const char *fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    i32 length = vsnprintf(buffer, sizeof buffer-1, fmt, args);
-    if (length >= (i32)sizeof buffer) {
-        msg = (char*)ALLOC(mem_tmp, length);
-        vsnprintf(msg, length, fmt, args);
-    }
+    vsnprintf(buffer, sizeof buffer-1, fmt, args);
 
     va_end(args);
     if (IsDebuggerPresent()) {
         OutputDebugStringA(msg);
-    } else { 
+    } else {
         printf("%s", msg);
     }
 }
@@ -164,7 +152,7 @@ const char* string_from_file_attribute(DWORD dwFileAttribute)
     case FILE_ATTRIBUTE_NORMAL: return "FILE_ATTRIBUTE_NORMAL";
     case FILE_ATTRIBUTE_DIRECTORY: return "FILE_ATTRIBUTE_DIRECTORY";
     case FILE_ATTRIBUTE_ARCHIVE: return "FILE_ATTRIBUTE_ARCHIVE";
-    default: 
+    default:
         LOG_ERROR("unknown file attribute: 0x%x", dwFileAttribute);
         return "unknown";
     }
@@ -196,4 +184,3 @@ void win32_client_rect(HWND hwnd, f32 *x, f32 *y)
         *y = (f32)(client_rect.bottom - client_rect.top);
     }
 }
-               

@@ -2,8 +2,7 @@
 #define WIN32_LITE_H
 
 #include "platform.h"
-
-#define WIN32_ERR_STR GetLastError(), win32_system_error_message(GetLastError())
+#include "core.h"
 
 #define CALLBACK __stdcall
 #define WINAPI __stdcall
@@ -29,7 +28,7 @@
 #define ERROR_ALREADY_EXISTS 0xB7
 #define ERROR_INSUFFICIENT_BUFFER 0x7A
 
-#define FILE_LIST_DIRECTORY 1 
+#define FILE_LIST_DIRECTORY 1
 
 #define FILE_NOTIFY_CHANGE_LAST_WRITE 0x00000010
 #define FILE_NOTIFY_CHANGE_FILE_NAME 0x00000001
@@ -75,6 +74,7 @@
 
 #define CS_OWNDC 0x0020
 
+#define PM_NOREMOVE 0x0000
 #define PM_REMOVE 0x0001
 
 #define WS_OVERLAPPED 0x00000000L
@@ -85,6 +85,10 @@
 #define WS_MAXIMIZEBOX 0x00010000L
 
 #define WS_OVERLAPPEDWINDOW (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
+
+#define WS_EX_WINDOWEDGE 0x00000100L
+#define WS_EX_CLIENTEDGE 0x00000200L
+#define WS_EX_OVERLAPPEDWINDOW (WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE)
 
 #define CW_USEDEFAULT ((int)0x80000000)
 
@@ -384,10 +388,12 @@ typedef long LONG;
 typedef unsigned long ULONG;
 typedef long long LONGLONG;
 typedef float FLOAT;
+
 typedef DWORD *LPDWORD;
+typedef UINT *PUINT;
 
 typedef WORD ATOM;
-typedef __int64 LONG_PTR; 
+typedef __int64 LONG_PTR;
 typedef unsigned __int64 ULONG_PTR;
 typedef ULONG_PTR DWORD_PTR;
 typedef signed __int64 INT_PTR;
@@ -400,7 +406,7 @@ typedef LONG HRESULT;
 typedef UINT_PTR WPARAM;
 
 extern "C" {
-    typedef LRESULT (CALLBACK* WNDPROC) (HWND, UINT, WPARAM, LPARAM); 
+    typedef LRESULT (CALLBACK* WNDPROC) (HWND, UINT, WPARAM, LPARAM);
     typedef INT_PTR (*PROC)();
     typedef INT_PTR (*FARPROC)();
     typedef INT_PTR (*NEARPROC)();
@@ -447,19 +453,19 @@ extern "C" {
         DWORD dwVisibleMask;
         DWORD dwDamageMask;
     } PIXELFORMATDESCRIPTOR, *PPIXELFORMATDESCRIPTOR, *LPPIXELFORMATDESCRIPTOR;
-    
+
     typedef struct _FILE_NOTIFY_INFORMATION {
         DWORD NextEntryOffset;
         DWORD Action;
         DWORD FileNameLength;
         WCHAR FileName[1];
     } FILE_NOTIFY_INFORMATION, *PFILE_NOTIFY_INFORMATION;
-    
+
     typedef struct _FILETIME {
         DWORD dwLowDateTime;
         DWORD dwHighDateTime;
     } FILETIME, *PFILETIME, *LPFILETIME;
-    
+
     typedef struct _WIN32_FIND_DATAA {
         DWORD    dwFileAttributes;
         FILETIME ftCreationTime;
@@ -475,18 +481,18 @@ extern "C" {
         DWORD    dwCreatorType;
         WORD     wFinderFlags;
     } WIN32_FIND_DATAA, *PWIN32_FIND_DATAA, *LPWIN32_FIND_DATAA;
-    
+
     DWORD GetFullPathNameA(
         LPCSTR lpFileName,
         DWORD  nBufferLength,
         LPSTR  lpBuffer,
         LPSTR  *lpFilePart);
-    
+
     typedef struct tagPOINT {
         LONG x;
         LONG y;
     } POINT, *PPOINT, *NPPOINT, *LPPOINT;
-    
+
     typedef struct tagMSG {
         HWND   hwnd;
         UINT   message;
@@ -496,7 +502,7 @@ extern "C" {
         POINT  pt;
         DWORD  lPrivate;
     } MSG, *PMSG, *NPMSG, *LPMSG;
-    
+
     typedef union _LARGE_INTEGER {
         struct {
             DWORD LowPart;
@@ -508,7 +514,7 @@ extern "C" {
         } u;
         LONGLONG QuadPart;
     } LARGE_INTEGER, *PLARGE_INTEGER;
-    
+
     typedef struct _OVERLAPPED {
         ULONG_PTR Internal;
         ULONG_PTR InternalHigh;
@@ -521,22 +527,22 @@ extern "C" {
         } DUMMYUNIONNAME;
         HANDLE    hEvent;
     } OVERLAPPED, *LPOVERLAPPED;
-    
+
     typedef void LPOVERLAPPED_COMPLETION_ROUTINE(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped);
-    
+
     typedef struct _SECURITY_ATTRIBUTES {
         DWORD  nLength;
         LPVOID lpSecurityDescriptor;
         BOOL   bInheritHandle;
     } SECURITY_ATTRIBUTES, *PSECURITY_ATTRIBUTES, *LPSECURITY_ATTRIBUTES;
-    
+
     typedef struct tagRECT {
         LONG left;
         LONG top;
         LONG right;
         LONG bottom;
     } RECT, *PRECT, *NPRECT, *LPRECT;
-    
+
     typedef struct _STARTUPINFOW {
         DWORD  cb;
         LPWSTR lpReserved;
@@ -557,41 +563,41 @@ extern "C" {
         HANDLE hStdOutput;
         HANDLE hStdError;
     } STARTUPINFOW, *LPSTARTUPINFOW;
-    
+
     typedef struct _PROCESS_INFORMATION {
         HANDLE hProcess;
         HANDLE hThread;
         DWORD  dwProcessId;
         DWORD  dwThreadId;
     } PROCESS_INFORMATION, *PPROCESS_INFORMATION, *LPPROCESS_INFORMATION;
-    
+
     // shell32.lib
 #define BIF_NEWDIALOGSTYLE (0x00000040)
 #define BIF_EDITBOX (0x00000010)
 #define BIF_USENEWUI (BIF_EDITBOX|BIF_NEWDIALOGSTYLE)
 #define BIF_RETURNONLYFSDIRS (0x00000001)
-    
+
     typedef int GPFIDL_FLAGS;
-    
+
     typedef struct _SHITEMID {
         USHORT cb;
         BYTE   abID[1];
     } SHITEMID;
-    
+
     typedef struct _ITEMIDLIST {
         SHITEMID mkid;
     } ITEMIDLIST, ITEMIDLIST_ABSOLUTE;
-    
+
     typedef ITEMIDLIST_ABSOLUTE* PIDLIST_ABSOLUTE;
     typedef const ITEMIDLIST_ABSOLUTE* PCIDLIST_ABSOLUTE;
-    
-    
+
+
     typedef int ( CALLBACK *BFFCALLBACK)(
         HWND   hwnd,
         UINT   uMsg,
         LPARAM lParam,
         LPARAM lpData);
-    
+
     typedef struct _browseinfoW {
         HWND              hwndOwner;
         PCIDLIST_ABSOLUTE pidlRoot;
@@ -602,7 +608,7 @@ extern "C" {
         LPARAM            lParam;
         int               iImage;
     } BROWSEINFOW, *PBROWSEINFOW, *LPBROWSEINFOW;
-    
+
     typedef struct _SYSTEM_INFO {
         union {
             DWORD dwOemId;
@@ -621,31 +627,31 @@ extern "C" {
         WORD      wProcessorLevel;
         WORD      wProcessorRevision;
     } SYSTEM_INFO, *LPSYSTEM_INFO;
-    
+
     LPWSTR* CommandLineToArgvW(
         LPCWSTR lpCmdLine,
         int *pNumArgs);
-    
+
     PIDLIST_ABSOLUTE SHBrowseForFolderW(LPBROWSEINFOW lpbi);
-    
+
     BOOL SHGetPathFromIDListEx(
         PCIDLIST_ABSOLUTE pidl,
         PWSTR             pszPath,
         DWORD             cchPath,
         GPFIDL_FLAGS      uOptss);
-    
+
     // kernel32.lib
     HMODULE LoadLibraryA(LPCSTR lpLibFileName);
     FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
-    
+
     LPVOID VirtualAlloc(
         LPVOID lpAddress,
         SIZE_T dwSize,
         DWORD  flAllocationType,
         DWORD  flProtect);
-    
+
     void GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
-    
+
     HANDLE CreateThread(
         LPSECURITY_ATTRIBUTES   lpThreadAttributes,
         SIZE_T                  dwStackSize,
@@ -653,18 +659,18 @@ extern "C" {
         LPVOID                  lpParameter,
         DWORD                   dwCreationFlags,
         LPDWORD                 lpThreadId);
-    
+
     BOOL CreatePipe(
         PHANDLE               hReadPipe,
         PHANDLE               hWritePipe,
         LPSECURITY_ATTRIBUTES lpPipeAttributes,
         DWORD                 nSize);
-    
+
     BOOL SetHandleInformation(
         HANDLE hObject,
         DWORD  dwMask,
         DWORD  dwFlags);
-    
+
     BOOL CreateProcessW(
         LPCWSTR               lpApplicationName,
         LPWSTR                lpCommandLine,
@@ -676,26 +682,26 @@ extern "C" {
         LPCWSTR               lpCurrentDirectory,
         LPSTARTUPINFOW        lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation);
-    
+
     BOOL GetExitCodeProcess(
         HANDLE  hProcess,
         LPDWORD lpExitCode);
-    
+
     HANDLE CreateMutexA(
         LPSECURITY_ATTRIBUTES lpMutexAttributes,
         BOOL                  bInitialOwner,
         LPCSTR                lpName);
-    
+
     DWORD WaitForSingleObject(
         HANDLE hHandle,
         DWORD  dwMilliseconds);
-    
+
     BOOL ReleaseMutex(HANDLE hMutex);
-    
+
     void Sleep(DWORD dwMilliseconds);
 
     DWORD GetLastError();
-    
+
     DWORD FormatMessageA(
         DWORD dwFlags,
         LPCVOID lpSource,
@@ -704,18 +710,18 @@ extern "C" {
         LPSTR lpBuffer,
         DWORD nSize,
         va_list *Arguments);
-    
+
     void OutputDebugStringA(LPCSTR lpOutputString);
     void OutputDebugStringW(LPWSTR lpOutputString);
-    
+
     BOOL IsDebuggerPresent();
-    
+
     BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
     BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
-    
+
     DWORD GetCurrentDirectoryW(DWORD nBufferLength,LPWSTR lpBuffer);
     BOOL SetCurrentDirectoryW(LPCWSTR lpPathName);
-    
+
     BOOL ReadDirectoryChangesW(
         HANDLE                          hDirectory,
         LPVOID                          lpBuffer,
@@ -725,34 +731,34 @@ extern "C" {
         LPDWORD                         lpBytesReturned,
         LPOVERLAPPED                    lpOverlapped,
         LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
-    
+
     HANDLE FindFirstFileA(
         LPCSTR             lpFileName,
         LPWIN32_FIND_DATAA lpFindFileData);
-    
+
     BOOL FindNextFileA(
         HANDLE             hFindFile,
         LPWIN32_FIND_DATAA lpFindFileData);
-    
+
     BOOL FindClose(HANDLE hFindFile);
 
-    
+
     DWORD GetModuleFileNameA(
         HMODULE hModule,
         LPSTR   lpFilename,
         DWORD   nSize);
-    
+
     DWORD GetModuleFileNameW(
         HMODULE hModule,
         LPWSTR  lpFilename,
         DWORD   nSize);
-    
+
     LPVOID VirtualAlloc(
         LPVOID lpAddress,
         SIZE_T dwSize,
         DWORD  flAllocationType,
-        DWORD  flProtect);    
-    
+        DWORD  flProtect);
+
     DECLSPEC_ALLOCATOR HGLOBAL GlobalAlloc(UINT uFlags, SIZE_T dwBytes);
 
     LPVOID GlobalLock(HGLOBAL hMem);
@@ -768,34 +774,37 @@ extern "C" {
         DWORD                 dwCreationDisposition,
         DWORD                 dwFlagsAndAttributes,
         HANDLE                hTemplateFile);
-    
+
     BOOL DeleteFileA(LPCSTR lpFileName);
-    
+
     BOOL WriteFile(
         HANDLE       hFile,
         LPCVOID      lpBuffer,
         DWORD        nNumberOfBytesToWrite,
         LPDWORD      lpNumberOfBytesWritten,
         LPOVERLAPPED lpOverlapped);
-    
+
     BOOL ReadFile(
         HANDLE       hFile,
         LPVOID       lpBuffer,
         DWORD        nNumberOfBytesToRead,
         LPDWORD      lpNumberOfBytesRead,
         LPOVERLAPPED lpOverlapped);
-    
+
     DWORD GetFileAttributesA(LPCSTR lpFileName);
     BOOL GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
     BOOL CreateDirectoryA(LPCSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-    
+
     BOOL GetFileTime(
         HANDLE     hFile,
         LPFILETIME lpCreationTime,
         LPFILETIME lpLastAccessTime,
-        LPFILETIME lpLastWriteTime);    
-    
+        LPFILETIME lpLastWriteTime);
+
     void GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+
+    HMODULE GetModuleHandleA(LPCSTR lpModuleName);
+
 }
 
 #endif // WIN32_LITE_H

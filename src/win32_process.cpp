@@ -12,19 +12,20 @@ struct Process {
 
 Process* create_process(String exe, String args, StdOutProc stdout_proc)
 {
+    SArena scratch = tl_scratch_arena();
     Process *p = ALLOC_T(mem_dynamic, Process);
 
     if (extension_of(exe) == ".bat") {
         if (args.length > 0) {
-            args = stringf(mem_tmp, "/c %.*s %.*s", STRFMT(exe), STRFMT(args));
+            args = stringf(scratch, "/c %.*s %.*s", STRFMT(exe), STRFMT(args));
         } else {
-            args = stringf(mem_tmp, "/c %.*s", STRFMT(exe));
+            args = stringf(scratch, "/c %.*s", STRFMT(exe));
         }
         exe = "c:\\windows\\system32\\cmd.exe";
     }
 
-    wchar_t *wsz_exe = wsz_string(exe);
-    wchar_t *wsz_args = wsz_string(args);
+    wchar_t *wsz_exe = wsz_string(exe, scratch);
+    wchar_t *wsz_args = wsz_string(args, scratch);
 
     HANDLE stdout_wr = NULL;
     defer { if (stdout_wr) CloseHandle(stdout_wr); };
@@ -105,6 +106,6 @@ bool get_exit_code(Process *process, i32 *exit_code)
         if (exit_code) *exit_code = dw_exit_code;
         return true;
     }
-    
+
     return false;
 }
