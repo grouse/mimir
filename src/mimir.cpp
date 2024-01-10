@@ -408,8 +408,8 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
         const char *tmp = ts_query_capture_name_for_id(injection_query, capture->index, &capture_name_length);
         String capture_name{ (char*)tmp, (i32)capture_name_length };
 
-        if (Language *l = find(&app.language_map, capture_name); l) {
-            DynamicArray<TSRange> *ranges = find_emplace(&lang_range_map, (u32)*l, { .alloc = scratch });
+        if (Language *l = map_find(&app.language_map, capture_name); l) {
+            DynamicArray<TSRange> *ranges = map_find_emplace(&lang_range_map, (u32)*l, { .alloc = scratch });
 
             u32 start_byte = ts_node_start_byte(capture->node);
             u32 end_byte = ts_node_end_byte(capture->node);
@@ -481,7 +481,7 @@ void get_syntax_colors(
             String str = capture_name;
             u32 *color = nullptr;
             do {
-                color = find(&app.syntax_colors, str);
+                color = map_find(&app.syntax_colors, str);
                 i32 p = last_of(str, '.');
                 if (p > 0) str = slice(str, 0, p);
                 else str.length = 0;
@@ -807,8 +807,8 @@ void init_app(Array<String> args)
 
     init_gui();
 
-    set(&app.language_map, "cpp", LANGUAGE_CPP);
-    set(&app.language_map, "comment", LANGUAGE_COMMENT);
+    map_set(&app.language_map, "cpp", LANGUAGE_CPP);
+    map_set(&app.language_map, "comment", LANGUAGE_COMMENT);
 
     app.languages[LANGUAGE_CPP] = tree_sitter_cpp();
     app.languages[LANGUAGE_CS] = tree_sitter_c_sharp();
@@ -831,29 +831,29 @@ void init_app(Array<String> args)
 
 
     u32 fg = bgr_pack(app.fg);
-    set(&app.syntax_colors, "unused", fg);
-    set(&app.syntax_colors, "_parent", fg);
-    set(&app.syntax_colors, "label", fg);
-    set(&app.syntax_colors, "parameter", fg);
-    set(&app.syntax_colors, "property", fg);
-    set(&app.syntax_colors, "variable", fg);
-    set(&app.syntax_colors, "identifier", fg);
+    map_set(&app.syntax_colors, "unused", fg);
+    map_set(&app.syntax_colors, "_parent", fg);
+    map_set(&app.syntax_colors, "label", fg);
+    map_set(&app.syntax_colors, "parameter", fg);
+    map_set(&app.syntax_colors, "property", fg);
+    map_set(&app.syntax_colors, "variable", fg);
+    map_set(&app.syntax_colors, "identifier", fg);
 
-    set(&app.syntax_colors, "text.warning", 0xff0000u);
+    map_set(&app.syntax_colors, "text.warning", 0xff0000u);
 
-    set(&app.syntax_colors, "preproc", 0xFE8019u);
-    set(&app.syntax_colors, "include", 0xFE8019u);
-    set(&app.syntax_colors, "string", 0x689D6Au);
-    set(&app.syntax_colors, "comment", 0x8EC07Cu);
-    set(&app.syntax_colors, "function", 0xccb486u);
-    set(&app.syntax_colors, "operator", 0xfcedcfu);
-    set(&app.syntax_colors, "punctuation", 0xfcedcfu);
-    set(&app.syntax_colors, "type", 0xbcbf91u);
-    set(&app.syntax_colors, "constant", 0xe9e4c6u);
-    set(&app.syntax_colors, "keyword", 0xd36e2au);
-    set(&app.syntax_colors, "namespace", 0xd36e2au);
-    set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
-    set(&app.syntax_colors, "attribute", 0x84a89au);
+    map_set(&app.syntax_colors, "preproc", 0xFE8019u);
+    map_set(&app.syntax_colors, "include", 0xFE8019u);
+    map_set(&app.syntax_colors, "string", 0x689D6Au);
+    map_set(&app.syntax_colors, "comment", 0x8EC07Cu);
+    map_set(&app.syntax_colors, "function", 0xccb486u);
+    map_set(&app.syntax_colors, "operator", 0xfcedcfu);
+    map_set(&app.syntax_colors, "punctuation", 0xfcedcfu);
+    map_set(&app.syntax_colors, "type", 0xbcbf91u);
+    map_set(&app.syntax_colors, "constant", 0xe9e4c6u);
+    map_set(&app.syntax_colors, "keyword", 0xd36e2au);
+    map_set(&app.syntax_colors, "namespace", 0xd36e2au);
+    map_set(&app.syntax_colors, "preproc.identifier", 0x84a89au);
+    map_set(&app.syntax_colors, "attribute", 0x84a89au);
 
     // TODO(jesper): this is kinda neat but I think I might want this as some kind of underline or background
     // style instead of foreground colour?

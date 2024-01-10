@@ -1,6 +1,7 @@
 #ifndef HASH_TABLE_H
 #define HASH_TABLE_H
 
+#include "core.h"
 #include "memory.h"
 #include "hash.h"
 
@@ -22,7 +23,7 @@ struct HashTable {
 };
 
 template<typename K, typename V>
-void set(HashTable<K, V> *table, K key, V value);
+void map_set(HashTable<K, V> *table, K key, V value);
 
 template<typename K, typename V>
 i32 find_slot(HashTable<K, V> *table, K key)
@@ -55,7 +56,7 @@ void grow_table(HashTable<K, V> *table, i32 new_capacity)
 
     for (i32 i = 0; i < old_table.capacity; i++) {
         if (old_table.slots[i].occupied) {
-            set(table, old_table.slots[i].key, old_table.slots[i].value);
+            map_set(table, old_table.slots[i].key, old_table.slots[i].value);
         }
     }
 
@@ -79,8 +80,26 @@ i32 set_slot(HashTable<K, V> *table, i32 slot, K key, V value)
     return slot;
 }
 
+template<typename K, typename V, i32 n>
+i32 set_slot(HashTable<K, V[n]> *table, i32 slot, K key, V value[n])
+{
+    if (table->count >= table->capacity*HASH_TABLE_LOAD_FACTOR) {
+        i32 new_capacity = table->capacity == 0 ? HASH_TABLE_INITIAL_CAPACITY : table->capacity*2;
+        grow_table(table, new_capacity);
+
+        slot = find_slot(table, key);
+        ASSERT(slot >= 0);
+    }
+
+    table->slots[slot] = { .key = key, .occupied = true };
+    for (i32 i = 0; i < n; i++) table->slots[slot].value[i] = value[i];
+    table->count++;
+
+    return slot;
+}
+
 template<typename K, typename V>
-void set(HashTable<K, V> *table, K key, V value)
+void map_set(HashTable<K, V> *table, K key, V value)
 {
     i32 slot = find_slot(table, key);
     if (slot >= 0 && table->slots[slot].occupied) {
@@ -91,29 +110,62 @@ void set(HashTable<K, V> *table, K key, V value)
     set_slot(table, slot, key, value);
 }
 
+template<typename K, typename V, i32 n>
+void map_set(HashTable<K, V[n]> *table, K key, V value[n])
+{
+    i32 slot = find_slot(table, key);
+    if (slot >= 0 && table->slots[slot].occupied) {
+        for (i32 i = 0; i < n; i++) table->slots[slot].value[i] = value[i];
+        return;
+    }
+
+    set_slot(table, slot, key, value);
+}
+
 
 template<typename K, typename V>
-V* find(HashTable<K, V> *table, K key)
+V* map_find(HashTable<K, V> *table, K key)
 {
     i32 i = find_slot(table, key);
     if (i == -1 || !table->slots[i].occupied) return nullptr;
     return &table->slots[i].value;
 }
 
-template<typename K, typename V>
-V* find_emplace(HashTable<K, V> *table, K key)
+template<typename K, typename V, i32 n>
+V* map_find(HashTable<K, V[n]> *table, K key)
 {
-    i32 slot = find_slot(table, key);
-    
-    if (slot == -1 || !table->slots[slot].occupied) {
-        slot = set_slot(table, slot, key, V{});
-    }
-    
-    return &table->slots[slot].value;
+    i32 i = find_slot(table, key);
+    if (i == -1 || !table->slots[i].occupied) return nullptr;
+    return &table->slots[i].value[0];
 }
 
 template<typename K, typename V>
-V* find_emplace(HashTable<K, V> *table, K key, V emp_value)
+V* map_find_emplace(HashTable<K, V> *table, K key)
+{
+    i32 slot = find_slot(table, key);
+
+    if (slot == -1 || !table->slots[slot].occupied) {
+        slot = set_slot(table, slot, key, V{});
+    }
+
+    return &table->slots[slot].value;
+}
+
+template<typename K, typename V, i32 n>
+V* map_find_emplace(HashTable<K, V[n]> *table, K key)
+{
+    i32 slot = find_slot(table, key);
+
+    if (slot == -1 || !table->slots[slot].occupied) {
+        V value[n] = {};
+        slot = set_slot(table, slot, key, value);
+    }
+
+    return &table->slots[slot].value[0];
+}
+
+template<typename K, typename V>
+V* map_find_emplace(HashTable<K, V> *table, K key, V emp_value)
 {
     i32 slot = find_slot(table, key);
 
@@ -125,8 +177,12 @@ V* find_emplace(HashTable<K, V> *table, K key, V emp_value)
 }
 
 
+// string specializations
 template<typename V>
-V* find(HashTable<String, V> *table, String key)
+void map_set(HashTable<String, V> *table, const char *key, V value) { return map_set(table, string(key), value); }
+
+template<typename V>
+V* map_find(HashTable<String, V> *table, String key)
 {
     i32 i = find_slot(table, key);
     if (i == -1 || !table->slots[i].occupied) return nullptr;
@@ -134,7 +190,7 @@ V* find(HashTable<String, V> *table, String key)
 }
 
 template<typename V>
-void set(HashTable<String, V> *table, String key, V value)
+void map_find(HashTable<String, V> *table, String key, V value)
 {
     i32 i = find_slot(table, key);
     if (i >= 0 && table->slots[i].occupied) {

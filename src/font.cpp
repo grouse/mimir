@@ -54,7 +54,7 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
     SArena scratch = tl_scratch_arena();
     int glyph_index = stbtt_FindGlyphIndex(&font->info, codepoint);
 
-    Glyph *existing = find(&font->glyphs, glyph_index);
+    Glyph *existing = map_find(&font->glyphs, glyph_index);
     if (existing) return *existing;
 
     bool glyph_empty = stbtt_IsGlyphEmpty(&font->info, glyph_index);
@@ -139,7 +139,7 @@ Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
         .x1 = x+dst_w, .y1 = y+dst_h,
         .xoff = x0,    .yoff = y0,
     };
-    set(&font->glyphs, glyph_index, glyph);
+    map_set(&font->glyphs, glyph_index, glyph);
     return glyph;
 }
 
