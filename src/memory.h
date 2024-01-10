@@ -28,7 +28,6 @@ struct Allocator {
     allocate_t *proc;
 };
 
-//extern thread_local Allocator mem_tmp;
 extern Allocator mem_dynamic;
 
 #define ALLOC(alloc, size)               (alloc).proc((alloc).state, M_ALLOC,   nullptr, 0,     size, M_DEFAULT_ALIGN)

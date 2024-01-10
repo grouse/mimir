@@ -3,6 +3,8 @@
 #include "win32_core.h"
 #include "win32_shlwapi.h"
 
+#include "gen/string.h"
+
 String absolute_path(String relative, Allocator mem)
 {
     SArena scratch = tl_scratch_arena(mem);

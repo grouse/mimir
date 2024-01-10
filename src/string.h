@@ -1,18 +1,25 @@
 #ifndef STRING_H
 #define STRING_H
 
+#include "platform.h"
 #include "memory.h"
 
 #define STRFMT(str) (str).length, (str).data
+
+extern "C" size_t strlen(const char * str) NOTHROW;
+extern "C" size_t wcslen(const wchar_t* wcs) NOTHROW;
+extern "C" int strcmp(const char * str1, const char * str2) NOTHROW;
+extern "C" int strncmp(const char * str1, const char * str2, size_t num) NOTHROW;
+extern "C" int tolower(int ch);
 
 struct String {
     char *data;
     i32 length;
 
     String() = default;
-    String(char *data, i32 length)
+    String(const char *data, i32 length)
     {
-        this->data = data;
+        this->data = (char*)data;
         this->length = length;
     }
 
@@ -31,7 +38,11 @@ struct String {
         //ASSERT(i < length && i >= 0);
         return data[i];
     }
+
+    operator bool() const { return length > 0; }
 };
+
+inline String string(const char *sz_string) { return String{ (char*)sz_string, (i32)strlen(sz_string) }; }
 
 struct StringBuilder {
     struct Block {
@@ -52,7 +63,9 @@ bool starts_with(String lhs, String rhs);
 bool starts_with(const char *lhs, const char *rhs);
 bool ends_with(String lhs, String rhs);
 
-String create_string(char *str, i32 length, Allocator mem);
+String create_string(StringBuilder *sb, Allocator mem);
+String create_string(const char *str, i32 length, Allocator mem);
+inline String create_string(const char *sz_str, Allocator mem) { return create_string(sz_str, (i32)strlen(sz_str), mem); }
 String duplicate_string(String other, Allocator mem);
 void string_copy(String *dst, String src, Allocator mem);
 
@@ -60,17 +73,14 @@ String to_lower(String s, Allocator mem);
 char to_lower(char c);
 
 bool is_whitespace(i32 c);
+bool is_number(i32 c);
 
 String stringf(char *buffer, i32 size, const char *fmt, ...);
 String stringf(Allocator mem, const char *fmt, ...);
 
 i32 i32_from_string(String s);
+bool i32_from_string(String s, i32 *dst);
 bool f32_from_string(String s, f32 *dst);
-
-String filename_of(String path);
-String extension_of(String path);
-String path_relative_to(String path, String root);
-String join_path(String root, String filename, Allocator mem);
 
 String slice(String str, i32 start, i32 end);
 String slice(String str, i32 start);
@@ -101,8 +111,11 @@ i32 utf8_truncate(String str, i32 limit);
 i32 byte_index_from_codepoint_index(String str, i32 codepoint);
 i32 codepoint_index_from_byte_index(String str, i32 byte);
 
+void reset_string_builder(StringBuilder *sb);
 void append_string(StringBuilder *sb, String str);
 void append_stringf(StringBuilder *sb, const char *fmt, ...);
+
+bool parse_cmd_argument(String *args, i32 count, String name, i32 values[2]);
 
 #if defined(_WIN32)
 wchar_t* wsz_string(String str, Allocator mem);

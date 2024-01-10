@@ -1,16 +1,35 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#ifndef NULL
+#define NULL nullptr
+#endif
+
 #if defined(__clang__)
 
 #define PACKED __attribute__((__packed__))
+
+#define EXPORT __attribute__((annotate("export")))
+#define EXPORTS namespace PUBLIC __attribute__((annotate("export")))
+
+#define INTERNAL __attribute__((annotate("internal")))
+#define INTERNALS namespace __attribute__((annotate("internal")))
 
 #else
 #error "unsupported compiler"
 #endif
 
 #if defined(__linux__)
+
+#include <linux/limits.h>
+
 #define NOTHROW __attribute__(( __nothrow__ __LEAF))
+
+#define DEBUG_BREAK() asm("int $3") // TODO(jesper): remove in non-debug builds
+#define BREAK() asm("int $3")
+
+
+typedef unsigned long size_t;
 
 typedef unsigned long u64;
 typedef unsigned int u32;
@@ -25,30 +44,14 @@ typedef signed char i8 ;
 typedef float f32;
 typedef double f64;
 
-#include <stdarg.h>
-#include <stdio.h> // TODO(jesper): only needed because vsnprintf is weird
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xatom.h>
-
-#include <dlfcn.h>
-#include <time.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <errno.h>
-
-#define DEBUG_BREAK() asm("int $3")
-
 #define atomic_exchange(var, value) __sync_lock_test_and_set(var, value)
 
-extern "C" char *strerror(int errnum) NOTHROW;
-
 #elif defined(_WIN32)
+
 #define NOTHROW
+
+#define DEBUG_BREAK() __debugbreak() // TODO(jesper): remove in non-debug builds
+#define BREAK() __debugbreak()
 
 typedef unsigned long long u64;
 typedef unsigned int u32;
@@ -63,10 +66,6 @@ typedef signed char i8 ;
 typedef float f32;
 typedef double f64;
 
-#include <stdarg.h>
-#include <stdio.h> // TODO(jesper): only needed because vsnprintf is weird
-
-#define DEBUG_BREAK() __debugbreak()
 
 #else
 #error "unsupported platform"
@@ -87,13 +86,16 @@ constexpr f32 f32_PI = (f32)f64_PI;
 
 static_assert(sizeof(u64) == 8);
 static_assert(sizeof(i64) == 8);
+static_assert(sizeof(f64) == 8);
+
 static_assert(sizeof(u32) == 4);
 static_assert(sizeof(i32) == 4);
+static_assert(sizeof(f32) == 4);
+
 static_assert(sizeof(u16) == 2);
 static_assert(sizeof(i16) == 2);
+
 static_assert(sizeof(u8) == 1);
 static_assert(sizeof(i8) == 1);
-static_assert(sizeof(f32) == 4);
-static_assert(sizeof(f64) == 8);
 
 #endif // PLATFORM_H

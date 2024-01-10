@@ -31,11 +31,6 @@ void* align_ptr(void *ptr, u8 alignment, u8 header_size);
 template<typename T>
 T* get_header(void *aligned_ptr) { return (T*)((size_t)aligned_ptr-sizeof(T)); }
 
-void init_thread_allocators(i32 tmp_size = 10*1024*1024)
-{
-    (void)tmp_size;
-}
-
 void init_default_allocators()
 {
     PANIC_IF(mem_sys.proc != nullptr, "default allocators already initialized");

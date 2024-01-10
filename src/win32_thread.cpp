@@ -29,18 +29,15 @@ Thread* create_thread(ThreadProc proc, void *user_data)
     Thread *t = ALLOC_T(mem_dynamic, Thread);
     t->user_proc = proc;
     t->user_data = user_data;
-    
+
     t->handle = CreateThread(
         NULL, 0,
         [](LPVOID data) -> DWORD
         {
             Thread *t = (Thread*)data;
-            init_thread_allocators();
-            
             return t->user_proc(t->user_data);
         },
         t, 0, NULL);
 
     return t;
 }
-    

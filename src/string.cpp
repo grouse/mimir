@@ -2,6 +2,9 @@
 
 #include "core.h"
 
+#include <stdarg.h>
+#include <stdio.h>
+
 bool operator!=(String lhs, String rhs)
 {
     return lhs.length != rhs.length || memcmp(lhs.data, rhs.data, lhs.length) != 0;
@@ -12,7 +15,7 @@ bool operator==(String lhs, String rhs)
     return lhs.length == rhs.length && memcmp(lhs.data, rhs.data, lhs.length) == 0;
 }
 
-String create_string(char *str, i32 length, Allocator mem)
+String create_string(const char *str, i32 length, Allocator mem)
 {
     String s;
     s.data = (char*)ALLOC(mem, length);
@@ -89,6 +92,12 @@ String slice(String str, i32 start)
 
 i32 i32_from_string(String s)
 {
+    if (i32 value; i32_from_string(s, &value)) return value;
+    return -1;
+}
+
+bool i32_from_string(String s, i32 *dst)
+{
     i32 sign = 1;
     i32 result = 0;
 
@@ -102,7 +111,8 @@ i32 i32_from_string(String s)
         result = result * 10 + (s[i] - '0');
     }
 
-    return sign * result;
+    *dst = sign*result;
+    return true;
 }
 
 bool f32_from_string(String s, f32 *dst)
@@ -125,7 +135,7 @@ bool starts_with(const char *lhs, const char *rhs)
 
 bool ends_with(String lhs, String rhs)
 {
-    return lhs.length >= rhs.length && memcmp(lhs.data-rhs.length, rhs.data, rhs.length) == 0;
+    return lhs.length >= rhs.length && memcmp(lhs.data+lhs.length-rhs.length, rhs.data, rhs.length) == 0;
 }
 
 char* sz_string(String str, Allocator mem)
@@ -588,7 +598,7 @@ i32 utf8_incr(String str, i32 i)
 }
 
 
-bool path_equals(String lhs, String rhs)
+bool path_equals(String lhs, String rhs) EXPORT
 {
     if (lhs.length != rhs.length) return false;
 
@@ -604,7 +614,7 @@ bool path_equals(String lhs, String rhs)
     return true;
 }
 
-String extension_of(String path)
+String extension_of(String path) EXPORT
 {
     for (i32 i = path.length-1; i >= 0; i--) {
         if (path.data[i] == '.') {
@@ -615,7 +625,7 @@ String extension_of(String path)
     return {};
 }
 
-String filename_of(String path)
+String filename_of(String path) EXPORT
 {
     for (i32 i = path.length-1; i >= 0; i--) {
         if (path.data[i] == '/' || path.data[i] == '\\') {
@@ -623,7 +633,31 @@ String filename_of(String path)
         }
     }
 
-    return {};
+    return path;
+}
+
+String filename_of_sz(const char *path) EXPORT
+{
+    const char *p = path;
+
+    for (; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            path = p+1;
+        }
+    }
+
+    return { path, i32(p-path) };
+}
+
+String directory_of(String path) EXPORT
+{
+    for (i32 i = path.length-1; i >= 0; i--) {
+        if (path.data[i] == '/' || path.data[i] == '\\') {
+            return slice(path, 0, i);
+        }
+    }
+
+    return path;
 }
 
 String path_relative_to(String path, String root)
@@ -641,7 +675,7 @@ String path_relative_to(String path, String root)
     return short_path;
 }
 
-String join_path(String root, String filename, Allocator mem)
+String join_path(String root, String filename, Allocator mem) EXPORT
 {
     bool add_slash = false;
     i32 required_length = root.length + filename.length;
@@ -665,7 +699,7 @@ String join_path(String root, String filename, Allocator mem)
     return path;
 }
 
-char* join_path(const char *sz_root, const char *sz_filename, Allocator mem)
+char* join_path(const char *sz_root, const char *sz_filename, Allocator mem) EXPORT
 {
     i32 root_length = strlen(sz_root);
     i32 filename_length = strlen(sz_filename);
@@ -825,6 +859,36 @@ i32 utf32_it_next(char **utf8, char *end)
     return c;
 }
 
+void reset_string_builder(StringBuilder *sb)
+{
+    for (auto it = sb->current; it; it = it->next) {
+        it->written = 0;
+    }
+
+    sb->current = &sb->head;
+}
+
+String create_string(StringBuilder *sb, Allocator mem)
+{
+    i32 length = 0;
+    for (auto it = sb->current; it; it = it->next) {
+        if (it->written == 0) break;
+        length += it->written;
+    }
+
+    String str;
+    str.data = (char*)ALLOC(mem, length);
+    str.length = length;
+
+    char *ptr = str.data;
+    for (auto it = sb->current; it; it = it->next) {
+        if (it->written == 0) break;
+        memcpy(ptr, it->data, it->written);
+    }
+
+    return str;
+}
+
 void append_string(StringBuilder *sb, String str)
 {
     i32 available = MIN((i32)sizeof sb->current->data - sb->current->written, str.length);
@@ -856,8 +920,6 @@ void append_string(StringBuilder *sb, String str)
 
 void append_stringf(StringBuilder *sb, const char *fmt, ...)
 {
-    SArena scratch = tl_scratch_arena(sb->alloc);
-
     va_list args;
     va_start(args, fmt);
 
@@ -866,6 +928,7 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
     va_end(args);
 
     if (length > available-1) {
+        SArena scratch = tl_scratch_arena(sb->alloc);
         char *buffer = (char*)ALLOC(*scratch, length+1);
 
         va_start(args, fmt);
@@ -881,6 +944,11 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
 bool is_whitespace(i32 c)
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+bool is_number(i32 c)
+{
+    return c >= '0' && c <= '9';
 }
 
 bool is_newline(i32 c)
@@ -923,6 +991,20 @@ char* last_of(char *str, char c)
 	}
 
 	return p;
+}
+
+bool parse_cmd_argument(String *args, i32 count, String name, i32 values[2])
+{
+    for (i32 i = 0; i < count; i++) {
+        if (args[i] == name) {
+            if (i+2 >= count) return false;
+            if (!i32_from_string(args[1], &values[0])) return false;
+            if (!i32_from_string(args[2], &values[1])) return false;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 

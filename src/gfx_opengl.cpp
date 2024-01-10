@@ -83,7 +83,7 @@ void gl_debug_proc(
     GLenum severity,
     GLsizei length,
     const GLchar *message,
-    const void */*userParam*/)
+    const void */*userParam*/) INTERNAL
 {
     String s_source;
     switch (source) {
@@ -119,12 +119,15 @@ void gl_debug_proc(
     default: s_type = "unknown"; break;
     }
 
+    LogType log_type = LOG_TYPE_INFO;
+    if (severity == GL_DEBUG_SEVERITY_HIGH ||
+        severity == GL_DEBUG_SEVERITY_MEDIUM)
+    {
+        log_type = LOG_TYPE_ERROR;
+    }
+
     if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {
-        String filename = filename_of(__FILE__);
-        LOG_RAW("%.*s:%d: %.*s: %.*s, %.*s (0x%x): %.*s\n",
-                STRFMT(filename), __LINE__,
-                STRFMT(s_severity), STRFMT(s_source), STRFMT(s_type), id,
-                length, message);
+        LOG(log_type, "%.*s (0x%x): %.*s", STRFMT(s_severity), id, length, message);
 
         if (type == GL_DEBUG_TYPE_ERROR &&
             debugger_attached())

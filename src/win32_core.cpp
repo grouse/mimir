@@ -1,76 +1,35 @@
 #include "core.h"
+#include "array.h"
 
 #include "win32_core.h"
 #include "win32_user32.h"
+
+
+#include "gen/string.h"
+
+
+#include <stdarg.h>
+#include <stdio.h>
+
+extern void stdio_sink(const char *path, u32 line, LogType type, const char *msg);
+extern void win32_debugger_sink(const char *path, u32 line, LogType type, const char *msg);
+FixedArray<sink_proc_t*, 10> log_sinks{ stdio_sink, win32_debugger_sink };
 
 bool debugger_attached()
 {
     return IsDebuggerPresent();
 }
 
-void log(String path, u32 line, String func, LogType type, const char *fmt, ...)
+void win32_debugger_sink(const char *path, u32 line, LogType type, const char *msg)
 {
-    char buffer0[1024];
-    char buffer1[1024];
+    char buffer[2048];
 
-    char *msg = buffer0;
-    char *final = buffer1;
-
-    va_list args;
-    va_start(args, fmt);
-
-    vsnprintf(buffer0, sizeof buffer0-1, fmt, args);
-
-    va_end(args);
-
-    const char *log_type_str = nullptr;
-    switch (type) {
-    case LOG_TYPE_ASSERT:
-        log_type_str = "assertion failed:";
-        break;
-    case LOG_TYPE_ERROR:
-        log_type_str = "error:";
-        break;
-    case LOG_TYPE_PANIC:
-        log_type_str = "panic!";
-        break;
-    case LOG_TYPE_INFO:
-        log_type_str = "info:";
-        break;
-    }
-
-    // NOTE(jesper): this is basically just to appease the jump buffer parsing in 4coder, but it was possible to grab this
-    // number from the source caller somehow
-    i32 column = 0;
-
-    constexpr const char* LOG_FMT = "%.*s:%d:%d in %.*s: %s %s\n";
-    String filename = filename_of(path);
-    snprintf(buffer1, sizeof buffer1-1, LOG_FMT, STRFMT(filename), line, column, STRFMT(func), log_type_str, msg);
-
-    if (debugger_attached()) {
-        OutputDebugStringA(final);
-    } else {
-        printf("%s", final);
-    }
+    String filename = filename_of_sz(path);
+    const char *type_s = sz_from_enum(type);
+    String s = stringf(buffer, sizeof buffer, "%.*s:%d %s %s\n\0", STRFMT(filename), line, type_s, msg);
+    OutputDebugStringA(s.data);
 }
 
-void log(const char *fmt, ...)
-{
-    char buffer[1024];
-    char *msg = buffer;
-
-    va_list args;
-    va_start(args, fmt);
-
-    vsnprintf(buffer, sizeof buffer-1, fmt, args);
-
-    va_end(args);
-    if (IsDebuggerPresent()) {
-        OutputDebugStringA(msg);
-    } else {
-        printf("%s", msg);
-    }
-}
 
 u64 time_counter_frequency()
 {
@@ -95,18 +54,11 @@ f32 app_time_s()
     return (f64)(time - start_time) / frequency;
 }
 
-u64 time_counter_from_s(f32 s)
+f32 wall_duration_s(u64 start, u64 end)
 {
     LARGE_INTEGER frequency;
     QueryPerformanceFrequency(&frequency);
-    return (u64)(s*frequency.QuadPart);
-}
-
-f32 time_counter_duration_s(u64 start, u64 current)
-{
-    LARGE_INTEGER frequency;
-    QueryPerformanceFrequency(&frequency);
-    return (f32)(current-start) / frequency.QuadPart;
+    return (f32)(end-start) / frequency.QuadPart;
 }
 
 void set_clipboard_data(String str)
@@ -171,6 +123,48 @@ char* win32_system_error_message(DWORD error)
         NULL);
 
     return buffer;
+}
+
+Array<String> win32_commandline_args(LPWSTR pCmdLine, Allocator mem)
+{
+    Array<String> args{};
+
+    // NOTE(jesper): CommandLineToArgvW sets the first argument string to the executable path if and only if pCmdLine is empty
+    if (pCmdLine && *pCmdLine != '\0') {
+        i32 argv = 0;
+        LPWSTR* argc = CommandLineToArgvW(pCmdLine, &argv);
+
+        if (argv > 0) {
+            i32 total_utf8_length = 0;
+            for (i32 i = 0; i < argv; i++) {
+                total_utf8_length += utf8_length(argc[i], wcslen(argc[i]));
+            }
+
+            args.data = ALLOC_ARR(mem, String, argv);
+            args.count = argv;
+
+            char *args_mem = ALLOC_ARR(mem, char, total_utf8_length);
+
+            char *p = args_mem;
+            for (i32 i = 0; i < argv; i++) {
+                i32 l = wcslen(argc[i]);
+
+                args[i].data = p;
+                args[i].length = utf8_from_utf16((u8*)p, l, argc[i], l);
+                p += l;
+            }
+        }
+    }
+
+    return args;
+}
+
+u64 wall_timestamp()
+{
+    FILETIME time;
+    GetSystemTimeAsFileTime(&time);
+
+    return time.dwLowDateTime | ((u64)time.dwHighDateTime << 32);
 }
 
 void win32_client_rect(HWND hwnd, f32 *x, f32 *y)
