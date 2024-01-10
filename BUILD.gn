@@ -3,11 +3,52 @@ executable("mimir") {
     libs = []
     deps = [ ":tree_sitter" ]
     defines = [ "ASSETS_DIR=\"//assets\""]
+    include_dirs = [
+        root_build_dir,
+        "external",
+    ]
 
     if (current_os == "win") {
         sources += [ "src/win32_mimir.cpp" ]
         libs += ["user32", "shell32", "opengl32", "gdi32", "shlwapi"]
     }
+}
+
+group("tools") {
+    deps = [ "//tools/gh" ]
+}
+
+action_foreach("gh") {
+    deps = [ "//tools/gh" ]
+    script = "tools/exe.py"
+    sources = [
+        "src/mimir.cpp",
+
+        "src/gui.cpp",
+        "src/window.cpp",
+        "src/font.cpp",
+        "src/maths.cpp",
+        "src/string.cpp",
+        "src/lexer.cpp",
+    ]
+
+    mnemonic = "generate-headers"
+
+    outputs = [
+        "$target_gen_dir/{{source_name_part}}.h",
+        "$target_gen_dir/internal/{{source_name_part}}.h",
+    ]
+
+    if (current_os == "win") { exe = rebase_path(root_build_dir, "") + "/gh.exe" }
+    else { exe = rebase_path(root_build_dir, "") + "/gh" }
+
+    args = [
+        exe,
+        "{{source}}",
+        "-o", rebase_path(target_gen_dir, ""),
+        "--",
+        "-I", rebase_path("//external/flecs/include", "")
+    ]
 }
 
 config("tree_sitter_public") {
@@ -42,4 +83,18 @@ static_library("tree_sitter") {
     configs += ["//gn/config:optimize", "//gn/config:no_warnings"]
     include_dirs = ["$TS_DIR/lib/include"]
     public_configs = [":tree_sitter_public"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
