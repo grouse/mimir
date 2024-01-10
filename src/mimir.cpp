@@ -24,7 +24,6 @@ extern "C" const TSLanguage* tree_sitter_c_sharp();
 extern "C" const TSLanguage* tree_sitter_lua();
 extern "C" const TSLanguage* tree_sitter_comment();
 
-
 #define DEBUG_LINE_WRAP_RECALC 0
 #define DEBUG_TREE_SITTER_SYNTAX_TREE 0
 #define DEBUG_TREE_SITTER_COLORS 0
@@ -94,8 +93,8 @@ enum BufferType {
 struct BufferId {
     i32 index = -1;
 
-    bool operator==(const BufferId &rhs) { return index == rhs.index; }
-    bool operator!=(const BufferId &rhs) { return index != rhs.index; }
+    bool operator==(const BufferId &rhs) const { return index == rhs.index; }
+    bool operator!=(const BufferId &rhs) const { return index != rhs.index; }
     operator bool() { return *this != BUFFER_INVALID; }
 };
 
@@ -793,6 +792,7 @@ void init_app(Array<String> args)
 
     String asset_folders[] = {
         exe_folder,
+        ASSETS_DIR,
         join_path(exe_folder, "/assets"),
         join_path(exe_folder, "../assets"),
     };

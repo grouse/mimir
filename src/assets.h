@@ -5,15 +5,8 @@ struct AssetHandle {
     i32 index;
     i32 id;
     
-    bool operator!=(const AssetHandle &rhs)
-    {
-        return index != rhs.index || id != rhs.id;
-    }
-    
-    bool operator==(const AssetHandle &rhs)
-    {
-        return index == rhs.index && id == rhs.id;
-    }
+    bool operator!=(const AssetHandle &rhs) const { return index != rhs.index || id != rhs.id; }
+    bool operator==(const AssetHandle &rhs) const { return index == rhs.index && id == rhs.id; }
 };
 
 #define ASSET_HANDLE_INVALID AssetHandle{ -1, -1 }

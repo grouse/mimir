@@ -93,12 +93,12 @@ struct GuiId {
     i32 index;
     i32 internal;
 
-    bool operator==(GuiId rhs)
+    bool operator==(GuiId rhs) const
     {
         return owner == rhs.owner && index == rhs.index && internal == rhs.internal;
     }
 
-    bool operator!=(GuiId rhs)
+    bool operator!=(GuiId rhs) const
     {
         return owner != rhs.owner || index != rhs.index || internal != rhs.internal;
     }
