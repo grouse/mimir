@@ -36,7 +36,7 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
     u32 vertex_shader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex_shader, 1, &vertex_src, nullptr);
     glCompileShader(vertex_shader);
-    
+
     GLint vertex_compiled;
     glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vertex_compiled);
     if (vertex_compiled != GL_TRUE) {
@@ -49,7 +49,7 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
     u32 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment_shader, 1, &fragment_src, nullptr);
     glCompileShader(fragment_shader);
-    
+
     GLint fragment_compiled;
     glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &fragment_compiled);
     if (fragment_compiled != GL_TRUE) {
@@ -63,7 +63,7 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
     glAttachShader(program, vertex_shader);
     glAttachShader(program, fragment_shader);
     glLinkProgram(program);
-    
+
     GLint program_linked;
     glGetProgramiv(program, GL_LINK_STATUS, &program_linked);
     if (program_linked != GL_TRUE) {
@@ -77,12 +77,12 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
 }
 
 void gl_debug_proc(
-    GLenum source, 
-    GLenum type, 
-    GLuint id, 
-    GLenum severity, 
-    GLsizei length, 
-    const GLchar *message, 
+    GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar *message,
     const void */*userParam*/)
 {
     String s_source;
@@ -95,7 +95,7 @@ void gl_debug_proc(
     case GL_DEBUG_SOURCE_OTHER: s_source = "other"; break;
     default: s_source = "unknown"; break;
     }
-    
+
     String s_severity;
     switch (severity) {
     case GL_DEBUG_SEVERITY_HIGH: s_severity = "high"; break;
@@ -104,7 +104,7 @@ void gl_debug_proc(
     case GL_DEBUG_SEVERITY_NOTIFICATION: s_severity = "notification"; break;
     default: s_severity = "unknown"; break;
     }
-    
+
     String s_type;
     switch (type) {
     case GL_DEBUG_TYPE_ERROR: s_type = "error"; break;
@@ -118,16 +118,16 @@ void gl_debug_proc(
     case GL_DEBUG_TYPE_OTHER: s_type = "other"; break;
     default: s_type = "unknown"; break;
     }
-        
+
     if (severity != GL_DEBUG_SEVERITY_NOTIFICATION) {
         String filename = filename_of(__FILE__);
         LOG_RAW("%.*s:%d: %.*s: %.*s, %.*s (0x%x): %.*s\n",
                 STRFMT(filename), __LINE__,
                 STRFMT(s_severity), STRFMT(s_source), STRFMT(s_type), id,
                 length, message);
-        
+
         if (type == GL_DEBUG_TYPE_ERROR &&
-            debugger_attached()) 
+            debugger_attached())
         {
             DEBUG_BREAK();
         }
@@ -160,17 +160,17 @@ void init_gfx(Vector2 resolution)
     } else {
         glEnable(GL_DEBUG_OUTPUT);
     }
-            
+
     glDebugMessageCallback(gl_debug_proc, nullptr);
-    
+
     gfx.resolution = resolution;
-    
+
     glEnable(GL_FRAMEBUFFER_SRGB);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);  
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     gfx.shaders.global.cs_from_ws = 0;
-    
+
     {
         const char *vert = SHADER_HEADER
             "layout(location = 0) in vec2 v_pos;\n"
@@ -219,7 +219,7 @@ void init_gfx(Vector2 resolution)
         gfx.shaders.basic2d.program = gfx_create_shader(vert, frag);
         ASSERT(glGetUniformLocation(gfx.shaders.basic2d.program, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
     }
-    
+
     {
         const char *vert = SHADER_HEADER
             "layout(location = 0) in vec2 v_pos;\n"
@@ -244,7 +244,7 @@ void init_gfx(Vector2 resolution)
         gfx.shaders.gui_prim.program = gfx_create_shader(vert, frag);
         gfx.shaders.gui_prim.resolution = glGetUniformLocation(gfx.shaders.gui_prim.program, "resolution");
     }
-    
+
     {
         const char *vert = SHADER_HEADER
             "layout(location = 0) in vec2 v_pos;\n"
@@ -302,7 +302,7 @@ void init_gfx(Vector2 resolution)
         gfx.shaders.text.resolution = glGetUniformLocation(gfx.shaders.text.program, "resolution");
         gfx.shaders.text.color = glGetUniformLocation(gfx.shaders.text.program, "color");
     }
-    
+
     {
         const char *vert = SHADER_HEADER
             "layout(location = 0) in vec2 v_pos;\n"
@@ -386,19 +386,19 @@ void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuff
 
     f32 vertices[] = {
         right, top, color.r, color.g, color.b, color.a,
-        left, top, color.r, color.g, color.b, color.a, 
-        left, bottom, color.r, color.g, color.b, color.a, 
+        left, top, color.r, color.g, color.b, color.a,
+        left, bottom, color.r, color.g, color.b, color.a,
 
-        left, bottom, color.r, color.g, color.b, color.a, 
-        right, bottom, color.r, color.g, color.b, color.a, 
-        right, top, color.r, color.g, color.b, color.a, 
+        left, bottom, color.r, color.g, color.b, color.a,
+        right, bottom, color.r, color.g, color.b, color.a,
+        right, top, color.r, color.g, color.b, color.a,
     };
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
 void gfx_draw_square(
-    Vector2 p0, 
-    Vector2 p1, 
+    Vector2 p0,
+    Vector2 p1,
     Vector2 p2,
     Vector2 p3,
     Vector3 color,
@@ -410,7 +410,7 @@ void gfx_draw_square(
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 6;
     gfx_push_command(cmdbuf, cmd);
-    
+
     color = linear_from_sRGB(color);
 
     f32 vertices[] = {
@@ -447,7 +447,7 @@ void gfx_draw_square(Vector2 center, Vector2 size, Vector2 uv_tl, Vector2 uv_br,
         left, bottom, uv_tl.x, uv_br.y,
 
         left, bottom, uv_tl.x, uv_br.y,
-        right, bottom, uv_br.x, uv_br.y, 
+        right, bottom, uv_br.x, uv_br.y,
         right, top, uv_br.x, uv_tl.y,
     };
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
@@ -462,7 +462,7 @@ void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCom
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 3;
     gfx_push_command(cmdbuf, cmd);
-    
+
     color = linear_from_sRGB(color);
 
     f32 vertices[] = {
@@ -482,11 +482,11 @@ void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 2;
     gfx_push_command(cmdbuf, cmd);
-    
+
     color = linear_from_sRGB(color);
 
-    f32 vertices[] = { 
-        a.x, a.y, color.r, color.g, color.b, 1.0f, 
+    f32 vertices[] = {
+        a.x, a.y, color.r, color.g, color.b, 1.0f,
         b.x, b.y, color.r, color.g, color.b, 1.0f,
     };
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
@@ -502,8 +502,8 @@ void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxComma
     gfx_push_command(cmdbuf, cmd);
 
     color = linear_from_sRGB(color);
-    
-    array_reserve_add(&gfx.frame_vertices, num_points*2*6);
+
+    array_grow(&gfx.frame_vertices, num_points*2*6);
     for (i32 i = 0; i < num_points-1; i++) {
         f32 vertices[] = {
             points[i].x, points[i].y, color.r, color.g, color.b, 1.0f,
@@ -511,7 +511,7 @@ void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxComma
         };
         array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
     }
-    
+
     f32 vertices[] = {
         points[num_points-1].x, points[num_points-1].y, color.r, color.g, color.b, 1.0f,
         points[0].x, points[0].y, color.r, color.g, color.b, 1.0f,
@@ -533,25 +533,25 @@ void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxComman
     f32 right = center.x + size.x*0.5f;
     f32 top = center.y - size.y*0.5f;
     f32 bottom = center.y + size.y*0.5f;
-    
+
     color = linear_from_sRGB(color);
 
     f32 vertices[] = {
         // ---
         left, top, color.r, color.g, color.b, 1.0f,
-        right, top, color.r, color.g, color.b, 1.0f, 
-        
+        right, top, color.r, color.g, color.b, 1.0f,
+
         //   |
         right, top, color.r, color.g, color.b, 1.0f,
-        right, bottom, color.r, color.g, color.b, 1.0f, 
-        
+        right, bottom, color.r, color.g, color.b, 1.0f,
+
         // ___
-        right, bottom, color.r, color.g, color.b, 1.0f, 
-        left, bottom, color.r, color.g, color.b, 1.0f, 
-        
+        right, bottom, color.r, color.g, color.b, 1.0f,
+        left, bottom, color.r, color.g, color.b, 1.0f,
+
         // |
-        left, bottom, color.r, color.g, color.b, 1.0f, 
-        left, top, color.r, color.g, color.b, 1.0f, 
+        left, bottom, color.r, color.g, color.b, 1.0f,
+        left, top, color.r, color.g, color.b, 1.0f,
     };
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
@@ -575,19 +575,19 @@ void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffe
     f32 vertices[] = {
         // ---
         left, top, color.r, color.g, color.b, 1.0f,
-        right, top, color.r, color.g, color.b, 1.0f, 
+        right, top, color.r, color.g, color.b, 1.0f,
 
         //   |
         right, top, color.r, color.g, color.b, 1.0f,
-        right, bottom, color.r, color.g, color.b, 1.0f, 
+        right, bottom, color.r, color.g, color.b, 1.0f,
 
         // ___
-        right, bottom - 1, color.r, color.g, color.b, 1.0f, 
-        left, bottom - 1, color.r, color.g, color.b, 1.0f, 
+        right, bottom - 1, color.r, color.g, color.b, 1.0f,
+        left, bottom - 1, color.r, color.g, color.b, 1.0f,
 
         // |
-        left, bottom, color.r, color.g, color.b, 1.0f, 
-        left, top, color.r, color.g, color.b, 1.0f, 
+        left, bottom, color.r, color.g, color.b, 1.0f,
+        left, top, color.r, color.g, color.b, 1.0f,
     };
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
@@ -630,15 +630,15 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
         switch (cmd.type) {
         case GFX_COMMAND_MONO_TEXT:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.mono_text.vbo);
-            
+
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             glUseProgram(gfx.shaders.mono_text.program);
-            
+
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2*sizeof(f32), (void*)(i64)((cmd.mono_text.vbo_offset+0)*sizeof(f32)));
             glEnableVertexAttribArray(0);
-            
+
             glBindTexture(GL_TEXTURE_2D, cmd.mono_text.glyph_atlas);
-            
+
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, cmd.mono_text.glyph_ssbo);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, cmd.mono_text.glyph_ssbo);
             //glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -664,7 +664,7 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(i64)((cmd.textured_prim.vbo_offset+2)*sizeof(f32)));
 
             glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1); 
+            glEnableVertexAttribArray(1);
 
             glDrawArrays(GL_TRIANGLES, 0, cmd.textured_prim.vertex_count);
             break;
@@ -679,7 +679,7 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+2)*sizeof(f32)));
 
             glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1); 
+            glEnableVertexAttribArray(1);
 
             glDrawArrays(GL_TRIANGLES, 0, cmd.colored_prim.vertex_count);
             break;
@@ -694,11 +694,11 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+2)*sizeof(f32)));
 
             glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1); 
+            glEnableVertexAttribArray(1);
 
             glDrawArrays(GL_LINES, 0, cmd.colored_prim.vertex_count);
             break;
-        case GFX_COMMAND_GUI_PRIM_COLOR: 
+        case GFX_COMMAND_GUI_PRIM_COLOR:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.gui_prim.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
@@ -707,7 +707,7 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(f32), (void*)(cmd.gui_prim.vbo_offset*sizeof(f32)));
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(f32), (void*)((cmd.gui_prim.vbo_offset+2)*sizeof(f32)));
             glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1); 
+            glEnableVertexAttribArray(1);
 
             glUniform2f(gfx.shaders.gui_prim.resolution, gfx.resolution.x, gfx.resolution.y);
 
@@ -722,14 +722,14 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(cmd.gui_prim_texture.vbo_offset*sizeof(f32)));
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)((cmd.gui_prim_texture.vbo_offset+2)*sizeof(f32)));
             glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1); 
+            glEnableVertexAttribArray(1);
 
             glUniform2f(gfx.shaders.gui_prim_texture.resolution, gfx.resolution.x, gfx.resolution.y);
             glBindTexture(GL_TEXTURE_2D, cmd.gui_prim_texture.texture);
 
             glDrawArrays(GL_TRIANGLES, 0, cmd.gui_prim_texture.vertex_count / 4);
             break;
-        case GFX_COMMAND_GUI_TEXT: 
+        case GFX_COMMAND_GUI_TEXT:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.gui_text.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
@@ -779,19 +779,19 @@ Vector4 linear_from_sRGB(Vector4 sRGB)
     l.a = sRGB.a;
     return l;
 }
-    
+
 GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height)
 {
     GLuint handle;
     glGenTextures(1, &handle);
-    
+
     glBindTexture(GL_TEXTURE_2D, handle);
-    
+
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
+
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel_data);
-    
+
     return handle;
 }
 

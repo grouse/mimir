@@ -1385,7 +1385,7 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
             }
             vcolumn = 0;
 
-            array_add(new_lines, { (i64)line_start, 1 });
+            array_add(new_lines, { (i64)line_start, .wrapped = true });
         }
 
         vcolumn++;
@@ -3389,4 +3389,3 @@ next_node:;
 
     gui_render();
 }
-
