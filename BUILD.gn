@@ -1,0 +1,45 @@
+executable("mimir") {
+    sources = []
+    libs = []
+    deps = [ ":tree_sitter" ]
+    defines = [ "ASSETS_DIR=\"//assets\""]
+
+    if (current_os == "win") {
+        sources += [ "src/win32_mimir.cpp" ]
+        libs += ["user32", "shell32", "opengl32", "gdi32", "shlwapi"]
+    }
+}
+
+config("tree_sitter_public") {
+  include_dirs = [ "external/tree-sitter-0.20.6/lib/include" ]
+}
+
+static_library("tree_sitter") {
+    TS_DIR = "external/tree-sitter-0.20.6"
+    TS_CPP_DIR = "external/tree-sitter-cpp-master"
+    TS_RS_DIR = "external/tree-sitter-rust-0.20.1"
+    TS_BASH_DIR = "external/tree-sitter-bash-master"
+    TS_CS_DIR = "external/tree-sitter-c-sharp-0.19.1"
+    TS_LUA_DIR = "external/tree-sitter-lua-master"
+    TS_COMMENT_DIR = "external/tree-sitter-comment-master"
+
+    sources = [
+        "$TS_DIR/lib/src/lib.c",
+        "$TS_CPP_DIR/src/parser.c",
+        "$TS_CPP_DIR/src/scanner.cc",
+        "$TS_RS_DIR/src/parser.c",
+        "$TS_RS_DIR/src/scanner.c",
+        "$TS_BASH_DIR/src/parser.c",
+        "$TS_BASH_DIR/src/scanner.cc",
+        "$TS_CS_DIR/src/parser.c",
+        "$TS_CS_DIR/src/scanner.c",
+        "$TS_LUA_DIR/src/parser.c",
+        "$TS_LUA_DIR/src/scanner.c",
+        "$TS_COMMENT_DIR/src/parser.c",
+        "$TS_COMMENT_DIR/src/scanner.c",
+    ]
+
+    configs += ["//gn/config:optimize", "//gn/config:no_warnings"]
+    include_dirs = ["$TS_DIR/lib/include"]
+    public_configs = [":tree_sitter_public"]
+}

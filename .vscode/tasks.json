@@ -2,18 +2,13 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build",
+            "label": "build:debug",
             "type": "shell",
-            "command": "ninja -f ${workspaceFolder}/linux_debug.ninja",
-            "problemMatcher": ["$gcc"],
-            "presentation": {
-                "revealProblems": "onProblem",
-                "clear": true,
-                "showReuseMessage": false,
-            },
+            "command": "ninja -C ${workspaceFolder}/build",
+            "problemMatcher": "$gcc",
             "group": {
-                "isDefault": true,
-                "kind": "build"
+                "kind": "build",
+                "isDefault": true
             }
         }
     ]
