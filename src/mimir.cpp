@@ -797,10 +797,10 @@ void init_app(Array<String> args)
     String exe_folder = get_exe_folder(scratch);
 
     String asset_folders[] = {
+        "./",
         exe_folder,
+        join_path(exe_folder, "assets", scratch),
         ASSETS_DIR,
-        join_path(exe_folder, "/assets", scratch),
-        join_path(exe_folder, "../assets", scratch),
     };
 
     init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
