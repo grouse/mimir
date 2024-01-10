@@ -1,15 +1,30 @@
-#ifndef INPUT_H
-#define INPUT_H
+#ifndef WINDOW_H
+#define WINDOW_H
+
+#include "string.h"
+#include "maths.h"
+
+#include <initializer_list>
+
+#define init_input_map(id, ...) init_input_map_(&id, #id, __VA_ARGS__)
 
 enum WindowEventType : u8 {
-    WE_MOUSE_WHEEL = 1,
+    WE_INPUT = 1,
+
+    WE_MOUSE_WHEEL,
     WE_MOUSE_PRESS,
     WE_MOUSE_RELEASE,
     WE_MOUSE_MOVE,
+
     WE_KEY_PRESS,
     WE_KEY_RELEASE,
+
     WE_TEXT,
+
+    WE_RESIZE,
     WE_QUIT,
+
+    WE_MAX,
 };
 
 enum KeyCode_ : u8 {
@@ -111,59 +126,184 @@ enum KeyCode_ : u8 {
 };
 
 enum ModifierFlags : u8 {
-    MF_NONE = 0,
-    MF_ALT = 1 << 0,
-    MF_CTRL = 1 << 1,
+    MF_ALT   = 1 << 0,
+    MF_CTRL  = 1 << 1,
     MF_SHIFT = 1 << 2,
+
+    MF_ANY   = 0xFF,
 };
 
 enum MouseButton : u8 {
-    MB_PRIMARY = 1 << 0,
+    MB_UNKNOWN   = 0,
+
+    MB_PRIMARY   = 1 << 0,
     MB_SECONDARY = 1 << 1,
-    MB_MIDDLE = 1 << 2,
+    MB_MIDDLE    = 1 << 2,
+    MB_WHEEL     = 1 << 3,
+
+    MB_4         = 1 << 4,
+    MB_5         = 1 << 5,
+
+    MB_ANY       = 0xFF,
+};
+
+enum InputType {
+    AXIS = 1,
+    AXIS_2D,
+    EDGE_DOWN,
+    EDGE_UP,
+    HOLD,
+    TEXT,
+
+    IT_MAX,
+};
+
+enum InputDevice {
+    KEYBOARD = 1,
+    MOUSE,
+
+    ID_MAX,
+};
+
+enum InputFlags {
+    FALLTHROUGH = 1 << 0,
+};
+
+enum {
+    CONFIRM = 0xF000,
+    CANCEL,
+
+    SAVE,
+
+    TEXT_INPUT,
+
+    UNDO,
+    REDO,
+
+    DUPLICATE,
+    COPY,
+    PASTE,
+    CUT,
+
+    DELETE,
+
+    SELECT,
+    SELECT_ALL,
+    DESELECT,
+
+    FORWARD,
+    BACK
+};
+
+typedef u32 InputId;
+typedef i32 InputMapId;
+
+constexpr i32 INPUT_MAP_INVALID = -1;
+constexpr i32 INPUT_MAP_ANY = -2;
+
+struct AppWindow;
+
+enum WindowFlags : u32 {
+    WINDOW_OPENGL = 1 << 0,
+};
+
+struct WindowCreateDesc {
+    String title;
+    i32 width, height;
+    u32 flags;
+};
+
+struct MouseState {
+    i16 x, y;
+    bool captured;
+};
+
+extern MouseState g_mouse;
+
+struct MouseEvent {
+    u8 modifiers;
+    u8 button;
+    i16 x, y;
+    i16 dx, dy;
+};
+
+struct InputDesc {
+    InputId id;
+    InputType type;
+    InputDevice device;
+
+    union {
+        struct {
+            u8 keycode;
+            u8 modifiers;
+            u8 axis;
+            i8 faxis;
+        } keyboard;
+        struct {
+            u8 button;
+            u8 modifiers;
+        } mouse;
+    };
+
+    u32 flags;
+};
+
+struct TextEvent {
+    // NOTE(jesper): key-repeat fills this buffer with repeated utf8 sequences
+    u8 modifiers;
+    u8 c[12];
+    u8 length;
 };
 
 struct WindowEvent {
     u8 type;
     union {
         struct {
-            i32 delta;
+            u8 modifiers;
+            i16 delta;
         } mouse_wheel;
+        MouseEvent mouse;
         struct {
-            i16 x, y;
-            u8 button;
-        } mouse;
-        struct {
-            u32 keycode    : 8;
             u32 modifiers  : 8;
+            u32 keycode    : 8;
             u32 prev_state : 1;
             u32 repeat     : 1;
             u32 unused     : 14;
         } key;
+        TextEvent text;
         struct {
-            // NOTE(jesper): key-repeat fills this buffer with repeated utf8 sequences
-            u8 c[12];
-            u8 length;
-            u8 modifiers;
-        } text;
+            InputMapId map;
+            InputId id;
+            InputType type;
+            union {
+                f32 axis;
+                f32 axis2d[2];
+                TextEvent text;
+            };
+        } input;
+        struct {
+            i16 width, height;
+        } resize;
     };
 };
-
-String string_from_enum(KeyCode_ kc);
-
-void enable_text_input();
-void disable_text_input();
-
 
 enum MouseCursor {
     MC_NORMAL = 0,
     MC_SIZE_NW_SE,
+    MC_HIDDEN,
     MC_MAX,
 };
 
-void init_cursors();
+AppWindow* create_window(WindowCreateDesc desc);
+void present_window(AppWindow *wnd);
+Vector2 get_client_resolution(AppWindow *wnd);
+
+void wait_for_next_event(AppWindow *wnd);
+bool next_event(AppWindow *wnd, WindowEvent *dst);
+
+void capture_mouse(AppWindow *wnd);
+void release_mouse(AppWindow *wnd);
+
 void push_cursor(MouseCursor c);
 
-
-
-#endif //INPUT_H
+#endif // WINDOW_H

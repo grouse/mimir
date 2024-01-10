@@ -10,7 +10,6 @@
 #include "string.cpp"
 #include "memory.cpp"
 #include "core.cpp"
-#include "window.cpp"
 #include "gfx_opengl.cpp"
 #include "assets.cpp"
 #include "font.cpp"
@@ -2784,8 +2783,8 @@ void update_and_render()
     }
 
     app.mode = app.next_mode;
-    if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
-    else disable_text_input();
+    // if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
+    // else disable_text_input();
 
     gfx_begin_frame();
     gui_begin_frame();

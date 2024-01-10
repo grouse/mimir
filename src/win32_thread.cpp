@@ -1,4 +1,7 @@
 #include "thread.h"
+#include "win32_lite.h"
+
+#include "memory.h"
 
 struct Thread {
     HANDLE handle;
@@ -26,9 +29,12 @@ void unlock_mutex(Mutex *m)
 
 Thread* create_thread(ThreadProc proc, void *user_data)
 {
-    Thread *t = ALLOC_T(mem_dynamic, Thread);
-    t->user_proc = proc;
-    t->user_data = user_data;
+    extern Allocator mem_sys;
+
+    Thread *t = ALLOC_T(mem_sys, Thread) {
+        .user_proc = proc,
+        .user_data = user_data,
+    };
 
     t->handle = CreateThread(
         NULL, 0,

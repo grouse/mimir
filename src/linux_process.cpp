@@ -1,4 +1,5 @@
 #include "process.h"
+#include "core.h"
 
 Process* create_process(String /*exe*/, String /*args*/, StdOutProc /*stdout_proc*/)
 {

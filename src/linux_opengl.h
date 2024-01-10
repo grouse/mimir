@@ -1,3 +1,6 @@
+#ifndef LINUX_OPENGL_H
+#define LINUX_OPENGL_H
+
 #include "platform.h"
 
 #define GL_TRUE 1
@@ -84,37 +87,6 @@
 #define GL_DEBUG_LOGGED_MESSAGES          0x9145
 #define GL_SCISSOR_TEST                   0x0C11
 
-/// GLX constants
-#define GLX_X_RENDERABLE		0x8012
-#define GLX_DRAWABLE_TYPE		0x8010
-#define GLX_RENDER_TYPE			0x8011
-#define GLX_X_VISUAL_TYPE		0x22
-#define GLX_SAMPLE_BUFFERS              0x186a0 /*100000*/
-#define GLX_SAMPLES                     0x186a1 /*100001*/
-
-#define GLX_RED_SIZE		8
-#define GLX_GREEN_SIZE		9
-#define GLX_BLUE_SIZE		10
-#define GLX_ALPHA_SIZE		11
-#define GLX_DEPTH_SIZE		12
-#define GLX_STENCIL_SIZE	13
-#define GLX_DOUBLEBUFFER	5
-#define GLX_WINDOW_BIT			0x00000001
-#define GLX_RGBA_BIT			0x00000001
-#define GLX_TRUE_COLOR			0x8002
-
-#define GLX_CONTEXT_MAJOR_VERSION_ARB           0x2091
-#define GLX_CONTEXT_MINOR_VERSION_ARB           0x2092
-#define GLX_CONTEXT_FLAGS_ARB                   0x2094
-#define GLX_CONTEXT_PROFILE_MASK_ARB            0x9126
-#define GLX_CONTEXT_DEBUG_BIT_ARB               0x0001
-#define GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB  0x0002
-#define GLX_CONTEXT_CORE_PROFILE_BIT_ARB        0x00000001
-#define GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB 0x00000002
-
-#define GLX_SWAP_INTERVAL_EXT               0x20F1
-#define GLX_MAX_SWAP_INTERVAL_EXT           0x20F2
-
 typedef char GLchar;
 typedef int GLsizei;
 typedef float GLclampf;
@@ -133,90 +105,24 @@ typedef void GLvoid;
 extern "C" {
 
     typedef void (*GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
-
-    struct __GLXFBConfigRec {
-        int visualType;
-        int transparentType;
-        /*    colors are floats scaled to ints */
-        int transparentRed, transparentGreen, transparentBlue, transparentAlpha;
-        int transparentIndex;
-
-        int visualCaveat;
-
-        int associatedVisualId;
-        int screen;
-
-        int drawableType;
-        int renderType;
-
-        int maxPbufferWidth, maxPbufferHeight, maxPbufferPixels;
-        int optimalPbufferWidth, optimalPbufferHeight;  /* for SGIX_pbuffer */
-
-        int visualSelectGroup;	/* visuals grouped by select priority */
-
-        unsigned int id;
-
-        GLboolean rgbMode;
-        GLboolean colorIndexMode;
-        GLboolean doubleBufferMode;
-        GLboolean stereoMode;
-        GLboolean haveAccumBuffer;
-        GLboolean haveDepthBuffer;
-        GLboolean haveStencilBuffer;
-
-        /* The number of bits present in various buffers */
-        GLint accumRedBits, accumGreenBits, accumBlueBits, accumAlphaBits;
-        GLint depthBits;
-        GLint stencilBits;
-        GLint indexBits;
-        GLint redBits, greenBits, blueBits, alphaBits;
-        GLuint redMask, greenMask, blueMask, alphaMask;
-
-        GLuint multiSampleSize;     /* Number of samples per pixel (0 if no ms) */
-
-        GLuint nMultiSampleBuffers; /* Number of availble ms buffers */
-        GLint maxAuxBuffers;
-
-        /* frame buffer level */
-        GLint level;
-
-        /* color ranges (for SGI_color_range) */
-        GLboolean extendedRange;
-        GLdouble minRed, maxRed;
-        GLdouble minGreen, maxGreen;
-        GLdouble minBlue, maxBlue;
-        GLdouble minAlpha, maxAlpha;
-    };
-
-    typedef struct __GLXFBConfigRec* GLXFBConfig;
-    typedef struct __GLXcontextRec* GLXContext;
     typedef void (*GLfunction)();
-    typedef void (*__GLXextFuncPtr)(void);
-    typedef XID GLXDrawable;
 }
 
+void load_opengl_procs();
 
-//#define LOAD_GL_ARB_PROC(proc, handle) proc = (proc##ARB_t*)gl_get_proc(#proc "ARB", handle)
-#define LOAD_GL_PROC(proc) proc = (proc##_t*)glXGetProcAddressARB(#proc)
+#ifdef LINUX_OPENGL_IMPL
+#define DECL_GL_PROC(ret, proc, ...) \
+    typedef ret proc##_t(__VA_ARGS__); \
+    proc##_t *proc = nullptr
+#else
+#define DECL_GL_PROC(ret, proc, ...) \
+    typedef ret proc##_t(__VA_ARGS__); \
+    extern proc##_t *proc
+#endif
 
 #define DECL_GL_PROC_S(ret, proc, ...) extern "C" ret proc(__VA_ARGS__);
-#define DECL_GL_PROC(ret, proc, ...) typedef ret proc##_t(__VA_ARGS__); proc##_t *proc = nullptr
+
 #define DECL_GL_ARB_PROC(ret, proc, ...) typedef ret proc##ARB_t(__VA_ARGS__); proc##ARB_t *proc = nullptr
-
-DECL_GL_PROC_S(GLfunction, glXGetProcAddressARB, const char*);
-
-DECL_GL_PROC_S(Bool, glXQueryVersion, Display * dpy, int * major, int * minor);
-DECL_GL_PROC_S(GLXFBConfig*, glXChooseFBConfig, Display * dpy, int screen, const int * attrib_list, int *
-             nelements);
-DECL_GL_PROC_S(int, glXGetFBConfigAttrib, Display *dpy, GLXFBConfig config, int attribute, int *value);
-DECL_GL_PROC_S(XVisualInfo*, glXGetVisualFromFBConfig, Display *dpy, GLXFBConfig config);
-DECL_GL_PROC_S(Bool, glXMakeCurrent, Display * dpy, GLXDrawable drawable, GLXContext ctx);
-DECL_GL_PROC_S(void, glXSwapBuffers, Display * dpy, GLXDrawable drawable);
-DECL_GL_PROC_S(GLXDrawable, glXGetCurrentDrawable, void );
-DECL_GL_PROC_S(void, glXQueryDrawable, Display *dpy, GLXDrawable draw, int attribute, unsigned int *value );
-
-DECL_GL_PROC(void, glXSwapIntervalEXT, Display *dpy, GLXDrawable drawable, int interval);
-DECL_GL_PROC(GLXContext, glXCreateContextAttribsARB,Display *dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int *attrib_list);
 
 DECL_GL_PROC(const GLubyte*, glGetString, GLenum name);
 DECL_GL_PROC(void, glEnable, GLenum cap);
@@ -225,49 +131,6 @@ DECL_GL_PROC(void, glClearColor, GLclampf red, GLclampf green, GLclampf blue, GL
 DECL_GL_PROC(void, glClear, GLbitfield mask);
 DECL_GL_PROC(void, glDrawArrays, GLenum mode, GLint first, GLsizei count);
 
-DECL_GL_PROC(void, glAttachShader, GLuint program, GLuint shader);
-DECL_GL_PROC(void, glBindAttribLocation, GLuint program, GLuint index, const GLchar *name);
-DECL_GL_PROC(void, glCompileShader, GLuint shader);
-DECL_GL_PROC(GLuint, glCreateProgram, void);
-DECL_GL_PROC(GLuint, glCreateShader, GLenum type);
-DECL_GL_PROC(void, glLinkProgram, GLuint program);
-DECL_GL_PROC(void, glShaderSource, GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
-DECL_GL_PROC(void, glGenBuffers, GLsizei n, GLuint *buffers);
-DECL_GL_PROC(void, glGenVertexArrays, GLsizei n, GLuint *arrays);
-DECL_GL_PROC(void, glBindVertexArray, GLuint array);
-DECL_GL_PROC(void, glBindBuffer, GLenum target, GLuint buffer);
-DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage);
-DECL_GL_PROC(void, glBufferSubData, GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
-DECL_GL_PROC(void*, glMapBufferRange, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
-DECL_GL_PROC(void*, glMapNamedBufferRange, GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
-DECL_GL_PROC(GLboolean, glUnmapBuffer, GLenum target);
-DECL_GL_PROC(GLboolean, glUnmapNamedBuffer, GLuint buffer);
-DECL_GL_PROC(void, glVertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
-DECL_GL_PROC(void, glEnableVertexAttribArray, GLuint index);
-DECL_GL_PROC(void, glDisableVertexAttribArray, GLuint index);
-DECL_GL_PROC(void, glUseProgram, GLuint program);
-DECL_GL_PROC(void, glUniform1i, GLint location, GLint v0);
-DECL_GL_PROC(void, glUniform1f, GLint location, GLfloat v0);
-DECL_GL_PROC(void, glUniform2f, GLint location, GLfloat v0, GLfloat v1);
-DECL_GL_PROC(void, glUniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
-DECL_GL_PROC(void, glUniform1fv, GLint location, GLsizei count, const GLfloat *value);
-DECL_GL_PROC(void, glUniformMatrix3fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-DECL_GL_PROC(void, glUniformMatrix4fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-DECL_GL_PROC(GLint, glGetUniformLocation, GLuint program, const GLchar *name);
-DECL_GL_PROC(void, glGetShaderiv, GLuint shader, GLenum pname, GLint *params);
-DECL_GL_PROC(void, glGetShaderInfoLog, GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-DECL_GL_PROC(void, glGetProgramiv, GLuint program, GLenum pname, GLint *params);
-DECL_GL_PROC(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-DECL_GL_PROC(void, glTexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * data);
-DECL_GL_PROC(void, glTexStorage2D, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
-DECL_GL_PROC(void, glGenTextures, GLsizei n, GLuint * textures);
-DECL_GL_PROC(void, glBindTexture, GLenum target, GLuint texture);
-DECL_GL_PROC(void, glTexParameteri, GLenum target, GLenum pname, GLint param);
-DECL_GL_PROC(void, glBlendFunc, GLenum sfactor, GLenum dfactor);
-DECL_GL_PROC(void, glDebugMessageCallback, GLDEBUGPROC callback, void * userParam);
-DECL_GL_PROC(void, glPolygonMode, GLenum face, GLenum mode);
-DECL_GL_PROC(void, glBindBufferRange, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
-DECL_GL_PROC(void, glBindBufferBase, GLenum target, GLuint index, GLuint buffer);
-DECL_GL_PROC(void, glScissor, GLint x, GLint y, GLsizei width, GLsizei height);
+#include "procs_opengl.h"
 
-DECL_GL_PROC(void, glTextureSubImage2D, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
+#endif // LINUX_OPENGL_H

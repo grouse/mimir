@@ -4,6 +4,26 @@
 #include "platform.h"
 #include "win32_lite.h"
 
+#define WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB             0x20A9
+
+#define WGL_CONTEXT_MAJOR_VERSION_ARB           0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB           0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB             0x2093
+#define WGL_CONTEXT_FLAGS_ARB                   0x2094
+#define WGL_CONTEXT_PROFILE_MASK_ARB            0x9126
+#define WGL_CONTEXT_DEBUG_BIT_ARB               0x0001
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB        0x00000001
+
+#define WGL_DRAW_TO_WINDOW_ARB                  0x2001
+#define WGL_SUPPORT_OPENGL_ARB                  0x2010
+#define WGL_DOUBLE_BUFFER_ARB                   0x2011
+#define WGL_PIXEL_TYPE_ARB                      0x2013
+#define WGL_COLOR_BITS_ARB                      0x2014
+#define WGL_DEPTH_BITS_ARB                      0x2022
+#define WGL_STENCIL_BITS_ARB                    0x2023
+#define WGL_TYPE_RGBA_ARB                       0x202B
+
+
 #define GL_TRUE 1
 #define GL_FALSE 0
 
@@ -122,7 +142,7 @@ typedef void GLvoid;
 
 extern "C" {
     PROC wglGetProcAddress(LPCSTR);
-    
+
     HGLRC wglCreateContext(HDC);
     BOOL wglDeleteContext(HGLRC);
     BOOL wglMakeCurrent(HDC, HGLRC);
@@ -138,6 +158,8 @@ extern "C" {
     typedef void (*GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar *message, const void *userParam);
 }
 
+void* gl_get_proc(const char *name, HMODULE gl_dll);
+void load_opengl_procs(HANDLE gl_dll);
 
 #define LOAD_GL_ARB_PROC(proc, dll) proc = (proc##ARB_t*)gl_get_proc(#proc "ARB", dll)
 #define LOAD_GL_PROC(proc, dll) proc = (proc##_t*)gl_get_proc(#proc, dll)
@@ -154,56 +176,6 @@ DECL_GL_ARB_PROC(char*, wglGetExtensionsString, HDC hdc);
 DECL_GL_ARB_PROC(BOOL, wglChoosePixelFormat, HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
 DECL_GL_ARB_PROC(HGLRC, wglCreateContextAttribs, HDC hDC, HGLRC hShareContext, const int *attribList);
 
-DECL_GL_PROC(void, glViewport, GLint x, GLint y, GLsizei width, GLsizei height);
-DECL_GL_PROC(void, glAttachShader, GLuint program, GLuint shader);
-DECL_GL_PROC(void, glBindAttribLocation, GLuint program, GLuint index, const GLchar *name);
-DECL_GL_PROC(void, glCompileShader, GLuint shader);
-DECL_GL_PROC(GLuint, glCreateProgram, void);
-DECL_GL_PROC(GLuint, glCreateShader, GLenum type);
-DECL_GL_PROC(void, glLinkProgram, GLuint program);
-DECL_GL_PROC(void, glShaderSource, GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length);
-DECL_GL_PROC(void, glGenBuffers, GLsizei n, GLuint *buffers);
-DECL_GL_PROC(void, glGenVertexArrays, GLsizei n, GLuint *arrays);
-DECL_GL_PROC(void, glBindVertexArray, GLuint array);
-DECL_GL_PROC(void, glBindBuffer, GLenum target, GLuint buffer);
-DECL_GL_PROC(void, glBindBufferBase, GLenum target, GLuint index, GLuint buffer);
-DECL_GL_PROC(void, glBufferData, GLenum target, GLsizeiptr size, const void *data, GLenum usage); 
-DECL_GL_PROC(void*, glMapBufferRange, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
-DECL_GL_PROC(void*, glMapNamedBufferRange, GLuint buffer, GLintptr offset, GLsizeiptr length, GLbitfield access);
-DECL_GL_PROC(GLboolean, glUnmapBuffer, GLenum target);
-DECL_GL_PROC(GLboolean, glUnmapNamedBuffer, GLuint buffer);
-DECL_GL_PROC(void, glBufferSubData, GLenum target, GLintptr offset, GLsizeiptr size, const void * data);
-DECL_GL_PROC(void, glVertexAttribPointer, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
-DECL_GL_PROC(void, glEnableVertexAttribArray, GLuint index);
-DECL_GL_PROC(void, glDisableVertexAttribArray, GLuint index);
-DECL_GL_PROC(void, glUseProgram, GLuint program);
-DECL_GL_PROC(void, glUniform1i, GLint location, GLint v0);
-DECL_GL_PROC(void, glUniform1f, GLint location, GLfloat v0);
-DECL_GL_PROC(void, glUniform2f, GLint location, GLfloat v0, GLfloat v1);
-DECL_GL_PROC(void, glUniform3f, GLint location, GLfloat v0, GLfloat v1, GLfloat v2);
-DECL_GL_PROC(void, glUniform1fv, GLint location, GLsizei count, const GLfloat *value);
-DECL_GL_PROC(void, glUniformMatrix3fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-DECL_GL_PROC(void, glUniformMatrix4fv, GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-DECL_GL_PROC(GLint, glGetUniformLocation, GLuint program, const GLchar *name);
-DECL_GL_PROC(void, glGetShaderiv, GLuint shader, GLenum pname, GLint *params); 
-DECL_GL_PROC(void, glGetShaderInfoLog, GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-DECL_GL_PROC(void, glGetProgramiv, GLuint program, GLenum pname, GLint *params);
-DECL_GL_PROC(void, glGetProgramInfoLog, GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog);
-DECL_GL_PROC(void, glGenTextures, GLsizei n, GLuint * textures);
-DECL_GL_PROC(void, glBindTexture, GLenum target, GLuint texture);
-DECL_GL_PROC(void, glBlendFunc, GLenum sfactor, GLenum dfactor);
-DECL_GL_PROC(void, glDebugMessageCallback, GLDEBUGPROC callback, void * userParam);
-DECL_GL_PROC(void, glPolygonMode, GLenum face, GLenum mode);
-DECL_GL_PROC(void, glBindBufferRange, GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
-DECL_GL_PROC(void, glScissor, GLint x, GLint y, GLsizei width, GLsizei height);
-
-DECL_GL_PROC(void, glPixelStorei, GLenum pname, GLint param);
-
-DECL_GL_PROC(void, glTexParameteri, GLenum target, GLenum pname, GLint param);
-DECL_GL_PROC(void, glTexStorage2D, GLenum target, GLsizei levels, GLenum internalformat, GLsizei width, GLsizei height);
-DECL_GL_PROC(void, glTexImage2D, GLenum target, GLint level, GLint internalFormat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const GLvoid * data);
-DECL_GL_PROC(void, glTexSubImage2D, GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid * pixels);
-DECL_GL_PROC(void, glTextureSubImage2D, GLuint texture, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void *pixels);
-DECL_GL_PROC(void, glMemoryBarrier, GLbitfield barriers);
+#include "procs_opengl.h"
 
 #endif // WIN32_OPENGL_H

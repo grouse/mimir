@@ -19,6 +19,7 @@ executable("mimir") {
 
             "src/win32_memory.cpp",
             "src/win32_file.cpp",
+            "src/win32_window.cpp",
         ]
         libs += ["user32", "shell32", "opengl32", "gdi32", "shlwapi"]
     }

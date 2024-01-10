@@ -1,6 +1,8 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
+#include "string.h"
+
 struct Process;
 
 typedef void (*StdOutProc) (String str);

@@ -1,10 +1,26 @@
 #include "window.h"
+#include "string.h"
+#include "array.h"
 
-#if defined(_WIN32)
-#include "win32_window.cpp"
-#elif defined(__linux__)
-#include "linux_window.cpp"
-#endif
+struct InputMap {
+    String name;
+
+    DynamicArray<InputDesc> by_device[ID_MAX][IT_MAX];
+    DynamicArray<InputDesc> by_type[IT_MAX][ID_MAX];
+
+    HashTable<InputId, i32> edges;
+    HashTable<InputId, bool> held;
+    HashTable<InputId, f32[2]> axes;
+};
+
+struct {
+    HashTable<InputType, u8> mouse;
+
+    DynamicArray<InputMap> maps;
+    DynamicArray<InputMapId> layers;
+    DynamicArray<InputMapId> queued_layers;
+    InputMapId active_map = -1;
+} input{};
 
 String string_from_enum(KeyCode_ kc)
 {
@@ -98,3 +114,404 @@ String string_from_enum(KeyCode_ kc)
     return "KC_UNKNOWN";
 }
 
+void init_input_map_(InputMapId *dst, String name, std::initializer_list<InputDesc> descriptors) EXPORT
+{
+    InputMap map{ .name = name };
+    for (auto it : descriptors) {
+        array_add(&map.by_device[it.device][0], it);
+        array_add(&map.by_type[it.type][0], it);
+
+        if (it.type) array_add(&map.by_device[it.device][it.type], it);
+        if (it.device) array_add(&map.by_type[it.type][it.device], it);
+    }
+
+    *dst = array_add(&input.maps, map);
+}
+
+void reset_input_map(InputMapId map_id) INTERNAL
+{
+    if (map_id < 0) return;
+
+    auto *map = &input.maps[map_id];
+    for (i32 i = 0; i < map->edges.capacity; i++) map->edges.slots[i].value = 0;
+
+    for (i32 i = AXIS; i <= AXIS_2D; i++) {
+        for (auto it : map->by_device[MOUSE][i]) {
+            auto *axis = map_find_emplace(&map->axes, it.id);
+            axis[0] = axis[1] = 0;
+        }
+    }
+}
+
+void input_begin_frame() EXPORT
+{
+    if (auto *it = map_find(&input.mouse, EDGE_DOWN); it) *it = 0;
+    if (auto *it = map_find(&input.mouse, EDGE_UP); it) *it = 0;
+
+    if (input.active_map < 0) return;
+    reset_input_map(input.active_map);
+
+    for (auto it : input.layers) reset_input_map(it);
+    SWAP(input.layers, input.queued_layers);
+    input.queued_layers.count = 0;
+}
+
+void set_input_map(InputMapId id) EXPORT
+{
+    LOG_INFO("switching input map: [%d] %.*s", id, STRFMT(input.maps[id].name));
+    reset_input_map(input.active_map);
+    input.active_map = id;
+    input.layers.count = 0;
+}
+
+void push_input_layer(InputMapId layer) EXPORT
+{
+    PANIC_IF(layer < 0, "Invalid input layer id: %d", layer);
+    array_add(&input.queued_layers, layer);
+}
+
+InputMapId get_input_map() EXPORT
+{
+    return input.active_map;
+}
+
+bool translate_input_event(
+    DynamicArray<WindowEvent> *queue,
+    InputMapId map_id,
+    WindowEvent event) INTERNAL
+{
+    bool handled = false;
+
+    constexpr auto insert_axis_event = [](
+        DynamicArray<WindowEvent> *queue,
+        InputMapId map,
+        InputId id,
+        InputType type,
+        f32 axis)
+    {
+        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type, .axis = axis } });
+    };
+
+    constexpr auto insert_axis2d_event = [](
+        DynamicArray<WindowEvent> *queue,
+        InputMapId map,
+        InputId id,
+        InputType type,
+        f32 axis[2])
+    {
+        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type, .axis2d = { axis[0], axis[1] } } });
+    };
+
+    constexpr auto insert_input_event = [](
+        DynamicArray<WindowEvent> *queue,
+        InputMapId map,
+        InputId id,
+        InputType type)
+    {
+        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type } });
+    };
+
+    if (event.type != WE_INPUT && map_id != -1) {
+        InputMap *map = &input.maps[map_id];
+
+        switch (event.type) {
+        case WE_TEXT:
+            for (InputDesc it : map->by_type[TEXT][0]) {
+                array_insert(queue, 0, { WE_INPUT, .input = { map_id, it.id, it.type, .text = event.text } });
+                handled = handled || !(it.flags & FALLTHROUGH);
+            }
+            break;
+        case WE_MOUSE_WHEEL:
+            for (InputDesc it : map->by_device[MOUSE][AXIS]) {
+                if (event.mouse_wheel.modifiers == it.mouse.modifiers ||
+                    it.mouse.modifiers == MF_ANY)
+                {
+                    f32 *axis = map_find_emplace(&map->axes, it.id);
+                    axis[0] += event.mouse_wheel.delta;
+                    insert_axis_event(queue, map_id, it.id, it.type, (f32)event.mouse_wheel.delta);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+            break;
+        case WE_MOUSE_MOVE:
+            for (InputDesc it : map->by_device[MOUSE][AXIS_2D]) {
+                if ((event.mouse.button == it.mouse.button ||
+                     it.mouse.button == MB_ANY) &&
+                    (event.mouse.modifiers == it.mouse.modifiers ||
+                     it.mouse.modifiers == MF_ANY))
+                {
+                    f32 *axis = map_find_emplace(&map->axes, it.id);
+                    axis[0] += event.mouse.dx;
+                    axis[1] += event.mouse.dy;
+                    insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ (f32)event.mouse.dx, (f32)event.mouse.dy });
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+            break;
+        case WE_MOUSE_PRESS:
+            (*map_find_emplace(&input.mouse, EDGE_DOWN, u8(0))) |= event.mouse.button;
+            (*map_find_emplace(&input.mouse, HOLD, u8(0))) |= event.mouse.button;
+
+            for (InputDesc it : map->by_device[MOUSE][EDGE_DOWN]) {
+                if ((event.mouse.button == it.mouse.button ||
+                     it.mouse.button == MB_ANY) &&
+                    (event.mouse.modifiers == it.mouse.modifiers ||
+                     it.mouse.button == MF_ANY))
+                {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "edge down [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (InputDesc it : map->by_device[MOUSE][HOLD]) {
+                if ((event.mouse.button == it.mouse.button ||
+                     it.mouse.button == MB_ANY) &&
+                    (event.mouse.modifiers == it.mouse.modifiers ||
+                     it.mouse.button == MF_ANY))
+                {
+                    (*map_find_emplace(&map->held, it.id, false)) = true;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "hold begin [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+            break;
+        case WE_MOUSE_RELEASE:
+            (*map_find_emplace(&input.mouse, EDGE_UP, u8(0))) |= event.mouse.button;
+            (*map_find_emplace(&input.mouse, HOLD, u8(0))) &= ~event.mouse.button;
+
+            for (InputDesc it : map->by_device[MOUSE][EDGE_UP]) {
+                if ((event.mouse.button == it.mouse.button ||
+                     it.mouse.button == MB_ANY) &&
+                    (event.mouse.modifiers == it.mouse.modifiers ||
+                     it.mouse.modifiers == MF_ANY))
+                {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "edge up [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (InputDesc it : map->by_device[MOUSE][HOLD]) {
+                if ((event.mouse.button == it.mouse.button ||
+                     it.mouse.button == MB_ANY) &&
+                    (event.mouse.modifiers == it.mouse.modifiers ||
+                     it.mouse.button == MF_ANY))
+                {
+                    (*map_find_emplace(&map->held, it.id, false)) = false;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "hold end [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+            break;
+        case WE_KEY_PRESS:
+            if (event.key.prev_state) break;
+
+            for (InputDesc it : map->by_device[KEYBOARD][EDGE_DOWN]) {
+                if (event.key.keycode == it.keyboard.keycode &&
+                    (event.key.modifiers == it.keyboard.modifiers ||
+                     it.keyboard.modifiers == MF_ANY))
+                {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "edge down [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (InputDesc it : map->by_device[KEYBOARD][HOLD]) {
+                if (event.key.keycode == it.keyboard.keycode &&
+                    (event.key.modifiers == it.keyboard.modifiers ||
+                     it.keyboard.modifiers == MF_ANY))
+                {
+                    (*map_find_emplace(&map->held, it.id, false)) = true;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "hold begin [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (i32 i = AXIS; i <= AXIS_2D; i++) {
+                for (InputDesc it : map->by_device[KEYBOARD][i]) {
+                    if(event.key.keycode == it.keyboard.keycode &&
+                       (event.key.modifiers == it.keyboard.modifiers ||
+                        it.keyboard.modifiers == MF_ANY))
+                    {
+                        f32 *axis = map_find_emplace(&map->axes, it.id);
+                        axis[it.keyboard.axis] += it.keyboard.faxis;
+                        insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
+                        handled = handled || !(it.flags & FALLTHROUGH);
+                    }
+                }
+            }
+            break;
+        case WE_KEY_RELEASE:
+            for (InputDesc it : map->by_device[KEYBOARD][EDGE_UP]) {
+                if (event.key.keycode == it.keyboard.keycode &&
+                    (event.key.modifiers == it.keyboard.modifiers ||
+                     it.keyboard.modifiers == MF_ANY))
+                {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "edge up [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (InputDesc it : map->by_device[KEYBOARD][HOLD]) {
+                if (event.key.keycode == it.keyboard.keycode &&
+                    (event.key.modifiers == it.keyboard.modifiers ||
+                     it.keyboard.modifiers == MF_ANY))
+                {
+                    (*map_find_emplace(&map->held, it.id, false)) = false;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+
+                    LOG_INFO(
+                        "hold end [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
+                        string_from_enum((KeyCode_)event.key.keycode).data,
+                        map_id, STRFMT(map->name),
+                        it.id, handled);
+                }
+            }
+
+            for (i32 i = AXIS; i <= AXIS_2D; i++) {
+                for (InputDesc it : map->by_device[KEYBOARD][i]) {
+                    if (event.key.keycode == it.keyboard.keycode &&
+                        (event.key.modifiers == it.keyboard.modifiers ||
+                         it.keyboard.modifiers == MF_ANY))
+                    {
+                        f32 *axis = map_find_emplace(&map->axes, it.id);
+                        axis[it.keyboard.axis] -= it.keyboard.faxis;
+                        insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
+                        handled = handled || !(it.flags & FALLTHROUGH);
+                    }
+                }
+            }
+            break;
+        }
+
+    }
+
+    return handled;
+}
+
+bool translate_input_event(
+    DynamicArray<WindowEvent> *queue,
+    WindowEvent event) INTERNAL
+{
+    for (auto it : reverse(input.layers)) if (translate_input_event(queue, it, event)) return true;
+    return translate_input_event(queue, input.active_map, event);
+}
+
+bool text_input_enabled() EXPORT
+{
+    if (input.active_map != -1 && input.maps[input.active_map].by_type[TEXT][0].count) return true;
+    for (auto it : input.layers) if (input.maps[it].by_type[TEXT][0].count) return true;
+    return false;
+}
+
+bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id) EXPORT
+{
+    if (map_id == INPUT_MAP_ANY) {
+        for (auto it : reverse(input.layers)) if (get_input_axis(id, dst, it)) return true;
+        map_id = input.active_map;
+    }
+
+    InputMap *map = &input.maps[map_id];
+    auto *axis = map_find(&map->axes, id);
+    if (!axis) return false;
+
+    dst[0] = axis[0];
+    return true;
+}
+
+bool get_input_axis2d(InputId id, f32 dst[2], InputMapId map_id) EXPORT
+{
+    if (map_id == INPUT_MAP_ANY) {
+        for (auto it : reverse(input.layers)) if (get_input_axis2d(id, dst, it)) return true;
+        map_id = input.active_map;
+    }
+
+    InputMap *map = &input.maps[map_id];
+    auto *axis = map_find(&map->axes, id);
+    if (!axis) return false;
+
+    dst[0] = axis[0];
+    dst[1] = axis[1];
+    return true;
+}
+
+bool get_input_edge(InputId id, InputMapId map_id) EXPORT
+{
+    if (map_id == INPUT_MAP_ANY) {
+        for (auto it : reverse(input.layers)) if (get_input_edge(id, it)) return true;
+        map_id = input.active_map;
+    }
+
+    InputMap *map = &input.maps[map_id];
+    i32 *value = map_find(&map->edges, id);
+    if (!value) return false;
+
+    return (*value)-- > 0;
+}
+
+bool get_input_held(InputId id, InputMapId map_id) EXPORT
+{
+    if (map_id == INPUT_MAP_ANY) {
+        for (auto it : reverse(input.layers)) if (get_input_held(id, it)) return true;
+        map_id = input.active_map;
+    }
+
+    InputMap *map = &input.maps[map_id];
+    bool *value = map_find(&map->held, id);
+    if (!value) return false;
+
+    return *value;
+}
+
+bool get_input_mouse(MouseButton btn, InputType type /*= EDGE_DOWN*/) EXPORT
+{
+    auto *it = map_find(&input.mouse, type);
+    if (!it) return false;
+    return (*it & btn) == btn || (btn == MB_ANY && *it);
+}
