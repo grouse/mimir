@@ -1,8 +1,11 @@
 executable("mimir") {
-    sources = []
     libs = []
     deps = [ ":tree_sitter" ]
-    defines = []
+
+    defines = [
+        "APP_INPUT_ID_START=0x100",
+        "GUI_INPUT_ID_START=0x200",
+    ]
 
     assets_dir = rebase_path("//assets", "")
     defines += [ "ASSETS_DIR=\"" + assets_dir + "\"" ]
@@ -12,16 +15,42 @@ executable("mimir") {
         "external",
     ]
 
+    sources = [
+        "src/assets.cpp",
+        "src/font.cpp",
+        "src/gfx_opengl.cpp",
+        "src/core.cpp",
+        "src/memory.cpp",
+        "src/string.cpp",
+    ]
 
     if (current_os == "win") {
         sources += [
             "src/win32_mimir.cpp",
-
-            "src/win32_memory.cpp",
-            "src/win32_file.cpp",
+            "src/win32_opengl.cpp",
             "src/win32_window.cpp",
+
+            "src/win32_file.cpp",
+            "src/win32_memory.cpp",
+            "src/win32_thread.cpp",
         ]
-        libs += ["user32", "shell32", "opengl32", "gdi32", "shlwapi"]
+
+        libs += [
+            "user32",
+            "shell32",
+            "opengl32",
+            "gdi32",
+            "shlwapi",
+        ]
+    } else if (current_os == "linux") {
+        sources += [
+            "src/linux_opengl.cpp",
+            "src/linux_window.cpp",
+
+            "src/linux_file.cpp",
+            "src/linux_memory.cpp",
+            "src/linux_thread.cpp",
+        ]
     }
 }
 
@@ -33,14 +62,16 @@ action_foreach("gh") {
     deps = [ "//tools/gh" ]
     script = "tools/exe.py"
     sources = [
-        "src/mimir.cpp",
-
         "src/gui.cpp",
+
+        "src/gfx_opengl.cpp",
         "src/window.cpp",
         "src/font.cpp",
+
         "src/maths.cpp",
         "src/string.cpp",
     ]
+
 
     mnemonic = "generate-headers"
 

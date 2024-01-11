@@ -7,15 +7,10 @@
 
 #include "maths.cpp"
 #include "gui.cpp"
-#include "string.cpp"
-#include "memory.cpp"
-#include "core.cpp"
-#include "gfx_opengl.cpp"
-#include "assets.cpp"
-#include "font.cpp"
 #include "fzy.cpp"
 
 #include "gen/string.h"
+#include "gen/font.h"
 
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
@@ -166,7 +161,7 @@ struct ViewBufferState {
 
 struct View {
     i32 id = -1;
-    GuiId gui_id = GUI_ID(0);
+    GuiId gui_id;
 
     GLuint glyph_data_ssbo;
     DynamicArray<BufferId> buffers;
@@ -178,6 +173,8 @@ struct View {
     i32 lines_visible;
 
     Rect rect;
+    Rect text_rect;
+
     BufferId buffer;
     Caret caret, mark;
 
@@ -200,7 +197,7 @@ struct Application {
         i32 selected_item;
     } lister;
 
-    View views[5];
+    StaticArray<View, 5> views;
     View *current_view = &views[0];
 
     struct {
@@ -281,6 +278,13 @@ String buffer_newline_str(Buffer *buffer)
 Application app{};
 DynamicArray<Buffer> buffers{};
 
+struct {
+    struct {
+        GuiId wnd;
+    } buffer_history;
+} debug{};
+
+
 void move_view_to_caret(View *view);
 
 
@@ -351,29 +355,29 @@ void ts_custom_free(void *ptr)
 
 TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
 {
-    if (auto a = find_asset(highlights); a) {
-        u32 error_loc;
-        TSQueryError error;
-        TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
-
-        if (error != TSQueryErrorNone) {
-            String s = "";
-            switch (error) {
-            case TSQueryErrorNone: s = "none"; break;
-            case TSQueryErrorSyntax: s = "syntax"; break;
-            case TSQueryErrorNodeType: s = "node_type"; break;
-            case TSQueryErrorField: s = "field"; break;
-            case TSQueryErrorCapture: s = "capture"; break;
-            case TSQueryErrorStructure: s = "structure"; break;
-            case TSQueryErrorLanguage: s = "language"; break;
-            }
-
-            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
-            return nullptr;
-        }
-
-        return query;
-    }
+    // if (auto a = find_asset(highlights); a) {
+    //     u32 error_loc;
+    //     TSQueryError error;
+    //     TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
+    //
+    //     if (error != TSQueryErrorNone) {
+    //         String s = "";
+    //         switch (error) {
+    //         case TSQueryErrorNone: s = "none"; break;
+    //         case TSQueryErrorSyntax: s = "syntax"; break;
+    //         case TSQueryErrorNodeType: s = "node_type"; break;
+    //         case TSQueryErrorField: s = "field"; break;
+    //         case TSQueryErrorCapture: s = "capture"; break;
+    //         case TSQueryErrorStructure: s = "structure"; break;
+    //         case TSQueryErrorLanguage: s = "language"; break;
+    //         }
+    //
+    //         LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
+    //         return nullptr;
+    //     }
+    //
+    //     return query;
+    // }
 
     return nullptr;
 }
@@ -619,7 +623,7 @@ i64 prev_byte(Buffer *b, i64 i)
 
 void calculate_num_visible_lines(View *view)
 {
-    i32 lines_visible = (i32)ceilf(gfx.resolution.y / (f32)app.mono.line_height);
+    i32 lines_visible = (i32)ceilf(view->rect.size().y / (f32)app.mono.line_height);
     view->lines_dirty = view->lines_dirty || lines_visible != view->lines_visible;
     view->lines_visible = lines_visible;
 }
@@ -804,7 +808,9 @@ void init_app(Array<String> args)
         ASSETS_DIR,
     };
 
-    init_assets({ asset_folders, ARRAY_COUNT(asset_folders) });
+    init_assets(
+        { asset_folders, ARRAY_COUNT(asset_folders) },
+        {});
 
     init_gui();
 
@@ -867,13 +873,14 @@ void init_app(Array<String> args)
         app.syntax_colors.slots[i].value = bgr_pack(linear_from_sRGB(c));
     }
 
-    if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
+    // if (auto a = find_asset("textures/build_16x16.png"); a) app.icons.build = gfx_load_texture(a->data, a->size);
 
     app.mono = create_font("fonts/UbuntuMono/UbuntuMono-Regular.ttf", 18, true);
 
-    for (View &view : app.views) {
-        calculate_num_visible_lines(&view);
-        glGenBuffers(1, &view.glyph_data_ssbo);
+    for (auto it : iterator(app.views)) {
+        it->gui_id = gui_gen_id(it.index);
+        it->lines_dirty = true;
+        glGenBuffers(1, &it->glyph_data_ssbo);
     }
     app.current_view->id = 0;
 
@@ -903,14 +910,14 @@ void init_app(Array<String> args)
         }
 #endif
     }
+
+    debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
 }
 
 bool app_change_resolution(Vector2 resolution)
 {
     if (!gfx_change_resolution(resolution)) return false;
-    for (View &view : app.views) {
-        if (view.id != -1) calculate_num_visible_lines(&view);
-    }
+    for (View &view : app.views) view.lines_dirty = true;
     return true;
 }
 
@@ -1319,7 +1326,7 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
     SArena scratch = tl_scratch_arena(lines->alloc);
 
     Rect r = view->rect;
-    f32 base_x = r.pos.x;
+    f32 base_x = r.tl.x;
 
     start_line = MAX(start_line, 0);
     end_line = MIN(end_line, lines->count);
@@ -1386,7 +1393,7 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
         }
 
         f32 x1 = base_x + (vcolumn+1) * app.mono.space_width;
-        if (x1 >= r.pos.x + r.size.x) {
+        if (x1 >= r.br.x) {
             if (!is_word_boundary(c) && line_start != word_start) {
                 p = line_start = word_start;
             } else {
@@ -2279,7 +2286,7 @@ void set_caret_xy(View *view, i64 x, i64 y)
     if (!buffer) return;
 
     ASSERT(!view->lines_dirty);
-    i64 wrapped_line = view->line_offset + (y - view->rect.pos.y + view->voffset) / app.mono.line_height;
+    i64 wrapped_line = view->line_offset + (y - view->text_rect.tl.y + view->voffset) / app.mono.line_height;
     wrapped_line = CLAMP(wrapped_line, 0, view->lines.count-1);
 
     while (view->caret.wrapped_line > wrapped_line) {
@@ -2292,7 +2299,7 @@ void set_caret_xy(View *view, i64 x, i64 y)
         view->caret.wrapped_line++;
     }
 
-    i64 wrapped_column = (x - view->rect.pos.x) / app.mono.space_width;
+    i64 wrapped_column = (x - view->text_rect.tl.x) / app.mono.space_width;
     view->caret.wrapped_column = calc_wrapped_column(view->caret.wrapped_line, wrapped_column, view->lines, buffer);
     view->caret.preferred_column = view->caret.wrapped_column;
     view->caret.column = calc_unwrapped_column(view->caret.wrapped_line, view->caret.wrapped_column, view->lines, buffer);
@@ -2314,7 +2321,6 @@ void app_event(WindowEvent event)
 {
     if (gui_input(event)) {
         app.animating = true;
-        return;
     }
 
     SArena scratch = tl_scratch_arena();
@@ -2729,39 +2735,32 @@ void app_event(WindowEvent event)
             app.animating = true;
         } break;
     case WE_MOUSE_WHEEL:
-        // TODO(jesper): make a decision/option whether this should be moving
-        // the caret or not. My current gut feeling says no, as a way to allow a
-        // kind of temporary scroll back to check on something, that you then get
-        // taken back to the current caret when you type something
-
-        view->voffset += event.mouse_wheel.delta;
-        if (view->line_offset == 0 && view->voffset > 0) view->voffset = 0;
-
-        if (view->voffset > app.mono.line_height) {
-            f32 div = view->voffset / app.mono.line_height;
-            view->line_offset = MAX(0, view->line_offset-1*div);
-            view->voffset -= app.mono.line_height*div;
-        } else if (view->voffset < -app.mono.line_height) {
-            f32 div = view->voffset / -app.mono.line_height;
-            view->line_offset += 1*div;
-            view->voffset += app.mono.line_height*div;
-        }
-
-        ASSERT(!view->lines_dirty);
-        view->line_offset = MIN(view->line_offset, view->lines.count - 3);
-
+        // // TODO(jesper): make a decision/option whether this should be moving
+        // // the caret or not. My current gut feeling says no, as a way to allow a
+        // // kind of temporary scroll back to check on something, that you then get
+        // // taken back to the current caret when you type something
+        //
+        // view->voffset += event.mouse_wheel.delta;
+        // if (view->line_offset == 0 && view->voffset > 0) view->voffset = 0;
+        //
+        // if (view->voffset > app.mono.line_height) {
+        //     f32 div = view->voffset / app.mono.line_height;
+        //     view->line_offset = MAX(0, view->line_offset-1*div);
+        //     view->voffset -= app.mono.line_height*div;
+        // } else if (view->voffset < -app.mono.line_height) {
+        //     f32 div = view->voffset / -app.mono.line_height;
+        //     view->line_offset += 1*div;
+        //     view->voffset += app.mono.line_height*div;
+        // }
+        //
+        // ASSERT(!view->lines_dirty);
+        // view->line_offset = MIN(view->line_offset, view->lines.count - 3);
+        //
         app.animating = true;
         break;
     default: break;
     }
 }
-
-struct {
-    struct {
-        GuiWindowState wnd;
-    } buffer_history;
-} debug{};
-
 
 void update_and_render()
 {
@@ -2791,31 +2790,27 @@ void update_and_render()
 
     GfxCommandBuffer debug_gfx = gfx_command_buffer();
 
-    GuiLayout *root = gui_current_layout();
-    gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = root->pos, .size = root->size });
-
     gui_menu() {
         gui_menu("file") {
             // TODO(jesper): save all?
-            if (gui_menu_button("save")) buffer_save(app.current_view->buffer);
+            if (gui_button("save")) buffer_save(app.current_view->buffer);
 
-            if (gui_menu_button("select working dir...")) {
+            if (gui_button("select working dir...")) {
                 String wd = select_folder_dialog(scratch);
                 if (wd.length > 0) set_working_dir(wd);
             }
         }
 
         gui_menu("debug") {
-            gui_checkbox("buffer history", &debug.buffer_history.wnd.active);
         }
 
         if (app.process_commands.count > 0) {
             app.selected_process = gui_dropdown(app.process_command_names, app.selected_process);
-            if (gui_button(16, app.icons.build)) exec_process_command();
+            if (gui_icon_button("󰣪")) exec_process_command();
         }
     }
 
-    gui_window("buffer history", &debug.buffer_history.wnd) {
+    gui_window_id(debug.buffer_history.wnd) {
         char str[256];
 
 		if (auto buffer = get_buffer(app.current_view->buffer); buffer) {
@@ -2847,11 +2842,11 @@ void update_and_render()
 
     Vector2 lister_p = gfx.resolution*0.5f;
 
-    gui_window("open file", lister_p, { lister_w, 200.0f }, { 0.5f, 0.5f }, &app.lister.active) {
-        GuiId id = GUI_ID(0);
+    gui_window({ "open file", lister_p, { lister_w, 200.0f }, .anchor = { 0.5f, 0.5f } }, &app.lister.active) {
+        GuiId id = GUI_ID;
 
-        GuiEditboxAction edit_action = gui_editbox_id(id, "");
-        if (edit_action & (GUI_EDITBOX_CHANGE)) {
+        GuiAction edit_action = gui_editbox_id(id, "");
+        if (edit_action & (GUI_CHANGE)) {
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
                 array_copy(&app.lister.filtered, app.lister.values);
@@ -2888,7 +2883,7 @@ void update_and_render()
                     memcpy(lower_buffer, s.data, s.length);
 
                     String ls{ lower_buffer, s.length };
-                    to_lower(&ls);
+                    ls = to_lower(ls, scratch);
 
                     char prev = '/';
                     for (i32 i = 0; i < ls.length; i++) {
@@ -2937,14 +2932,14 @@ next_node:;
             }
         }
 
-        if (edit_action == GUI_EDITBOX_FINISH &&
+        if (edit_action == GUI_END &&
             (app.lister.selected_item < 0 || app.lister.selected_item >= app.lister.filtered.count))
         {
             gui.focused = id;
         }
 
-        GuiListerAction lister_action = gui_lister_id(id, app.lister.filtered, &app.lister.selected_item);
-        if (lister_action == GUI_LISTER_FINISH || edit_action == GUI_EDITBOX_FINISH) {
+        GuiAction lister_action = gui_lister_id(id, app.lister.filtered, &app.lister.selected_item);
+        if (lister_action == GUI_END || edit_action == GUI_END) {
             if (app.lister.selected_item >= 0 && app.lister.selected_item < app.lister.filtered.count) {
                 String file = app.lister.filtered[app.lister.selected_item];
                 String path = absolute_path(file, scratch);
@@ -2957,7 +2952,7 @@ next_node:;
                 app.lister.active = false;
                 gui.focused = GUI_ID_INVALID;
             }
-        } else if (lister_action == GUI_LISTER_CANCEL) {
+        } else if (lister_action == GUI_CANCEL) {
             // TODO(jesper): this results in 1 frame of empty lister window being shown because
             // we don't really have a good way to close windows from within the window
             app.lister.active = false;
@@ -2974,141 +2969,134 @@ next_node:;
     for (View &view : app.views) {
         if (view.id == -1) continue;
 
-        view.caret_dirty |= view.lines_dirty;
+        gui_push_id(view.gui_id);
+        defer { gui_pop_id(); };
 
-        // TODO(jesper): store layout rect stuff in the view
-        gui_begin_layout({ .type = GUI_LAYOUT_ROW, .rect = gui_layout_widget_fill() });
-        defer { gui_end_layout(); };
+        // TODO(jesper): put split direction/ratio/stuff in view
+        view.rect = split_rect({});
+        view.caret_dirty |= view.lines_dirty;
+        calculate_num_visible_lines(&view);
+
+        gui_hot_rect(view.gui_id, view.rect);
+
+        gui_push_layout({ .rect = view.rect });
+        defer { gui_pop_layout(); };
+
+        BufferId active_buffer = view.buffer;
 
         // TODO(jesper): kind of only want to do the tabs if there are more than 1 file open, but then I'll
         // need to figure out reasonable ways of visualising unsaved changes as well as which file is open.
         // Likely do-able with the window titlebar decoration on most/all OS?
         if (view.buffers.count > 0) {
-            GuiWindow *wnd = gui_current_window();
+            LayoutRect row = split_top({ gui.fonts.base.line_height+2 });
+            gui_draw_rect(row, gui.style.bg_dark1);
 
-            Vector2 size{ 0, gui.style.button.font.line_height + 2 };
-            Vector2 pos = gui_layout_widget(&size);
-            gui_draw_rect(pos, size, wnd->clip_rect, gui.style.bg_dark1);
+            GUI_LAYOUT(row) {
+                FontAtlas *font = &gui.fonts.base;
+                i32 current_tab = 0;
 
-            gui_divider();
+                //i32 cutoff = -1;
+                for (i32 i = 0; i < view.buffers.count; i++) {
+                    Buffer *b = get_buffer(view.buffers[i]);
+                    GuiId id = gui_gen_id(i);
 
-            gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = pos, .size = size, .column.spacing = 2 });
-            defer { gui_end_layout(); };
+                    GlyphsData td = calc_glyphs_data(b->name, font, scratch);
+                    Rect rect = split_rect({ td.bounds.x+6, td.bounds.y+16, .margin = gui.style.margin });
 
-            FontAtlas *font = &gui.style.button.font;
-            Vector2 msize{ gui.style.button.font.line_height, gui.style.button.font.line_height };
-            Vector2 mpos = gui_layout_widget(msize, GUI_ANCHOR_RIGHT);
+                    // if (gui_current_layout()->available_space.x < size.x) {
+                    //     cutoff = i;
+                    //     break;
+                    // }
 
-            i32 current_tab = 0;
-            GuiId parent = GUI_ID(0);
+                    if (gui_clicked(id, rect)) active_buffer = b->id;
 
-            BufferId active_buffer = view.buffer;
-
-            i32 cutoff = -1;
-            for (i32 i = 0; i < view.buffers.count; i++) {
-                Buffer *b = get_buffer(view.buffers[i]);
-
-                GuiId id = GUI_ID_INDEX(parent, i);
-
-                TextQuadsAndBounds td = calc_text_quads_and_bounds(b->name, font, scratch);
-                Vector2 size = td.bounds.size + Vector2{ 14.0f, 2.0f };
-                if (gui_current_layout()->available_space.x < size.x) {
-                    cutoff = i;
-                    break;
-                }
-
-                Vector2 pos = gui_layout_widget(size);
-                Vector2 text_offset = size*0.5f - Vector2{ td.bounds.size.x*0.5f, font->line_height*0.5f };
-
-                if (gui_clicked(id, pos, size)) active_buffer = b->id;
-
-                if (i == current_tab) {
-                    gui_draw_accent_button(id, pos, size);
-                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
-                } else {
-                    gui_draw_button(id, pos, size);
-                    gui_draw_text(td.glyphs, pos+text_offset, wnd->clip_rect, gui.style.fg, font);
-                }
-
-                if (b->saved_at != b->history_index) {
-                    gui_draw_rect(
-                        pos + Vector2{ size.x-4-1, 1 },
-                        { 4, 4 },
-                        wnd->clip_rect,
-                        bgr_unpack(0xFF990000));
-                }
-            }
-
-            if (cutoff >= 0) {
-                // TODO(jesper): this is essentially a dropdown with an icon button as the trigger button
-                // instead of a label button
-
-                GuiId mid = GUI_ID(0);
-                gui_hot_rect(mid, mpos, msize);
-                if (gui_pressed(mid)) {
-                    if (gui.focused == mid) {
-                        gui.focused = GUI_ID_INVALID;
+                    if (i == current_tab) {
+                        gui_draw_accent_button(id, rect);
+                        gui_draw_text(td, calc_center(rect.tl, rect.br, { td.bounds.x, td.font->line_height }), gui.style.fg);
                     } else {
-                        gui.focused = mid;
-                    }
-                }
-
-                Vector3 mbg = gui.hot == mid ? gui.style.accent_bg_hot : gui.style.accent_bg;
-                gui_draw_rect(mpos, msize, wnd->clip_rect, mbg);
-
-                Vector2 icon_s{ 16, 16 };
-                Vector2 icon_p = mpos + 0.5f*(msize - icon_s);
-                gui_draw_rect(icon_p, icon_s, gui.icons.down);
-
-                if (gui.focused == mid) {
-                    i32 old_window = gui.current_window;
-                    gui.current_window = GUI_OVERLAY;
-                    defer { gui.current_window = old_window; };
-
-                    GuiWindow *overlay = &gui.windows[GUI_OVERLAY];
-
-                    Vector3 border_col = bgr_unpack(0xFFCCCCCC);
-                    Vector3 bg = bgr_unpack(0xFF1d2021);
-                    Vector3 bg_hot = bgr_unpack(0xFF3A3A3A);
-
-                    i32 bg_index = overlay->command_buffer.commands.count;
-
-                    // TODO(jesper): figure out a reasonable way to make this layout anchored to the right and expand to the
-                    // left with the subsequent labels. Right now I'm just hoping that the width is wide enough
-                    Vector2 s{ 200.0f, 0 };
-                    Vector2 p{ mpos.x-s.x+msize.x, mpos.y + msize.y };
-                    Vector2 border{ 1, 1 };
-
-                    gui_begin_layout({ .type = GUI_LAYOUT_ROW, .flags = GUI_LAYOUT_EXPAND_Y, .pos = p, .size = s, .margin = { 1, 1 } });
-                    defer { gui_end_layout(); };
-
-                    for (i32 i = cutoff; i < view.buffers.count; i++) {
-                        Buffer *b = get_buffer(view.buffers[i]);
-
-                        Vector2 rect_s{ 0, font->line_height };
-                        Vector2 rect_p = gui_layout_widget(&rect_s);
-
-                        GuiId lid = GUI_ID_INDEX(parent, i);
-                        if (gui.hot == lid) gui_draw_rect(rect_p, rect_s, bg_hot);
-                        gui_textbox(b->name, rect_p);
-
-                        // TODO(jesper): due to changes in gui_hot to not allow a new hot widget
-                        // if one is pressed, this doesn't behave the way I want for dropdowns where
-                        // I can press the trigger button, drag to an item, then release to select it
-                        gui_hot_rect(lid, rect_p, rect_s);
-                        if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) ||
-                            gui_clicked(lid, rect_p, rect_s))
-                        {
-                            active_buffer = b->id;
-                            gui.focused = GUI_ID_INVALID;
-                        }
+                        gui_draw_button(id, rect);
+                        gui_draw_text(td, calc_center(rect.tl, rect.br, { td.bounds.x, td.font->line_height }), gui.style.fg);
                     }
 
-                    GuiLayout *cl = gui_current_layout();
-                    gui_draw_rect(cl->pos, cl->size, overlay->clip_rect, border_col, &overlay->command_buffer, bg_index);
-                    gui_draw_rect(cl->pos + border, cl->size - 2*border, overlay->clip_rect, bg, &overlay->command_buffer, bg_index+1);
-
+                    // if (b->saved_at != b->history_index) {
+                    //     gui_draw_rect(
+                    //         rect.tl + Vector2{ rect.size().x-4-1, 1 },
+                    //         { 4, 4 },
+                    //         bgr_unpack(0xFF990000));
+                    // }
                 }
+
+                // if (cutoff >= 0) {
+                //     // TODO(jesper): this is essentially a dropdown with an icon button as the trigger button
+                //     // instead of a label button
+                //
+                //     GuiId mid = GUI_ID(0);
+                //     gui_hot_rect(mid, mpos, msize);
+                //     if (gui_pressed(mid)) {
+                //         if (gui.focused == mid) {
+                //             gui.focused = GUI_ID_INVALID;
+                //         } else {
+                //             gui.focused = mid;
+                //         }
+                //     }
+                //
+                //     Vector3 mbg = gui.hot == mid ? gui.style.accent_bg_hot : gui.style.accent_bg;
+                //     gui_draw_rect(mpos, msize, wnd->clip_rect, mbg);
+                //
+                //     Vector2 icon_s{ 16, 16 };
+                //     Vector2 icon_p = mpos + 0.5f*(msize - icon_s);
+                //     gui_draw_rect(icon_p, icon_s, gui.icons.down);
+                //
+                //     if (gui.focused == mid) {
+                //         i32 old_window = gui.current_window;
+                //         gui.current_window = GUI_OVERLAY;
+                //         defer { gui.current_window = old_window; };
+                //
+                //         GuiWindow *overlay = &gui.windows[GUI_OVERLAY];
+                //
+                //         Vector3 border_col = bgr_unpack(0xFFCCCCCC);
+                //         Vector3 bg = bgr_unpack(0xFF1d2021);
+                //         Vector3 bg_hot = bgr_unpack(0xFF3A3A3A);
+                //
+                //         i32 bg_index = overlay->command_buffer.commands.count;
+                //
+                //         // TODO(jesper): figure out a reasonable way to make this layout anchored to the right and expand to the
+                //         // left with the subsequent labels. Right now I'm just hoping that the width is wide enough
+                //         Vector2 s{ 200.0f, 0 };
+                //         Vector2 p{ mpos.x-s.x+msize.x, mpos.y + msize.y };
+                //         Vector2 border{ 1, 1 };
+                //
+                //         gui_begin_layout({ .type = GUI_LAYOUT_ROW, .flags = GUI_LAYOUT_EXPAND_Y, .pos = p, .size = s, .margin = { 1, 1 } });
+                //         defer { gui_end_layout(); };
+                //
+                //         for (i32 i = cutoff; i < view.buffers.count; i++) {
+                //             Buffer *b = get_buffer(view.buffers[i]);
+                //
+                //             Vector2 rect_s{ 0, font->line_height };
+                //             Vector2 rect_p = gui_layout_widget(&rect_s);
+                //
+                //             GuiId lid = GUI_ID_INDEX(parent, i);
+                //             if (gui.hot == lid) gui_draw_rect(rect_p, rect_s, bg_hot);
+                //             gui_textbox(b->name, rect_p);
+                //
+                //             // TODO(jesper): due to changes in gui_hot to not allow a new hot widget
+                //             // if one is pressed, this doesn't behave the way I want for dropdowns where
+                //             // I can press the trigger button, drag to an item, then release to select it
+                //             gui_hot_rect(lid, rect_p, rect_s);
+                //             if ((gui.hot == lid && gui.pressed == mid && !gui.mouse.left_pressed) ||
+                //                 gui_clicked(lid, rect_p, rect_s))
+                //             {
+                //                 active_buffer = b->id;
+                //                 gui.focused = GUI_ID_INVALID;
+                //             }
+                //         }
+                //
+                //         GuiLayout *cl = gui_current_layout();
+                //         gui_draw_rect(cl->pos, cl->size, overlay->clip_rect, border_col, &overlay->command_buffer, bg_index);
+                //         gui_draw_rect(cl->pos + border, cl->size - 2*border, overlay->clip_rect, bg, &overlay->command_buffer, bg_index+1);
+                //
+                //     }
+                // }
             }
 
             // TODO(jesper): why is this herer
@@ -3117,46 +3105,42 @@ next_node:;
 
         if (auto buffer = get_buffer(view.buffer); buffer) {
             if (app.incremental_search.active) {
-                Vector2 size{ 0, 25.0f };
-                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_TOP);;
-                gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
-                defer { gui_end_layout(); };
-
-                auto action = gui_editbox("");
-                if (action & GUI_EDITBOX_CHANGE) {
-                    String needle{ gui.edit.buffer, gui.edit.length };
-                    string_copy(&app.incremental_search.str, needle, mem_dynamic);
-
-                    view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
-                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                    if (app.incremental_search.set_mark) view.mark = view.caret;
-                    move_view_to_caret(&view);
-                }
-
-                if (action & GUI_EDITBOX_FINISH) {
-                    app.incremental_search.active = false;
-                }
-
-                if (action & GUI_EDITBOX_CANCEL) {
-                    FREE(mem_dynamic, app.incremental_search.str.data);
-                    app.incremental_search.str = {};
-
-                    view.caret.byte_offset = app.incremental_search.start_caret;
-                    view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                    if (app.incremental_search.set_mark) {
-                        view.mark.byte_offset = app.incremental_search.start_mark;
-                        view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
-                    }
-                    app.incremental_search.active = false;
-                }
+                // Vector2 size{ 0, 25.0f };
+                // Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_TOP);;
+                // gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
+                // defer { gui_end_layout(); };
+                //
+                // auto action = gui_editbox("");
+                // if (action & GUI_EDITBOX_CHANGE) {
+                //     String needle{ gui.edit.buffer, gui.edit.length };
+                //     string_copy(&app.incremental_search.str, needle, mem_dynamic);
+                //
+                //     view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
+                //     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                //     if (app.incremental_search.set_mark) view.mark = view.caret;
+                //     move_view_to_caret(&view);
+                // }
+                //
+                // if (action & GUI_EDITBOX_FINISH) {
+                //     app.incremental_search.active = false;
+                // }
+                //
+                // if (action & GUI_EDITBOX_CANCEL) {
+                //     FREE(mem_dynamic, app.incremental_search.str.data);
+                //     app.incremental_search.str = {};
+                //
+                //     view.caret.byte_offset = app.incremental_search.start_caret;
+                //     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                //     if (app.incremental_search.set_mark) {
+                //         view.mark.byte_offset = app.incremental_search.start_mark;
+                //         view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                //     }
+                //     app.incremental_search.active = false;
+                // }
             } else if (app.incremental_search.str.length > 0) {
             }
 
-            if (true) {
-                Vector2 size{ 0, 15.0f };
-                Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_BOTTOM);
-                gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
-                defer { gui_end_layout(); };
+            GUI_LAYOUT(split_bottom({ 15 })) {
 
                 String nl = string_from_enum(buffer->newline_mode);
                 String in = buffer->indent_with_tabs ? String("TAB") : String("SPACE");
@@ -3171,26 +3155,24 @@ next_node:;
         }
 
         {
-            gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .rect = gui_layout_widget_fill() });
-            defer { gui_end_layout(); };
-
             // NOTE(jesper): the scrollbar is 1 frame delayed if the reflowing results in a different number of lines,
             // which we are doing afterwards to allow the gui layout system trigger line reflowing
             // We could move it to after the reflow handling with some more layout plumbing, by letter caller deal with
             // the layouting and passing in absolute positions and sizes to the scrollbar
-            gui_scrollbar(app.mono.line_height, &view.line_offset, view.lines.count, view.lines_visible, &view.voffset);
+            gui_scrollbar(
+                &view.voffset,
+                &view.line_offset,
+                app.mono.line_height,
+                view.lines.count,
+                view.lines_visible);
 
-            Rect text_rect = gui_layout_widget_fill();
-            if (view.lines_dirty || text_rect != view.rect) {
-                view.rect = text_rect;
-
+            if (view.lines_dirty) {
                 recalc_line_wrap(&view, &view.lines, 0, view.lines.count, view.buffer);
-
                 view.lines_dirty = false;
             }
-
-            gui_hot_rect(view.gui_id, view.rect.pos, view.rect.size);
         }
+
+        view.text_rect = *gui_current_layout();
 
         // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
         // make sense for this path to go away completely when they are, but I won't completely discount that
@@ -3218,20 +3200,22 @@ next_node:;
         }
 
 
+        // draw caret
         if (view.caret.wrapped_line >= view.line_offset &&
             view.caret.wrapped_line < view.line_offset + view.lines_visible)
         {
+            Rect rect = view.text_rect;
             i32 y = view.caret.wrapped_line - view.line_offset;
             f32 w = app.mono.space_width;
             f32 h = app.mono.line_height - 2.0f;
 
             Vector2 p0{
-                view.rect.pos.x + view.caret.wrapped_column*app.mono.space_width,
-                view.rect.pos.y + y*app.mono.line_height - view.voffset,
+                rect.tl.x + view.caret.wrapped_column*app.mono.space_width,
+                rect.tl.y + y*app.mono.line_height - view.voffset,
             };
             Vector2 p1{ p0.x, p0.y + h };
 
-            gui_draw_rect({ view.rect.pos.x, p0.y }, { view.rect.size.x, h }, app.line_bg, &gfx.frame_cmdbuf);
+            gui_draw_rect({ rect.tl.x, p0.y }, { rect.size().x, h }, app.line_bg, &gfx.frame_cmdbuf);
 
             gui_draw_rect(p0, { w, h }, app.caret_bg, &gfx.frame_cmdbuf);
             gui_draw_rect(p0, { 1.0f, h }, app.caret_fg, &gfx.frame_cmdbuf);
@@ -3239,16 +3223,18 @@ next_node:;
             gui_draw_rect(p1, { w, 1.0f }, app.caret_fg, &gfx.frame_cmdbuf);
         }
 
+        // draw caret anchor
         if (view.mark.wrapped_line >= view.line_offset &&
             view.mark.wrapped_line < view.line_offset + view.lines_visible)
         {
+            Rect rect = view.text_rect;
             i32 y = view.mark.wrapped_line - view.line_offset;
             f32 w = app.mono.space_width/2;
             f32 h = app.mono.line_height - 2.0f;
 
             Vector2 p0{
-                view.rect.pos.x + view.mark.wrapped_column*app.mono.space_width,
-                view.rect.pos.y + y*app.mono.line_height - view.voffset,
+                rect.tl.x + view.mark.wrapped_column*app.mono.space_width,
+                rect.tl.y + y*app.mono.line_height - view.voffset,
             };
             Vector2 p1{ p0.x, p0.y + h };
 
@@ -3260,10 +3246,7 @@ next_node:;
         if (Buffer *buffer = get_buffer(view.buffer); buffer) {
             FontAtlas *font = &app.mono;
 
-            Vector2 pos{ view.rect.pos.x, view.rect.pos.y };
-            Vector2 size{ view.rect.size.x, view.rect.size.y };
-
-            i32 columns = (i32)ceilf(view.rect.size.x / font->space_width);
+            i32 columns = (i32)ceilf(view.rect.size().x / font->space_width);
             i32 rows = view.lines_visible;
 
             i64 byte_start = line_start_offset(view.line_offset, view.lines);
@@ -3362,6 +3345,9 @@ next_node:;
                 }
             }
 
+
+            Rect rect = *gui_current_layout();
+
             GfxCommand cmd{
                 .type = GFX_COMMAND_MONO_TEXT,
                 .mono_text = {
@@ -3370,7 +3356,7 @@ next_node:;
                     .glyph_ssbo = view.glyph_data_ssbo,
                     .glyph_atlas = font->texture,
                     .cell_size = { app.mono.space_width, app.mono.line_height },
-                    .pos = pos,
+                    .pos = rect.tl,
                     .offset = view.voffset,
                     .line_offset = view.line_offset,
                     .columns = columns,
@@ -3380,15 +3366,15 @@ next_node:;
             array_add(
                 &gfx.frame_vertices,
                 {
-                    pos.x+size.x, pos.y,
-                    pos.x       , pos.y,
-                    pos.x       , pos.y+size.y,
-                    pos.x       , pos.y+size.y,
-                    pos.x+size.x, pos.y+size.y,
-                    pos.x+size.x, pos.y,
+                    rect.br.x, rect.tl.y,
+                    rect.tl.x, rect.tl.y,
+                    rect.tl.x, rect.br.y,
+                    rect.tl.x, rect.br.y,
+                    rect.br.x, rect.br.y,
+                    rect.br.x, rect.tl.y,
                 });
 
-            gfx_push_command(&gfx.frame_cmdbuf, cmd);
+            gfx_push_command(cmd, &gfx.frame_cmdbuf);
         }
     }
 
@@ -3396,15 +3382,15 @@ next_node:;
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    gui_end_layout();
-
     app.animating = false;
     if (gui.capture_text[0] != gui.capture_text[1]) app.animating = true;
     gui_end_frame();
 
+    Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
+
     gfx_flush_transfers();
-    gfx_submit_commands(gfx.frame_cmdbuf);
-    gfx_submit_commands(debug_gfx);
+    gfx_submit_commands(gfx.frame_cmdbuf, view);
+    gfx_submit_commands(debug_gfx, view);
 
     gui_render();
 }

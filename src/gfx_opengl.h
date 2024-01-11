@@ -4,16 +4,33 @@
 #include "maths.h"
 #include "array.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #include "win32_lite.h"
 #include "win32_opengl.h"
+#elif defined(__linux__)
+#include "linux_opengl.h"
 #endif
+
+struct GfxProgram {
+    GLuint object;
+    GLuint shaders[2];
+};
+
+struct TextureAsset {
+    GLuint texture_handle;
+};
+
+struct ShaderAsset {
+    GLuint object;
+    GLint stage;
+
+    DynamicArray<GfxProgram*> used_by;
+};
 
 enum GfxCommandType {
     GFX_COMMAND_COLORED_LINE,
     GFX_COMMAND_COLORED_PRIM,
     GFX_COMMAND_TEXTURED_PRIM,
-    GFX_COMMAND_GUI_PRIM_COLOR,
     GFX_COMMAND_GUI_PRIM_TEXTURE,
     GFX_COMMAND_GUI_TEXT,
     GFX_COMMAND_MONO_TEXT,
@@ -27,17 +44,12 @@ struct GfxCommand {
             i32 vbo_offset;
             i32 vertex_count;
         } colored_prim;
-        struct { 
+        struct {
             GLuint vbo;
             i32 vbo_offset;
             i32 vertex_count;
             GLuint texture;
         } textured_prim;
-        struct {
-            GLuint vbo;
-            i32 vbo_offset;
-            i32 vertex_count;
-        } gui_prim;
         struct {
             GLuint vbo;
             GLuint texture;
@@ -84,43 +96,42 @@ struct GfxContext {
             GLint cs_from_ws;
         } global;
         struct {
-            GLint program;
+            GfxProgram *program;
             GLint ws_from_ls;
             GLint color;
         } basic2d;
         struct {
-            GLuint program;
+            GfxProgram *program;
         } pass2d;
         struct {
-            GLuint program;
+            GfxProgram *program;
             GLint resolution;
             GLint color;
         } text;
         struct {
-            GLuint program;
+            GfxProgram *program;
             GLuint resolution;
             GLuint cell_size;
             GLuint pos, offset, line_offset, columns;
         } mono_text;
         struct {
-            GLuint program;
-            GLint resolution;
-        } gui_prim;
-        struct {
-            GLuint program;
+            GfxProgram *program;
             GLint resolution;
         } gui_prim_texture;
     } shaders;
 
     struct {
+        GLuint square;
         GLuint frame;
     } vaos;
-    
+
     struct {
+        GLuint square;
         GLuint frame;
     } vbos;
 
     struct {
+        GLuint font;
     } textures;
 
     GfxCommandBuffer frame_cmdbuf;
@@ -130,24 +141,24 @@ struct GfxContext {
 
 extern GfxContext gfx;
 
-struct Camera {
+struct Camera2 {
+    Matrix3 projection;
+    Vector2 position;
+    f32 uni_scale = 1.0f;
+};
+
+struct Camera3 {
     Matrix4 projection;
     Vector3 position;
     f32 uni_scale = 1.0f;
 };
 
-Matrix4 transform(Camera *camera);
-Vector2 ws_from_ss(Vector2 ss_pos);
 
-f32 linear_from_sRGB(f32 s);
-Vector3 linear_from_sRGB(Vector3 sRGB);
-Vector4 linear_from_sRGB(Vector4 sRGB);
-
-void gfx_begin_frame();
-
+void gfx_push_command(GfxCommand cmd, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_square(Vector2 center, Vector2 size, Vector2 uv_tl, Vector2 uv_br, GLuint texture, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_square(Vector2 p0,  Vector2 p1,  Vector2 p2, Vector2 p3, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
+void gfx_draw_rect(Vector2 tl, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 
 void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 
@@ -155,13 +166,5 @@ void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf
 void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
-GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height);
-GLuint gfx_load_texture(u8 *data, i32 size);
-
-void gfx_flush_transfers();
-
-GfxCommandBuffer gfx_command_buffer();
-void gfx_reset_command_buffer(GfxCommandBuffer *cmdbuf);
-void gfx_submit_commands(GfxCommandBuffer cmdbuf);
 
 #endif // GFX_OPENGL_H

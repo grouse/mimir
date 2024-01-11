@@ -6,10 +6,6 @@
 #include "linux_thread.cpp"
 #include "linux_file.cpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ASSERT(x) ASSERT(x)
-#include "external/stb/stb_image.h"
-
 #include "external/MurmurHash/MurmurHash3.cpp"
 
 Allocator mem_frame;
@@ -114,5 +110,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-
-

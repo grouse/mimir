@@ -148,10 +148,9 @@ void input_begin_frame() EXPORT
     if (auto *it = map_find(&input.mouse, EDGE_DOWN); it) *it = 0;
     if (auto *it = map_find(&input.mouse, EDGE_UP); it) *it = 0;
 
-    if (input.active_map < 0) return;
     reset_input_map(input.active_map);
-
     for (auto it : input.layers) reset_input_map(it);
+
     SWAP(input.layers, input.queued_layers);
     input.queued_layers.count = 0;
 }
@@ -211,6 +210,18 @@ bool translate_input_event(
         array_insert(queue, 0, { WE_INPUT, .input = { map, id, type } });
     };
 
+    switch (event.type) {
+    case WE_MOUSE_PRESS:
+        (*map_find_emplace(&input.mouse, EDGE_DOWN, u8(0))) |= event.mouse.button;
+        (*map_find_emplace(&input.mouse, HOLD, u8(0))) |= event.mouse.button;
+        break;
+    case WE_MOUSE_RELEASE:
+        (*map_find_emplace(&input.mouse, EDGE_UP, u8(0))) |= event.mouse.button;
+        (*map_find_emplace(&input.mouse, HOLD, u8(0))) &= ~event.mouse.button;
+        break;
+    default: break;
+    }
+
     if (event.type != WE_INPUT && map_id != -1) {
         InputMap *map = &input.maps[map_id];
 
@@ -249,9 +260,6 @@ bool translate_input_event(
             }
             break;
         case WE_MOUSE_PRESS:
-            (*map_find_emplace(&input.mouse, EDGE_DOWN, u8(0))) |= event.mouse.button;
-            (*map_find_emplace(&input.mouse, HOLD, u8(0))) |= event.mouse.button;
-
             for (InputDesc it : map->by_device[MOUSE][EDGE_DOWN]) {
                 if ((event.mouse.button == it.mouse.button ||
                      it.mouse.button == MB_ANY) &&
@@ -289,9 +297,6 @@ bool translate_input_event(
             }
             break;
         case WE_MOUSE_RELEASE:
-            (*map_find_emplace(&input.mouse, EDGE_UP, u8(0))) |= event.mouse.button;
-            (*map_find_emplace(&input.mouse, HOLD, u8(0))) &= ~event.mouse.button;
-
             for (InputDesc it : map->by_device[MOUSE][EDGE_UP]) {
                 if ((event.mouse.button == it.mouse.button ||
                      it.mouse.button == MB_ANY) &&
@@ -457,6 +462,7 @@ bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id) EXPORT
         map_id = input.active_map;
     }
 
+    if (map_id == -1) return false;
     InputMap *map = &input.maps[map_id];
     auto *axis = map_find(&map->axes, id);
     if (!axis) return false;
@@ -472,6 +478,7 @@ bool get_input_axis2d(InputId id, f32 dst[2], InputMapId map_id) EXPORT
         map_id = input.active_map;
     }
 
+    if (map_id == -1) return false;
     InputMap *map = &input.maps[map_id];
     auto *axis = map_find(&map->axes, id);
     if (!axis) return false;
@@ -488,6 +495,7 @@ bool get_input_edge(InputId id, InputMapId map_id) EXPORT
         map_id = input.active_map;
     }
 
+    if (map_id == -1) return false;
     InputMap *map = &input.maps[map_id];
     i32 *value = map_find(&map->edges, id);
     if (!value) return false;
@@ -502,6 +510,7 @@ bool get_input_held(InputId id, InputMapId map_id) EXPORT
         map_id = input.active_map;
     }
 
+    if (map_id == -1) return false;
     InputMap *map = &input.maps[map_id];
     bool *value = map_find(&map->held, id);
     if (!value) return false;

@@ -6,9 +6,11 @@
 // copied and reused safely without worry about stomping over underlying
 // texture atlas handles etc
 
-#include "external/stb/stb_truetype.h"
+#include "stb/stb_truetype.h"
 
+#include "string.h"
 #include "hash_table.h"
+#include "gfx_opengl.h"
 
 struct Glyph {
     u32 codepoint;
@@ -36,7 +38,7 @@ struct FontAtlas {
     f32 scale;
     f32 line_height;
     f32 space_width;
-    
+
     bool mono_space;
 
     stbtt_fontinfo info;
@@ -47,9 +49,15 @@ struct FontAtlas {
     HashTable<i32 , Glyph> glyphs;
 };
 
+struct GlyphsData {
+    FontAtlas *font;
+    Vector2 bounds;
+    Vector2 offset;
+    DynamicArray<GlyphRect> glyphs;
+};
+
 FontAtlas create_font(String path, f32 pixel_height, bool mono_space = false);
 f32 glyph_advance(FontAtlas *font, u32 codepoint);
 GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen);
-
 
 #endif // FONT_H

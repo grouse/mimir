@@ -28,6 +28,8 @@ struct AppWindow {
 
 HashTable<u64, DynamicArray<WindowEvent>> event_queues;
 
+HWND win32_root_window;
+
 MouseState g_mouse{};
 MouseCursor current_cursor;
 HCURSOR cursors[MC_MAX];

@@ -5,13 +5,7 @@
 #include "window.h"
 #include "gen/window.h"
 
-#include "win32_opengl.cpp"
 #include "win32_process.cpp"
-#include "win32_thread.cpp"
-
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_ASSERT(x) ASSERT(x)
-#include "external/stb/stb_image.h"
 
 #include "external/MurmurHash/MurmurHash3.cpp"
 
@@ -19,8 +13,6 @@ Allocator mem_frame;
 
 i32 mouse_capture_count = 0;
 bool has_init = false;
-
-HWND win32_root_window;
 
 int WINAPI wWinMain(
     HINSTANCE /*hInstance*/,
@@ -33,8 +25,10 @@ int WINAPI wWinMain(
 
     Vector2 resolution{ 1280, 720 };
 
-    extern HWND win32_window_handle(AppWindow *wnd);
     AppWindow *wnd = create_window({"mimir", i32(resolution.x), i32(resolution.y), WINDOW_OPENGL });
+
+    extern HWND win32_root_window;
+    extern HWND win32_window_handle(AppWindow *wnd);
     win32_root_window = win32_window_handle(wnd);
 
     init_gfx(resolution);

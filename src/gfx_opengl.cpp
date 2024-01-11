@@ -1,37 +1,71 @@
 #include "gfx_opengl.h"
+#include "gen/gfx_opengl.h"
 
-#include "external/stb/stb_image.h"
+#include "assets.h"
 
-GfxContext gfx;
+#include "gen/string.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ASSERT(x) ASSERT(x)
+#include "stb/stb_image.h"
 
 extern Allocator mem_frame;
 
-void gfx_push_command(GfxCommandBuffer *cmdbuf, GfxCommand cmd)
+GfxContext gfx{};
+
+void gfx_push_command(GfxCommand cmd, GfxCommandBuffer *cmdbuf) EXPORT
 {
-    if (cmdbuf->commands.count > 0) {
-        GfxCommand *last = &cmdbuf->commands[cmdbuf->commands.count-1];
-        if (cmd.type == last->type) {
-            switch (cmd.type) {
-            case GFX_COMMAND_COLORED_PRIM:
-            case GFX_COMMAND_COLORED_LINE:
+    if (auto *last = array_tail(cmdbuf->commands);
+        last && cmd.type == last->type)
+    {
+        switch (cmd.type) {
+        case GFX_COMMAND_COLORED_PRIM:
+        case GFX_COMMAND_COLORED_LINE:
+            if (last->colored_prim.vbo == cmd.colored_prim.vbo &&
+                (last->colored_prim.vbo_offset+(last->colored_prim.vertex_count*6))  == cmd.colored_prim.vbo_offset)
+            {
                 last->colored_prim.vertex_count += cmd.colored_prim.vertex_count;
                 return;
-            case GFX_COMMAND_TEXTURED_PRIM:
+            }
+            break;
+        case GFX_COMMAND_TEXTURED_PRIM:
+            if (last->textured_prim.texture == cmd.textured_prim.texture &&
+                last->textured_prim.vbo == cmd.textured_prim.vbo &&
+                last->textured_prim.vbo_offset+last->textured_prim.vertex_count*4 == cmd.textured_prim.vbo_offset)
+            {
                 last->textured_prim.vertex_count += cmd.textured_prim.vertex_count;
                 return;
-            case GFX_COMMAND_MONO_TEXT:
-            case GFX_COMMAND_GUI_PRIM_COLOR:
-            case GFX_COMMAND_GUI_PRIM_TEXTURE:
-            case GFX_COMMAND_GUI_TEXT:
-                break;
             }
+            break;
+        case GFX_COMMAND_MONO_TEXT:
+        case GFX_COMMAND_GUI_PRIM_TEXTURE:
+        case GFX_COMMAND_GUI_TEXT:
+            break;
         }
     }
 
     array_add(&cmdbuf->commands, cmd);
 }
 
-u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
+bool gfx_link_program(GfxProgram *program) INTERNAL
+{
+    for (auto it : program->shaders) glAttachShader(program->object, it);
+    glLinkProgram(program->object);
+
+    GLint program_linked;
+    glGetProgramiv(program->object, GL_LINK_STATUS, &program_linked);
+    if (program_linked != GL_TRUE) {
+        GLsizei log_length = 0;
+        GLchar message[1024];
+        glGetProgramInfoLog(program->object, 1024, &log_length, message);
+        LOG_ERROR("program failed to link: %s", message);
+        return false;
+    } else {
+        return true;
+    }
+}
+
+GfxProgram* gfx_create_shader(const char *vertex_src, const char *fragment_src) EXPORT
 {
     u32 vertex_shader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex_shader, 1, &vertex_src, nullptr);
@@ -44,6 +78,7 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
         GLchar message[1024];
         glGetShaderInfoLog(vertex_shader, 1024, &log_length, message);
         LOG_ERROR("vertex shader failed to compile: %s", message);
+        return 0;
     }
 
     u32 fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -57,23 +92,48 @@ u32 gfx_create_shader(const char *vertex_src, const char *fragment_src)
         GLchar message[1024];
         glGetShaderInfoLog(fragment_shader, 1024, &log_length, message);
         LOG_ERROR("fragment shader failed to compile: %s", message);
+        return 0;
     }
 
-    u32 program = glCreateProgram();
-    glAttachShader(program, vertex_shader);
-    glAttachShader(program, fragment_shader);
-    glLinkProgram(program);
+    GfxProgram *program = ALLOC_T(mem_dynamic, GfxProgram) {
+        .object = glCreateProgram(),
+        .shaders = { vertex_shader, fragment_shader },
+    };
 
-    GLint program_linked;
-    glGetProgramiv(program, GL_LINK_STATUS, &program_linked);
-    if (program_linked != GL_TRUE) {
-        GLsizei log_length = 0;
-        GLchar message[1024];
-        glGetProgramInfoLog(program, 1024, &log_length, message);
-        LOG_ERROR("program failed to link: %s", message);
+    if (gfx_link_program(program)) {
+        return program;
+    } else {
+        return {};
+    }
+}
+
+GfxProgram* gfx_create_shader_program(String vertex, String fragment) EXPORT
+{
+    auto *vertex_shader = find_asset<ShaderAsset>(vertex);
+    auto *fragment_shader = find_asset<ShaderAsset>(fragment);
+
+    if (!vertex_shader) {
+        LOG_ERROR("unable to find vertex shader: %.*s", STRFMT(vertex));
+        return {};
     }
 
-    return program;
+    if (!fragment_shader) {
+        LOG_ERROR("unable to find fragment shader: %.*s", STRFMT(fragment));
+        return {};
+    }
+
+    GfxProgram *program = ALLOC_T(mem_dynamic, GfxProgram) {
+        .object = glCreateProgram(),
+        .shaders = { vertex_shader->object, fragment_shader->object },
+    };
+
+    if (gfx_link_program(program)) {
+        array_add(&vertex_shader->used_by, program);
+        array_add(&fragment_shader->used_by, program);
+        return program;
+    } else {
+        return {};
+    }
 }
 
 void gl_debug_proc(
@@ -140,7 +200,7 @@ void gl_debug_proc(
 #define SHADER_HEADER \
     "#version 430 core\n" \
     "#extension GL_ARB_explicit_uniform_location : enable\n"\
-    "layout(location = 0) uniform mat4 cs_from_ws;\n"\
+    "layout(location = 0) uniform mat3 cs_from_ws;\n"\
     "vec3 rgb_unpack(uint rgb)\n"\
     "{\n"\
     "	uint r = rgb & 0xff;\n"\
@@ -156,7 +216,7 @@ void gl_debug_proc(
     "	return vec3(r, g, b) / 255.0;\n"\
     "}\n"
 
-void init_gfx(Vector2 resolution)
+void init_gfx(Vector2 resolution) EXPORT
 {
     if (debugger_attached()) {
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -165,8 +225,7 @@ void init_gfx(Vector2 resolution)
     }
 
     glDebugMessageCallback(gl_debug_proc, nullptr);
-
-    gfx.resolution = resolution;
+    gfx_change_resolution(resolution);
 
     glEnable(GL_FRAMEBUFFER_SRGB);
     glEnable(GL_BLEND);
@@ -181,8 +240,7 @@ void init_gfx(Vector2 resolution)
             "out vec4 vs_color;\n"
             "void main()\n"
             "{\n"
-            "   gl_Position = cs_from_ws * vec4(v_pos, 0.0, 1.0);\n"
-            "   gl_Position.y = -gl_Position.y;\n"
+            "   gl_Position = vec4((cs_from_ws * vec3(v_pos, 1.0)).xy, 0.0, 1.0);\n"
             "   vs_color = v_color;\n"
             "}\0";
 
@@ -195,7 +253,7 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.pass2d.program = gfx_create_shader(vert, frag);
-        ASSERT(glGetUniformLocation(gfx.shaders.pass2d.program, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
+        ASSERT(glGetUniformLocation(gfx.shaders.pass2d.program->object, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
     }
 
     {
@@ -205,8 +263,7 @@ void init_gfx(Vector2 resolution)
             "out vec2 vs_uv;\n"
             "void main()\n"
             "{\n"
-            "   gl_Position = cs_from_ws * vec4(v_pos, 0.0, 1.0);\n"
-            "   gl_Position.y = -gl_Position.y;\n"
+            "   gl_Position = vec4((cs_from_ws * vec3(v_pos, 1.0)).xy, 0.0, 1.0);\n"
             "   vs_uv = v_uv;\n"
             "}\0";
 
@@ -220,32 +277,7 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.basic2d.program = gfx_create_shader(vert, frag);
-        ASSERT(glGetUniformLocation(gfx.shaders.basic2d.program, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
-    }
-
-    {
-        const char *vert = SHADER_HEADER
-            "layout(location = 0) in vec2 v_pos;\n"
-            "layout(location = 1) in vec3 v_color;\n"
-            "uniform vec2 resolution;\n"
-            "out vec3 vs_color;\n"
-            "void main()\n"
-            "{\n"
-            "    gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
-            "    gl_Position.y = -gl_Position.y;\n"
-            "    vs_color = v_color;\n"
-            "}\0";
-
-        const char *frag = SHADER_HEADER
-            "in vec3 vs_color;\n"
-            "out vec4 out_color;\n"
-            "void main()\n"
-            "{\n"
-            "	out_color = vec4(vs_color, 1.0f);\n"
-            "}\0";
-
-        gfx.shaders.gui_prim.program = gfx_create_shader(vert, frag);
-        gfx.shaders.gui_prim.resolution = glGetUniformLocation(gfx.shaders.gui_prim.program, "resolution");
+        ASSERT(glGetUniformLocation(gfx.shaders.basic2d.program->object, "cs_from_ws") == gfx.shaders.global.cs_from_ws);
     }
 
     {
@@ -271,9 +303,8 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.gui_prim_texture.program = gfx_create_shader(vert, frag);
-        gfx.shaders.gui_prim_texture.resolution = glGetUniformLocation(gfx.shaders.gui_prim_texture.program, "resolution");
+        gfx.shaders.gui_prim_texture.resolution = glGetUniformLocation(gfx.shaders.gui_prim_texture.program->object, "resolution");
     }
-
 
     {
         const char *vert = SHADER_HEADER
@@ -302,8 +333,8 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.text.program = gfx_create_shader(vert, frag);
-        gfx.shaders.text.resolution = glGetUniformLocation(gfx.shaders.text.program, "resolution");
-        gfx.shaders.text.color = glGetUniformLocation(gfx.shaders.text.program, "color");
+        gfx.shaders.text.resolution = glGetUniformLocation(gfx.shaders.text.program->object, "resolution");
+        gfx.shaders.text.color = glGetUniformLocation(gfx.shaders.text.program->object, "color");
     }
 
     {
@@ -352,33 +383,56 @@ void init_gfx(Vector2 resolution)
             "}\0";
 
         gfx.shaders.mono_text.program = gfx_create_shader(vert, frag);
-        gfx.shaders.mono_text.resolution = glGetUniformLocation(gfx.shaders.mono_text.program, "resolution");
-        gfx.shaders.mono_text.cell_size = glGetUniformLocation(gfx.shaders.mono_text.program, "cell_size");
-        gfx.shaders.mono_text.pos = glGetUniformLocation(gfx.shaders.mono_text.program, "pos");
-        gfx.shaders.mono_text.offset = glGetUniformLocation(gfx.shaders.mono_text.program, "voffset");
-        gfx.shaders.mono_text.line_offset = glGetUniformLocation(gfx.shaders.mono_text.program, "line_offset");
-        gfx.shaders.mono_text.columns = glGetUniformLocation(gfx.shaders.mono_text.program, "columns");
+        gfx.shaders.mono_text.resolution = glGetUniformLocation(gfx.shaders.mono_text.program->object, "resolution");
+        gfx.shaders.mono_text.cell_size = glGetUniformLocation(gfx.shaders.mono_text.program->object, "cell_size");
+        gfx.shaders.mono_text.pos = glGetUniformLocation(gfx.shaders.mono_text.program->object, "pos");
+        gfx.shaders.mono_text.offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "voffset");
+        gfx.shaders.mono_text.line_offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "line_offset");
+        gfx.shaders.mono_text.columns = glGetUniformLocation(gfx.shaders.mono_text.program->object, "columns");
     }
+
+    f32 square_vertices[] = {
+        0.5f, -0.5f,
+        -0.5f, -0.5f,
+        -0.5f, 0.5f,
+
+        -0.5f, 0.5f,
+        0.5f, 0.5f,
+        0.5f, -0.5f,
+    };
+
+    glGenBuffers(1, &gfx.vbos.square);
+    glGenVertexArrays(1, &gfx.vaos.square);
+
+    glBindVertexArray(gfx.vaos.square);
+
+    glBindBuffer(GL_ARRAY_BUFFER, gfx.vbos.square);
+    glBufferData(GL_ARRAY_BUFFER, sizeof square_vertices, square_vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2*sizeof square_vertices[0], (void*)0);
+    glEnableVertexAttribArray(0);
 
     glGenBuffers(1, &gfx.vbos.frame);
     glGenVertexArrays(1, &gfx.vaos.frame);
 }
 
-bool gfx_change_resolution(Vector2 resolution)
+bool gfx_change_resolution(Vector2 resolution) EXPORT
 {
     if (gfx.resolution == resolution) return false;
+    LOG_INFO("new render resolution: {%f, %f}", resolution.x, resolution.y);
+    glViewport(0, 0, resolution.x, resolution.y);
     gfx.resolution = resolution;
     return true;
 }
 
-void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_PRIM;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 6;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     color = linear_from_sRGB(color);
 
@@ -399,20 +453,47 @@ void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuff
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
-void gfx_draw_square(
-    Vector2 p0,
-    Vector2 p1,
-    Vector2 p2,
-    Vector2 p3,
-    Vector3 color,
-    GfxCommandBuffer *cmdbuf)
+void gfx_draw_rect(
+        Vector2 tl,
+        Vector2 size,
+        Vector4 color,
+        GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_PRIM;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 6;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
+
+    color = linear_from_sRGB(color);
+
+    f32 vertices[] = {
+        tl.x+size.x, tl.y,        color.r, color.g, color.b, color.a,
+        tl.x,        tl.y,        color.r, color.g, color.b, color.a,
+        tl.x,        tl.y+size.y, color.r, color.g, color.b, color.a,
+
+        tl.x,        tl.y+size.y, color.r, color.g, color.b, color.a,
+        tl.x+size.x, tl.y+size.y, color.r, color.g, color.b, color.a,
+        tl.x+size.x, tl.y,        color.r, color.g, color.b, color.a,
+    };
+    array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
+}
+
+void gfx_draw_square(
+    Vector2 p0,
+    Vector2 p1,
+    Vector2 p2,
+    Vector2 p3,
+    Vector3 color,
+    GfxCommandBuffer *cmdbuf) EXPORT
+{
+    GfxCommand cmd;
+    cmd.type = GFX_COMMAND_COLORED_PRIM;
+    cmd.colored_prim.vbo = gfx.vbos.frame;
+    cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
+    cmd.colored_prim.vertex_count = 6;
+    gfx_push_command(cmd, cmdbuf);
 
     color = linear_from_sRGB(color);
 
@@ -428,17 +509,14 @@ void gfx_draw_square(
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
-
-void gfx_draw_square(Vector2 center, Vector2 size, Vector2 uv_tl, Vector2 uv_br, GLuint texture, GfxCommandBuffer *cmdbuf)
+void gfx_draw_square(
+    Vector2 center,
+    Vector2 size,
+    Vector2 uv_tl,
+    Vector2 uv_br,
+    GLuint texture,
+    GfxCommandBuffer *cmdbuf) EXPORT
 {
-    GfxCommand cmd;
-    cmd.type = GFX_COMMAND_TEXTURED_PRIM;
-    cmd.textured_prim.vbo = gfx.vbos.frame;
-    cmd.textured_prim.vbo_offset = gfx.frame_vertices.count;
-    cmd.textured_prim.texture = texture;
-    cmd.textured_prim.vertex_count = 6;
-    gfx_push_command(cmdbuf, cmd);
-
     f32 left = center.x - size.x*0.5f;
     f32 right = center.x + size.x*0.5f;
     f32 top = center.y - size.y*0.5f;
@@ -453,18 +531,28 @@ void gfx_draw_square(Vector2 center, Vector2 size, Vector2 uv_tl, Vector2 uv_br,
         right, bottom, uv_br.x, uv_br.y,
         right, top, uv_br.x, uv_tl.y,
     };
+
+    GfxCommand cmd{
+        .type = GFX_COMMAND_TEXTURED_PRIM,
+        .textured_prim.vbo = gfx.vbos.frame,
+        .textured_prim.vbo_offset = gfx.frame_vertices.count,
+        .textured_prim.texture = texture,
+        .textured_prim.vertex_count = 6,
+    };
+    gfx_push_command(cmd, cmdbuf);
+
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 
 }
 
-void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_PRIM;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 3;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     color = linear_from_sRGB(color);
 
@@ -477,14 +565,14 @@ void gfx_draw_triangle(Vector2 p0, Vector2 p1, Vector2 p2, Vector3 color, GfxCom
 }
 
 
-void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_LINE;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 2;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     color = linear_from_sRGB(color);
 
@@ -495,14 +583,14 @@ void gfx_draw_line(Vector2 a, Vector2 b, Vector3 color, GfxCommandBuffer *cmdbuf
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
-void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_LINE;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = num_points*2;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     color = linear_from_sRGB(color);
 
@@ -523,14 +611,14 @@ void gfx_draw_line_loop(Vector2 *points, i32 num_points, Vector3 color, GfxComma
 }
 
 
-void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_LINE;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 8;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     f32 left = center.x - size.x*0.5f;
     f32 right = center.x + size.x*0.5f;
@@ -559,14 +647,14 @@ void gfx_draw_line_square(Vector2 center, Vector2 size, Vector3 color, GfxComman
     array_add(&gfx.frame_vertices, vertices, ARRAY_COUNT(vertices));
 }
 
-void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf)
+void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffer *cmdbuf) EXPORT
 {
     GfxCommand cmd;
     cmd.type = GFX_COMMAND_COLORED_LINE;
     cmd.colored_prim.vbo = gfx.vbos.frame;
     cmd.colored_prim.vbo_offset = gfx.frame_vertices.count;
     cmd.colored_prim.vertex_count = 8;
-    gfx_push_command(cmdbuf, cmd);
+    gfx_push_command(cmd, cmdbuf);
 
     f32 left = tl.x;
     f32 right = tl.x + size.x;
@@ -597,45 +685,39 @@ void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffe
 
 
 
-void gfx_begin_frame()
+void gfx_begin_frame() EXPORT
 {
     array_reset(&gfx.frame_vertices, mem_frame, gfx.frame_vertices.count);
     gfx_reset_command_buffer(&gfx.frame_cmdbuf);
 }
 
-void gfx_flush_transfers()
+void gfx_flush_transfers() EXPORT
 {
     glBindVertexArray(gfx.vaos.frame);
     glBindBuffer(GL_ARRAY_BUFFER, gfx.vbos.frame);
     glBufferData(GL_ARRAY_BUFFER, gfx.frame_vertices.count * sizeof gfx.frame_vertices[0], gfx.frame_vertices.data, GL_STREAM_DRAW);
 }
 
-void gfx_reset_command_buffer(GfxCommandBuffer *cmdbuf)
+void gfx_reset_command_buffer(GfxCommandBuffer *cmdbuf) EXPORT
 {
     array_reset(&cmdbuf->commands, mem_frame, cmdbuf->commands.count);
 }
 
-GfxCommandBuffer gfx_command_buffer()
+GfxCommandBuffer gfx_command_buffer() EXPORT
 {
     GfxCommandBuffer cmd{ .commands.alloc = mem_frame };
     return cmd;
 }
 
-void gfx_submit_commands(GfxCommandBuffer cmdbuf)
+void gfx_submit_commands(GfxCommandBuffer cmdbuf, Matrix3 view) EXPORT
 {
-    Matrix4 cs_from_ws = matrix4_identity();
-    cs_from_ws[0][0] = 2.0f / gfx.resolution.x;
-    cs_from_ws[1][1] = 2.0f / gfx.resolution.y;
-    cs_from_ws[3][0] = -1.0f;
-    cs_from_ws[3][1] = -1.0f;
-
     for (GfxCommand cmd : cmdbuf.commands) {
         switch (cmd.type) {
         case GFX_COMMAND_MONO_TEXT:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.mono_text.vbo);
 
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            glUseProgram(gfx.shaders.mono_text.program);
+            glUseProgram(gfx.shaders.mono_text.program->object);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2*sizeof(f32), (void*)(i64)((cmd.mono_text.vbo_offset+0)*sizeof(f32)));
             glEnableVertexAttribArray(0);
@@ -659,9 +741,9 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glBindBuffer(GL_ARRAY_BUFFER, cmd.textured_prim.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-            glUseProgram(gfx.shaders.basic2d.program);
+            glUseProgram(gfx.shaders.basic2d.program->object);
             glBindTexture(GL_TEXTURE_2D, cmd.textured_prim.texture);
-            glUniformMatrix4fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, cs_from_ws.data);
+            glUniformMatrix3fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, view.data);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(i64)((cmd.textured_prim.vbo_offset+0)*sizeof(f32)));
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(i64)((cmd.textured_prim.vbo_offset+2)*sizeof(f32)));
@@ -672,11 +754,11 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glDrawArrays(GL_TRIANGLES, 0, cmd.textured_prim.vertex_count);
             break;
         case GFX_COMMAND_COLORED_PRIM:
-            glBindBuffer(GL_ARRAY_BUFFER, gfx.vbos.frame);
+            glBindBuffer(GL_ARRAY_BUFFER, cmd.colored_prim.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-            glUseProgram(gfx.shaders.pass2d.program);
-            glUniformMatrix4fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, cs_from_ws.data);
+            glUseProgram(gfx.shaders.pass2d.program->object);
+            glUniformMatrix3fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, view.data);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+0)*sizeof(f32)));
             glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+2)*sizeof(f32)));
@@ -690,8 +772,8 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glBindBuffer(GL_ARRAY_BUFFER, gfx.vbos.frame);
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-            glUseProgram(gfx.shaders.pass2d.program);
-            glUniformMatrix4fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, cs_from_ws.data);
+            glUseProgram(gfx.shaders.pass2d.program->object);
+            glUniformMatrix3fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, view.data);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+0)*sizeof(f32)));
             glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6*sizeof(f32), (void*)(i64)((cmd.colored_prim.vbo_offset+2)*sizeof(f32)));
@@ -701,33 +783,19 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
 
             glDrawArrays(GL_LINES, 0, cmd.colored_prim.vertex_count);
             break;
-        case GFX_COMMAND_GUI_PRIM_COLOR:
-            glBindBuffer(GL_ARRAY_BUFFER, cmd.gui_prim.vbo);
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-            glUseProgram(gfx.shaders.gui_prim.program);
-
-            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5*sizeof(f32), (void*)(cmd.gui_prim.vbo_offset*sizeof(f32)));
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5*sizeof(f32), (void*)((cmd.gui_prim.vbo_offset+2)*sizeof(f32)));
-            glEnableVertexAttribArray(0);
-            glEnableVertexAttribArray(1);
-
-            glUniform2f(gfx.shaders.gui_prim.resolution, gfx.resolution.x, gfx.resolution.y);
-
-            glDrawArrays(GL_TRIANGLES, 0, cmd.gui_prim.vertex_count / 5);
-            break;
         case GFX_COMMAND_GUI_PRIM_TEXTURE:
             glBindBuffer(GL_ARRAY_BUFFER, cmd.gui_prim_texture.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-            glUseProgram(gfx.shaders.gui_prim_texture.program);
+            glUseProgram(gfx.shaders.gui_prim_texture.program->object);
+
+            glUniformMatrix3fv(gfx.shaders.global.cs_from_ws, 1, GL_FALSE, view.data);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(cmd.gui_prim_texture.vbo_offset*sizeof(f32)));
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)((cmd.gui_prim_texture.vbo_offset+2)*sizeof(f32)));
             glEnableVertexAttribArray(0);
             glEnableVertexAttribArray(1);
 
-            glUniform2f(gfx.shaders.gui_prim_texture.resolution, gfx.resolution.x, gfx.resolution.y);
             glBindTexture(GL_TEXTURE_2D, cmd.gui_prim_texture.texture);
 
             glDrawArrays(GL_TRIANGLES, 0, cmd.gui_prim_texture.vertex_count / 4);
@@ -736,7 +804,7 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
             glBindBuffer(GL_ARRAY_BUFFER, cmd.gui_text.vbo);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-            glUseProgram(gfx.shaders.text.program);
+            glUseProgram(gfx.shaders.text.program->object);
 
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)(cmd.gui_text.vbo_offset*sizeof(f32)));
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(f32), (void*)((cmd.gui_text.vbo_offset+2)*sizeof(f32)));
@@ -754,8 +822,26 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf)
     }
 }
 
+Vector3 rgb_unpack(u32 argb) EXPORT
+{
+    Vector3 rgb;
+    rgb.r = ((argb >> 16) & 0xFF) / 255.0f;
+    rgb.g = ((argb >> 8) & 0xFF) / 255.0f;
+    rgb.b = ((argb >> 0) & 0xFF) / 255.0f;
+    return rgb;
+}
 
-f32 linear_from_sRGB(f32 s)
+Vector4 argb_unpack(u32 argb) EXPORT
+{
+    Vector4 v;
+    v.r = ((argb >> 16) & 0xFF) / 255.0f;
+    v.g = ((argb >> 8) & 0xFF) / 255.0f;
+    v.b = ((argb >> 0) & 0xFF) / 255.0f;
+    v.a = ((argb >> 24) & 0xFF) / 255.0f;
+    return v;
+}
+
+f32 linear_from_sRGB(f32 s) EXPORT
 {
     if (s <= 0.04045f) {
         return s / 12.92f;
@@ -764,7 +850,7 @@ f32 linear_from_sRGB(f32 s)
     }
 }
 
-Vector3 linear_from_sRGB(Vector3 sRGB)
+Vector3 linear_from_sRGB(Vector3 sRGB) EXPORT
 {
     Vector3 l;
     l.r = linear_from_sRGB(sRGB.r);
@@ -773,7 +859,7 @@ Vector3 linear_from_sRGB(Vector3 sRGB)
     return l;
 }
 
-Vector4 linear_from_sRGB(Vector4 sRGB)
+Vector4 linear_from_sRGB(Vector4 sRGB) EXPORT
 {
     Vector4 l;
     l.r = linear_from_sRGB(sRGB.r);
@@ -783,7 +869,7 @@ Vector4 linear_from_sRGB(Vector4 sRGB)
     return l;
 }
 
-GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height)
+GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height) EXPORT
 {
     GLuint handle;
     glGenTextures(1, &handle);
@@ -798,27 +884,92 @@ GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height)
     return handle;
 }
 
-GLuint gfx_load_texture(u8 *data, i32 size)
+Vector3 cs_from_ss(Vector3 ss_v) EXPORT
+{
+    f32 ratio = gfx.resolution.y/gfx.resolution.x;
+    Matrix3 projection = orthographic3(0.0f, gfx.resolution.x, 0.0f, gfx.resolution.y, ratio);
+    return projection*ss_v;
+}
+
+// ----------------------------------------
+// GFX_ASSETS
+// ----------------------------------------
+void* gfx_load_texture_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size)
 {
     i32 width, height, num_channels;
     u8 *pixel_data = stbi_load_from_memory(data, size, &width, &height, &num_channels, 4);
-    return gfx_create_texture(pixel_data, width, height);
+
+    if (!pixel_data) {
+        LOG_ERROR("failed to load texture: %s", stbi_failure_reason());
+        return nullptr;
+    }
+
+    GLuint object = gfx_create_texture(pixel_data, width, height);
+    if (!object) {
+        LOG_ERROR("failed to create texture");
+        return nullptr;
+    }
+
+    if (existing) {
+        TextureAsset *texture = (TextureAsset*)existing;
+        glDeleteTextures(1, &texture->texture_handle);
+        texture->texture_handle = object;
+        return texture;
+    }
+
+    return ALLOC_T(mem_dynamic, TextureAsset) {
+        .texture_handle = object,
+    };
 }
 
-Matrix4 transform(Camera *camera)
+void* gfx_load_shader_asset(
+    AssetHandle /*handle*/,
+    void *existing,
+    String identifier,
+    u8 *data, i32 size)
 {
-    Matrix4 m = camera->projection;
-    m[3].xyz -= (camera->projection * Vector4{ .xyz = camera->position, ._w = 1.0f }).xyz;
-    m[0].x *= camera->uni_scale;
-    m[1].y *= camera->uni_scale;
-    m[2].z *= camera->uni_scale;
-    return m;
-}
+    ShaderAsset *shader = (ShaderAsset*)existing;
 
-Vector2 ws_from_ss(Vector2 ss_pos)
-{
-    Vector2 r;
-    r.x = ss_pos.x - 0.5f*gfx.resolution.x;
-    r.y = ss_pos.y - 0.5f*gfx.resolution.y;
-    return r;
+    GLint stage;
+    if (ends_with(identifier, ".vert.glsl")) stage = GL_VERTEX_SHADER;
+    else if (ends_with(identifier, ".frag.glsl")) stage = GL_FRAGMENT_SHADER;
+    else {
+        LOG_ERROR("unknown shader stage for identifier %.*s", STRFMT(identifier));
+        return nullptr;
+    }
+
+    const char *strings[] = { SHADER_HEADER, (char*)data };
+    i32 lengths[] = { sizeof(SHADER_HEADER)-1, size };
+
+    GLuint object = shader ? shader->object : glCreateShader(stage);
+    glShaderSource(object, ARRAY_COUNT(strings), strings, lengths);
+    glCompileShader(object);
+
+    GLint status;
+    glGetShaderiv(object, GL_COMPILE_STATUS, &status);
+    if (status != GL_TRUE) {
+        GLsizei log_length = 0;
+        GLchar message[1024];
+        glGetShaderInfoLog(object, 1024, &log_length, message);
+        LOG_ERROR("%.*s: compile error: %s", STRFMT(identifier), message);
+        return nullptr;
+    }
+
+    if (shader) {
+        for (auto it : shader->used_by) {
+            for (auto s : it->shaders) glDetachShader(it->object, s);
+
+            glDeleteProgram(it->object);
+            it->object = glCreateProgram();
+
+            gfx_link_program(it);
+        }
+
+        return shader;
+    }
+
+    return ALLOC_T(mem_dynamic, ShaderAsset) {
+        .object = object,
+        .stage = stage,
+    };
 }

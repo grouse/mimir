@@ -296,7 +296,7 @@ String string_from_utf16(const u16 *in_str, i32 length, Allocator mem)
     return str;
 }
 
-i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit)
+i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit) EXPORT
 {
     i32 length = 0;
     for (i32 i = 0; i < utf16_len; i++) {
@@ -341,7 +341,7 @@ i32 utf8_length(const u16 *str, i32 utf16_len, i32 limit)
     return length;
 }
 
-i32 utf8_length(const u16 *str, i32 utf16_len)
+i32 utf8_length(const u16 *str, i32 utf16_len) EXPORT
 {
     i32 length = 0;
     for (i32 i = 0; i < utf16_len; i++) {
@@ -382,7 +382,7 @@ i32 utf8_length(const u16 *str, i32 utf16_len)
     return length;
 }
 
-i32 utf16_length(String str)
+i32 utf16_length(String str) EXPORT
 {
     i32 length = 0;
     for (i32 i = 0; i < str.length; i++) {
@@ -425,7 +425,7 @@ end:
     return length;
 }
 
-void utf16_from_string(u16 *dst, i32 capacity, String src)
+void utf16_from_string(u16 *dst, i32 capacity, String src) EXPORT
 {
     i32 length = 0;
     for (i32 i = 0; i < src.length; i++) {
@@ -473,7 +473,7 @@ end:
     return;
 }
 
-u16* utf16_from_string(String str, i32 *utf16_length, Allocator mem)
+u16* utf16_from_string(String str, i32 *utf16_length, Allocator mem) EXPORT
 {
     i32 length = 0;
     i32 capacity = str.length;
@@ -534,7 +534,7 @@ end:
     return utf16;
 }
 
-i32 byte_index_from_codepoint_index(String str, i32 codepoint)
+i32 byte_index_from_codepoint_index(String str, i32 codepoint) EXPORT
 {
     i32 i, ci;
     for (i = 0, ci = 0; i < str.length; i++, ci++) {
@@ -550,7 +550,7 @@ i32 byte_index_from_codepoint_index(String str, i32 codepoint)
     return i;
 }
 
-i32 codepoint_index_from_byte_index(String str, i32 byte)
+i32 codepoint_index_from_byte_index(String str, i32 byte) EXPORT
 {
     i32 ci = 0;
     for (i32 i = 0; i < str.length; i++) {
@@ -567,14 +567,14 @@ i32 codepoint_index_from_byte_index(String str, i32 byte)
     return ci;
 }
 
-i64 utf8_decr(char *str, i64 i)
+i64 utf8_decr(char *str, i64 i) EXPORT
 {
     i--;
     while (i > 0 && (str[i] & 0b11000000) == 0b10000000) i--;
     return i;
 }
 
-i64 utf8_incr(char *str, i64 length, i64 i)
+i64 utf8_incr(char *str, i64 length, i64 i) EXPORT
 {
     if (i < length) {
         char c = str[i++];
@@ -587,12 +587,12 @@ i64 utf8_incr(char *str, i64 length, i64 i)
     return i;
 }
 
-i32 utf8_decr(String str, i32 i)
+i32 utf8_decr(String str, i32 i) EXPORT
 {
     return (i32)utf8_decr(str.data, i);
 }
 
-i32 utf8_incr(String str, i32 i)
+i32 utf8_incr(String str, i32 i) EXPORT
 {
     return (i32)utf8_incr(str.data, str.length, i);
 }
@@ -726,7 +726,7 @@ char* join_path(const char *sz_root, const char *sz_filename, Allocator mem) EXP
     return sz_path;
 }
 
-i32 utf8_from_utf32(u8 utf8[4], i32 utf32)
+i32 utf8_from_utf32(u8 utf8[4], i32 utf32) EXPORT
 {
     if (utf32 <= 0x007F) {
         utf8[0] = (u8)utf32;
@@ -751,7 +751,7 @@ i32 utf8_from_utf32(u8 utf8[4], i32 utf32)
     return -1;
 }
 
-i64 utf32_it_next(char *str, i64 length, i64 *offset)
+i64 utf32_it_next(char *str, i64 length, i64 *offset) EXPORT
 {
     i32 c = str[*offset];
     i64 end = (i64)(str + length);
@@ -787,7 +787,7 @@ i64 utf32_it_next(char *str, i64 length, i64 *offset)
     return c;
 }
 
-i32 utf32_it_next(String str, i32 *offset)
+i32 utf32_it_next(String str, i32 *offset) EXPORT
 {
     i32 c = str[*offset];
     i64 end = (i64)(str.data + str.length);
@@ -823,7 +823,7 @@ i32 utf32_it_next(String str, i32 *offset)
     return c;
 }
 
-i32 utf32_it_next(char **utf8, char *end)
+i32 utf32_it_next(char **utf8, char *end) EXPORT
 {
     i32 c = **utf8;
 
@@ -859,7 +859,7 @@ i32 utf32_it_next(char **utf8, char *end)
     return c;
 }
 
-void reset_string_builder(StringBuilder *sb)
+void reset_string_builder(StringBuilder *sb) EXPORT
 {
     for (auto it = sb->current; it; it = it->next) {
         it->written = 0;
@@ -868,7 +868,7 @@ void reset_string_builder(StringBuilder *sb)
     sb->current = &sb->head;
 }
 
-String create_string(StringBuilder *sb, Allocator mem)
+String create_string(StringBuilder *sb, Allocator mem) EXPORT
 {
     i32 length = 0;
     for (auto it = sb->current; it; it = it->next) {
@@ -889,7 +889,7 @@ String create_string(StringBuilder *sb, Allocator mem)
     return str;
 }
 
-void append_string(StringBuilder *sb, String str)
+void append_string(StringBuilder *sb, String str) EXPORT
 {
     i32 available = MIN((i32)sizeof sb->current->data - sb->current->written, str.length);
     i32 rest = str.length - available;
@@ -918,7 +918,7 @@ void append_string(StringBuilder *sb, String str)
     }
 }
 
-void append_stringf(StringBuilder *sb, const char *fmt, ...)
+void append_stringf(StringBuilder *sb, const char *fmt, ...) EXPORT
 {
     va_list args;
     va_start(args, fmt);
@@ -941,29 +941,29 @@ void append_stringf(StringBuilder *sb, const char *fmt, ...)
     }
 }
 
-bool is_whitespace(i32 c)
+bool is_whitespace(i32 c) EXPORT
 {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-bool is_number(i32 c)
+bool is_number(i32 c) EXPORT
 {
     return c >= '0' && c <= '9';
 }
 
-bool is_newline(i32 c)
+bool is_newline(i32 c) EXPORT
 {
     return c == '\n' || c == '\r';
 }
 
-String to_lower(String s, Allocator mem)
+String to_lower(String s, Allocator mem) EXPORT
 {
     String l = duplicate_string(s, mem);
     for (i32 i = 0; i < l.length; i++) l[i] = to_lower(l[i]);
     return l;
 }
 
-i32 last_of(String str, char c)
+i32 last_of(String str, char c) EXPORT
 {
 	i32 p = -1;
 	for (i32 i = 0; i < str.length; i++) {

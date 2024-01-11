@@ -1,5 +1,12 @@
 #include "font.h"
 
+#include "core.h"
+#include "platform.h"
+#include "maths.h"
+#include "assets.h"
+#include "gfx_opengl.h"
+#include "file.h"
+
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_malloc(x,u)  ((void)(u),malloc(x))
 #define STBTT_free(x,u)    ((void)(u),free(x))
@@ -11,16 +18,21 @@
 #define STBTT_iceil(x)    ((int) ceil(x))
 #define STBTT_sqrt(x)      sqrt(x)
 #define STBTT_fabs(x)     fabs(x)
-#include "external/stb/stb_truetype.h"
+#include "stb/stb_truetype.h"
 
-FontAtlas create_font(String path, f32 pixel_height, bool mono_space)
+FontAtlas create_font(String filename, f32 pixel_height, bool mono_space)
 {
+    SArena scratch = tl_scratch_arena();
+
     FontAtlas font{};
     font.mono_space = mono_space;
 
-    Asset *asset = find_asset(path);
-    if (asset) {
-        stbtt_InitFont(&font.info, asset->data, 0);
+    // TODO(jesper): load fonts through asset handles
+    String path = resolve_asset_path(filename, scratch);
+    FileInfo file = read_file(path, mem_dynamic);
+
+    if (file.data) {
+        stbtt_InitFont(&font.info, file.data, 0);
 
         stbtt_GetFontVMetrics(&font.info, &font.ascent, &font.descent, &font.line_gap);
         font.scale = stbtt_ScaleForPixelHeight(&font.info, pixel_height);
@@ -49,9 +61,10 @@ FontAtlas create_font(String path, f32 pixel_height, bool mono_space)
     return font;
 }
 
-Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint)
+Glyph find_or_create_glyph(FontAtlas *font, u32 codepoint) EXPORT
 {
     SArena scratch = tl_scratch_arena();
+
     int glyph_index = stbtt_FindGlyphIndex(&font->info, codepoint);
 
     Glyph *existing = map_find(&font->glyphs, glyph_index);
@@ -172,4 +185,61 @@ GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen)
 
     pen->x += glyph.advance;
     return g;
+}
+
+GlyphsData calc_glyphs_data(
+    String text,
+    FontAtlas *font,
+    Allocator mem) EXPORT
+{
+    GlyphsData r{
+        .font = font,
+        .bounds.y = font->line_height,
+        .offset = { f32_MAX, (f32)font->baseline },
+        .glyphs.alloc = mem
+    };
+    array_reserve(&r.glyphs, text.length);
+
+    Vector2 cursor{ 0.0f, (f32)font->baseline };
+
+    char *p = text.data;
+    char *end = text.data+text.length;
+    while (p < end) {
+        i32 c = utf32_it_next(&p, end);
+        if (c == 0) return r;
+
+        GlyphRect g = get_glyph_rect(font, c, &cursor);
+        array_add(&r.glyphs, g);
+
+        r.bounds.x = MAX3(r.bounds.x, g.x0, g.x1);
+        r.bounds.y = MAX3(r.bounds.y, g.y0, g.y1);
+
+        r.offset.x = MIN3(r.offset.x, g.x0, g.x1);
+    }
+
+    r.offset.x = r.offset.x == f32_MAX ? 0 : r.offset.x;
+    return r;
+}
+
+DynamicArray<GlyphRect> calc_glyph_rects(
+    String text,
+    FontAtlas *font,
+    Allocator mem) EXPORT
+{
+    DynamicArray<GlyphRect> glyphs{ .alloc = mem };
+    array_reserve(&glyphs, text.length);
+
+    Vector2 cursor{ 0.0f, (f32)font->baseline };
+
+    char *p = text.data;
+    char *end = text.data+text.length;
+    while (p < end) {
+        i32 c = utf32_it_next(&p, end);
+        if (c == 0) return glyphs;
+
+        GlyphRect g = get_glyph_rect(font, c, &cursor);
+        array_add(&glyphs, g);
+    }
+
+    return glyphs;
 }
