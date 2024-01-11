@@ -40,7 +40,6 @@ action_foreach("gh") {
         "src/font.cpp",
         "src/maths.cpp",
         "src/string.cpp",
-        "src/lexer.cpp",
     ]
 
     mnemonic = "generate-headers"
