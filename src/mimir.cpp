@@ -11,6 +11,7 @@
 
 #include "gen/string.h"
 #include "gen/font.h"
+#include "gen/assets.h"
 
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
@@ -355,29 +356,29 @@ void ts_custom_free(void *ptr)
 
 TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
 {
-    // if (auto a = find_asset(highlights); a) {
-    //     u32 error_loc;
-    //     TSQueryError error;
-    //     TSQuery *query = ts_query_new(lang, (char*)a->data, a->size, &error_loc, &error);
-    //
-    //     if (error != TSQueryErrorNone) {
-    //         String s = "";
-    //         switch (error) {
-    //         case TSQueryErrorNone: s = "none"; break;
-    //         case TSQueryErrorSyntax: s = "syntax"; break;
-    //         case TSQueryErrorNodeType: s = "node_type"; break;
-    //         case TSQueryErrorField: s = "field"; break;
-    //         case TSQueryErrorCapture: s = "capture"; break;
-    //         case TSQueryErrorStructure: s = "structure"; break;
-    //         case TSQueryErrorLanguage: s = "language"; break;
-    //         }
-    //
-    //         LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
-    //         return nullptr;
-    //     }
-    //
-    //     return query;
-    // }
+    if (auto a = find_asset<String>(highlights); a) {
+        u32 error_loc;
+        TSQueryError error;
+        TSQuery *query = ts_query_new(lang, a->data, a->length, &error_loc, &error);
+
+        if (error != TSQueryErrorNone) {
+            String s = "";
+            switch (error) {
+            case TSQueryErrorNone: s = "none"; break;
+            case TSQueryErrorSyntax: s = "syntax"; break;
+            case TSQueryErrorNodeType: s = "node_type"; break;
+            case TSQueryErrorField: s = "field"; break;
+            case TSQueryErrorCapture: s = "capture"; break;
+            case TSQueryErrorStructure: s = "structure"; break;
+            case TSQueryErrorLanguage: s = "language"; break;
+            }
+
+            LOG_ERROR("tree-sitter query creation error: '%.*s' in %.*s:%d", STRFMT(s), STRFMT(highlights), error_loc);
+            return nullptr;
+        }
+
+        return query;
+    }
 
     return nullptr;
 }
@@ -810,7 +811,11 @@ void init_app(Array<String> args)
 
     init_assets(
         { asset_folders, ARRAY_COUNT(asset_folders) },
-        {});
+        AssetTypesDesc{ .types = {
+            { ".scm",  typeid(String),       &load_string_asset,      nullptr },
+            { ".png",  typeid(TextureAsset), &gfx_load_texture_asset, nullptr },
+            { ".glsl", typeid(ShaderAsset),  &gfx_load_shader_asset,  nullptr },
+        }});
 
     init_gui();
 
@@ -2346,7 +2351,7 @@ void app_event(WindowEvent event)
         }
         break;
     case WE_KEY_PRESS:
-        if (gui.focused != GUI_ID_INVALID) break;
+        if (gui.focused != view->gui_id) break;
         app.animating = true;
         if (app.mode == MODE_EDIT) {
             switch (event.key.keycode) {
@@ -2977,7 +2982,8 @@ next_node:;
         view.caret_dirty |= view.lines_dirty;
         calculate_num_visible_lines(&view);
 
-        gui_hot_rect(view.gui_id, view.rect);
+        gui_handle_focus_grabbing(view.gui_id);
+        if (gui_clicked(view.gui_id, view.rect)) gui.focused = view.gui_id;
 
         gui_push_layout({ .rect = view.rect });
         defer { gui_pop_layout(); };
@@ -3173,6 +3179,8 @@ next_node:;
         }
 
         view.text_rect = *gui_current_layout();
+        gui_hot_rect(view.gui_id, view.text_rect);
+        if (gui_clicked(view.gui_id, view.text_rect)) gui.focused = view.gui_id;
 
         // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
         // make sense for this path to go away completely when they are, but I won't completely discount that

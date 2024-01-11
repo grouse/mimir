@@ -67,6 +67,7 @@ action_foreach("gh") {
         "src/gfx_opengl.cpp",
         "src/window.cpp",
         "src/font.cpp",
+        "src/assets.cpp",
 
         "src/maths.cpp",
         "src/string.cpp",

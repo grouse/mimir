@@ -436,3 +436,10 @@ Array<String> list_asset_files(String ext, Allocator mem)
 
     return files;
 }
+
+
+void* load_string_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size) EXPORT
+{
+    if (existing) FREE(mem_dynamic, existing);
+    return ALLOC_T(mem_dynamic, String) { (char*)data, size };
+}

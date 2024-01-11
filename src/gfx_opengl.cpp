@@ -1,9 +1,9 @@
 #include "gfx_opengl.h"
-#include "gen/gfx_opengl.h"
 
 #include "assets.h"
 
 #include "gen/string.h"
+#include "gen/gfx_opengl.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ASSERT(x) ASSERT(x)
@@ -894,7 +894,7 @@ Vector3 cs_from_ss(Vector3 ss_v) EXPORT
 // ----------------------------------------
 // GFX_ASSETS
 // ----------------------------------------
-void* gfx_load_texture_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size)
+void* gfx_load_texture_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size) EXPORT
 {
     i32 width, height, num_channels;
     u8 *pixel_data = stbi_load_from_memory(data, size, &width, &height, &num_channels, 4);
@@ -926,7 +926,7 @@ void* gfx_load_shader_asset(
     AssetHandle /*handle*/,
     void *existing,
     String identifier,
-    u8 *data, i32 size)
+    u8 *data, i32 size) EXPORT
 {
     ShaderAsset *shader = (ShaderAsset*)existing;
 
