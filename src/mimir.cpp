@@ -306,6 +306,18 @@ bool buffer_valid(BufferId buffer_id)
     return buffer_id.index >= 0;
 }
 
+TSLogger ts_logger  {
+    .payload = nullptr,
+    .log = [](void *payload, TSLogType type, const char *msg) {
+        const char *type_s = nullptr;
+        switch (type) {
+        case TSLogTypeParse: type_s = "parse"; break;
+        case TSLogTypeLex: type_s = "lex"; break;
+        }
+        LOG_INFO("tree-sitter [%s]: %s", type_s, msg);
+    }
+};
+
 Allocator ts_custom_alloc;
 
 struct ts_alloc_header {
@@ -687,6 +699,7 @@ BufferId create_buffer(String file)
 
         if (auto lang = app.languages[b.language]; lang) {
             TSParser *parser = ts_parser_new();
+            //ts_parser_set_logger(parser, ts_logger);
             ts_parser_set_language(parser, lang);
             b.syntax_tree = ts_parser_parse_string(parser, b.syntax_tree, b.flat.data, b.flat.size);
 
@@ -840,7 +853,6 @@ void init_app(Array<String> args)
 
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
     ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
-
 
     u32 fg = bgr_pack(app.fg);
     map_set(&app.syntax_colors, "unused", fg);

@@ -1,6 +1,14 @@
 executable("mimir") {
     libs = []
-    deps = [ ":tree_sitter" ]
+    deps = [
+        ":tree_sitter",
+        ":tree_sitter_cpp",
+        ":tree_sitter_rust",
+        ":tree_sitter_bash",
+        ":tree_sitter_csharp",
+        ":tree_sitter_lua",
+        ":tree_sitter_comment",
+    ]
 
     defines = [
         "APP_INPUT_ID_START=0x100",
@@ -94,49 +102,82 @@ action_foreach("gh") {
 }
 
 config("tree_sitter_public") {
-  include_dirs = [ "external/tree-sitter-0.20.6/lib/include" ]
+    include_dirs = [ "external/tree-sitter-0.20.8/lib/include" ]
 }
 
+static_library("tree_sitter_cpp")
+{
+    TS_DIR = "external/tree-sitter-cpp-master"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.cc" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+static_library("tree_sitter_rust")
+{
+    TS_DIR = "external/tree-sitter-rust-0.20.1"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.c" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+static_library("tree_sitter_bash")
+{
+    TS_DIR = "external/tree-sitter-bash-master"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.cc" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+static_library("tree_sitter_csharp")
+{
+    TS_DIR = "external/tree-sitter-c-sharp-0.19.1"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.c" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+static_library("tree_sitter_lua")
+{
+    TS_DIR = "external/tree-sitter-lua-master"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.c" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+static_library("tree_sitter_comment")
+{
+    TS_DIR = "external/tree-sitter-comment-master"
+
+    sources = [ "$TS_DIR/src/parser.c", "$TS_DIR/src/scanner.c" ]
+    include_dirs = ["$TS_DIR/src"]
+
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
+    deps = [ ":tree_sitter" ]
+}
+
+
 static_library("tree_sitter") {
-    TS_DIR = "external/tree-sitter-0.20.6"
-    TS_CPP_DIR = "external/tree-sitter-cpp-master"
-    TS_RS_DIR = "external/tree-sitter-rust-0.20.1"
-    TS_BASH_DIR = "external/tree-sitter-bash-master"
-    TS_CS_DIR = "external/tree-sitter-c-sharp-0.19.1"
-    TS_LUA_DIR = "external/tree-sitter-lua-master"
-    TS_COMMENT_DIR = "external/tree-sitter-comment-master"
+    TS_DIR = "external/tree-sitter-0.20.8"
 
-    sources = [
-        "$TS_DIR/lib/src/lib.c",
-        "$TS_CPP_DIR/src/parser.c",
-        "$TS_CPP_DIR/src/scanner.cc",
-        "$TS_RS_DIR/src/parser.c",
-        "$TS_RS_DIR/src/scanner.c",
-        "$TS_BASH_DIR/src/parser.c",
-        "$TS_BASH_DIR/src/scanner.cc",
-        "$TS_CS_DIR/src/parser.c",
-        "$TS_CS_DIR/src/scanner.c",
-        "$TS_LUA_DIR/src/parser.c",
-        "$TS_LUA_DIR/src/scanner.c",
-        "$TS_COMMENT_DIR/src/parser.c",
-        "$TS_COMMENT_DIR/src/scanner.c",
-    ]
+    sources = [ "$TS_DIR/lib/src/lib.c" ]
 
-    configs += ["//gn/config:optimize", "//gn/config:no_warnings"]
+    configs += ["//gn/config:no_warnings", "//gn/config:optimize"]
     include_dirs = ["$TS_DIR/lib/include"]
     public_configs = [":tree_sitter_public"]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
