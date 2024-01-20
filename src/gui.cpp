@@ -2527,24 +2527,15 @@ void gui_vscrollbar_id(
     i32 *line_current,
     f32 line_height,
     i32 lines_total,
-    i32 lines_num_visible) EXPORT
+    i32 lines_num_visible,
+    Rect rect,
+    Rect view_r) EXPORT
 {
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    Rect r = split_right({ gui.style.scrollbar.thickness });
-    gui_push_layout({ .rect = r });
-    defer { gui_pop_layout(); };
-
-    Rect up_rect     = split_top({ gui.style.scrollbar.thickness });
-    Rect down_rect   = split_bottom({ gui.style.scrollbar.thickness });
-    LayoutRect scroll_rect = *gui_current_layout();
-
-    gui_draw_rect(scroll_rect, gui.style.bg_dark0);
-
-    LayoutRect parent = *gui_parent_layout();
     if (gui.hot_window == gui_current_window()->id &&
-        point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] }))
+        point_in_rect(gui_mouse(), view_r))
     {
         push_input_layer(gui.input.scrollarea);
         if (f32 delta; get_input_axis(SCROLL, &delta, gui.input.scrollarea)) {
@@ -2552,8 +2543,12 @@ void gui_vscrollbar_id(
         }
     }
 
-    if (gui_icon_button(gui.icons.up,   up_rect))   *foffset += line_height;
-    if (gui_icon_button(gui.icons.down, down_rect)) *foffset -= line_height;
+    Rect up_r   = split_top(&rect, gui.style.scrollbar.thickness);
+    Rect down_r = split_bottom(&rect, gui.style.scrollbar.thickness);
+
+    gui_draw_rect(rect, gui.style.bg_dark0);
+    if (gui_icon_button(gui.icons.up,   up_r))   *foffset += line_height;
+    if (gui_icon_button(gui.icons.down, down_r)) *foffset -= line_height;
 
     while (*foffset >= line_height) {
         f32 div        = *foffset / line_height;
@@ -2574,22 +2569,21 @@ void gui_vscrollbar_id(
     f32 y0 = 0, y1 = 0;
     if (lines_num_visible >= lines_total) {
         y0 = 0;
-        y1 = scroll_rect.size().y;
+        y1 = rect.size().y;
     } else {
         f32 start_factor = (f32)*line_current / lines_total;
         f32 end_factor   = ((f32)*line_current + lines_num_visible) / lines_total;
 
-        y0 = start_factor * scroll_rect.size().y;
-        y1 = end_factor * scroll_rect.size().y;
+        y0 = start_factor * rect.size().y;
+        y1 = end_factor * rect.size().y;
     }
 
-
-    Rect scroll_handle{
-        { scroll_rect.rect.tl.x, scroll_rect.rect.tl.y + y0 },
-        { scroll_rect.rect.br.x, scroll_rect.rect.tl.y + y1 }
+    Rect handle_r {
+        { rect.tl.x, MAX(rect.tl.y + y0, up_r.br.y) },
+        { rect.br.x, MIN(rect.tl.y + y1, down_r.tl.y) }
     };
 
-    gui_hot_rect(id, scroll_handle);
+    gui_hot_rect(id, handle_r);
     if (gui_drag(id, { *foffset, transmute(f32, *line_current) }) && gui.mouse.dy != 0) {
         // TODO(jesper): +3?!
         f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
@@ -2606,7 +2600,7 @@ void gui_vscrollbar_id(
         }
     }
 
-    gui_draw_button(id, scroll_handle);
+    gui_draw_button(id, handle_r);
 }
 
 void gui_vscrollbar_id(
@@ -2615,22 +2609,64 @@ void gui_vscrollbar_id(
     f32 total_height,
     f32 step_size) EXPORT
 {
+    LayoutRect parent = *gui_parent_layout();
+    Rect view_r { parent.r[0], parent.r[1] };
+    gui_vscrollbar_id(id, offset, total_height, step_size, view_r);
+}
+
+void gui_vscrollbar_id(
+    GuiId id,
+    f32 *foffset,
+    i32 *line_current,
+    f32 line_height,
+    i32 lines_total,
+    i32 lines_num_visible,
+    Rect rect) EXPORT
+{
+    LayoutRect parent = *gui_parent_layout();
+    Rect view_r { parent.r[0], parent.r[1] };
+    gui_vscrollbar_id(id, foffset, line_current, line_height, lines_total, lines_num_visible, rect, view_r);
+}
+
+void gui_vscrollbar_id(
+    GuiId id,
+    f32 *foffset,
+    i32 *line_current,
+    f32 line_height,
+    i32 lines_total,
+    i32 lines_num_visible) EXPORT
+{
+    Rect rect = split_right({ gui.style.scrollbar.thickness });
+    gui_vscrollbar_id(id, foffset, line_current, line_height, lines_total, lines_num_visible, rect);
+}
+
+
+void gui_vscrollbar_id(
+    GuiId id,
+    f32 *offset,
+    f32 total_height,
+    f32 step_size,
+    Rect view_r) EXPORT
+{
+    Rect rect = split_right({ gui.style.scrollbar.thickness });
+    gui_vscrollbar_id(id, offset, total_height, step_size, rect, view_r);
+}
+
+void gui_vscrollbar_id(
+    GuiId id,
+    f32 *offset,
+    f32 total_height,
+    f32 step_size,
+    Rect rect,
+    Rect view_r) EXPORT
+{
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    // TODO(jesper): the way scrollbars interact with layouting is so damn confusing and needs to be fixed.
-    LayoutRect parent = *gui_parent_layout();
-
-    Rect up_rect     = split_top({ gui.style.scrollbar.thickness });
-    Rect down_rect   = split_bottom({ gui.style.scrollbar.thickness });
-    Rect scroll_rect = *gui_current_layout();
-
-    f32 max_offset = total_height > parent.bsize().y ? total_height-parent.bsize().y : 0;
-
-    gui_draw_rect(scroll_rect, gui.style.bg_dark0);
+    f32 max_offset = total_height > view_r.size().y ? total_height-view_r.size().y : 0;
 
     if (gui.hot_window == gui_current_window()->id &&
-        point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] }))
+        point_in_rect(gui_mouse(), view_r))
     {
         push_input_layer(gui.input.scrollarea);
         if (f32 delta; get_input_axis(SCROLL, &delta, gui.input.scrollarea)) {
@@ -2638,36 +2674,40 @@ void gui_vscrollbar_id(
         }
     }
 
-    if (gui_icon_button(gui.icons.up, up_rect)) *offset -= step_size;
-    if (gui_icon_button(gui.icons.down, down_rect)) *offset += step_size;
+    Rect up_r   = split_top(&rect, gui.style.scrollbar.thickness);
+    Rect down_r = split_bottom(&rect, gui.style.scrollbar.thickness);
+
+    gui_draw_rect(rect, gui.style.bg_dark0);
+    if (gui_icon_button(gui.icons.up, up_r)) *offset -= step_size;
+    if (gui_icon_button(gui.icons.down, down_r)) *offset += step_size;
     *offset = MAX(*offset, 0);
     *offset = MIN(*offset, max_offset);
 
     f32 min_h = 10.0f;
-    f32 y0 =  *offset * (scroll_rect.size().y / total_height);
-    f32 y1 = (*offset + parent.bsize().y) * (scroll_rect.size().y / total_height);
+    f32 y0 =  *offset * (rect.size().y / total_height);
+    f32 y1 = (*offset + view_r.size().y) * (rect.size().y / total_height);
 
     if (y1-y0 < min_h) {
         y0 = y1-0.5f*min_h;
-        y1 = MAX(scroll_rect.size().y, y0+min_h);
+        y1 = MAX(rect.size().y, y0+min_h);
         y0 = MIN(y0, y1-min_h);
     }
 
-    Rect scroll_handle{
-        { scroll_rect.tl.x, scroll_rect.tl.y + y0 },
-        { scroll_rect.br.x, scroll_rect.tl.y + y1 }
+    Rect handle_r {
+        { rect.tl.x, MAX(rect.tl.y + y0, up_r.br.y) },
+        { rect.br.x, MIN(rect.tl.y + y1, down_r.tl.y) }
     };
 
-    gui_hot_rect(id, scroll_handle);
+    gui_hot_rect(id, handle_r);
     if (gui_drag(id, { 0, *offset }) && gui.mouse.dy != 0) {
         f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
 
-        *offset = gui.drag_start_data[0].y + (dy * (total_height / scroll_rect.size().y));
+        *offset = gui.drag_start_data[0].y + (dy * (total_height / rect.size().y));
         *offset = MIN(*offset, max_offset);
         *offset = MAX(*offset, 0);
     }
 
-    gui_draw_button(id, scroll_handle);
+    gui_draw_button(id, handle_r);
 }
 
 GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPORT
@@ -2737,13 +2777,7 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
 
     f32 total_height = gui_current_layout()->rect.br.y+scroll_area->offset.y - vrect.tl.y;
 
-    // TODO(jesper): the way scrollbars interact with layouting is so damn confusing and needs to be fixed.
-    GUI_LAYOUT({ .rect = vrect }) {
-        GUI_LAYOUT({ .rect = scroll, .flags = LAYOUT_ROOT }) {
-            gui_vscrollbar(&scroll_area->offset.y, total_height, item_height);
-        }
-    }
-
+    gui_vscrollbar(&scroll_area->offset.y, total_height, item_height, scroll, vrect);
     return result;
 }
 
