@@ -78,7 +78,7 @@ KeyCode_ keycode_from_scancode(u8 scancode)
     case 0x27: return KC_COLON;
     case 0x28: return KC_TICK;
     case 0x29: return KC_GRAVE;
-    case 0x2A: return KC_LSHIFT;
+    case 0x2A: return KC_SHIFT;
     case 0x2B: return KC_BACKSLASH;
     case 0x2C: return KC_Z;
     case 0x2D: return KC_X;
@@ -90,7 +90,7 @@ KeyCode_ keycode_from_scancode(u8 scancode)
     case 0x33: return KC_COMMA;
     case 0x34: return KC_PERIOD;
     case 0x35: return KC_SLASH;
-    case 0x36: return KC_RSHIFT;
+    case 0x36: return KC_SHIFT;
     case 0x38: return KC_ALT;
     case 0x39: return KC_SPACE;
     case 0x3B: return KC_F1;
@@ -254,6 +254,78 @@ AppWindow* create_window(WindowCreateDesc desc)
             case WM_SIZING:
                 result = 1;
                 break;
+            case WM_ACTIVATE:
+                if (wparam != WA_INACTIVE) {
+                    u16 alt   = GetAsyncKeyState(VK_MENU);
+                    u16 ctrl  = GetAsyncKeyState(VK_CONTROL);
+                    u16 shift = GetAsyncKeyState(VK_SHIFT);
+
+                    if ((alt & 0x8000) && (modifier_state & MF_ALT) == 0) {
+                        modifier_state |= MF_ALT;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_PRESS,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_ALT,
+                                .prev_state = false,
+                            },
+                        });
+                    } else if ((modifier_state & MF_ALT) != 0) {
+                        modifier_state &= ~MF_ALT;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_RELEASE,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_ALT,
+                                .prev_state = true,
+                            },
+                        });
+                    }
+
+                    if ((ctrl & 0x8000) && (modifier_state & MF_CTRL) == 0) {
+                        modifier_state |= MF_CTRL;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_PRESS,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_CTRL,
+                                .prev_state = false,
+                            },
+                        });
+                    } else if ((modifier_state & MF_CTRL) != 0) {
+                        modifier_state &= ~MF_CTRL;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_RELEASE,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_CTRL,
+                                .prev_state = true,
+                            },
+                        });
+                    }
+
+                    if ((shift & 0x8000) && (modifier_state & MF_SHIFT) == 0) {
+                        modifier_state |= MF_SHIFT;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_PRESS,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_SHIFT,
+                                .prev_state = false,
+                            },
+                        });
+                    } else if ((modifier_state & MF_SHIFT) != 0) {
+                        modifier_state &= ~MF_SHIFT;
+                        array_add(queue, WindowEvent{
+                            .type = WE_KEY_RELEASE,
+                            .key = {
+                                .modifiers  = modifier_state,
+                                .keycode    = KC_CTRL,
+                                .prev_state = true,
+                            },
+                        });
+                    }
+                } break;
             case WM_SIZE:
                 switch (wparam) {
                 case SIZE_RESTORED:
@@ -303,20 +375,23 @@ AppWindow* create_window(WindowCreateDesc desc)
                         event.mouse.dy = event.mouse.y - g_mouse.y;
                     }
 
+                    // RAWMOUSE.usButtonFlags is a bitfield of mouse button state changes since last event
                     if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_1_DOWN) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_PRESS,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_PRIMARY,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_PRIMARY
                         });
                         win32_input.mouse_button_state |= MB_PRIMARY;
                     } else if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_1_UP) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_RELEASE,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_PRIMARY,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_PRIMARY
                         });
                         win32_input.mouse_button_state &= ~MB_PRIMARY;
                     }
@@ -324,17 +399,19 @@ AppWindow* create_window(WindowCreateDesc desc)
                     if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_2_DOWN) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_PRESS,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_SECONDARY,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_SECONDARY
                         });
                         win32_input.mouse_button_state |= MB_SECONDARY;
                     } else if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_2_UP) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_RELEASE,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_SECONDARY,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_SECONDARY
                         });
                         win32_input.mouse_button_state &= ~MB_SECONDARY;
                     }
@@ -342,17 +419,19 @@ AppWindow* create_window(WindowCreateDesc desc)
                     if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_3_DOWN) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_PRESS,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_MIDDLE,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_MIDDLE,
                         });
                         win32_input.mouse_button_state |= MB_MIDDLE;
                     } else if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_3_UP) {
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_RELEASE,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_MIDDLE,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_MIDDLE,
                         });
                         win32_input.mouse_button_state &= ~MB_MIDDLE;
                     }
@@ -361,18 +440,20 @@ AppWindow* create_window(WindowCreateDesc desc)
                         LOG_INFO("xbutton down: 4");
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_PRESS,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_4,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_4,
                         });
                         win32_input.mouse_button_state |= MB_4;
                     } else if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_4_UP) {
                         LOG_INFO("xbutton up: 4");
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_RELEASE,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_4,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_4,
                         });
                         win32_input.mouse_button_state &= ~MB_4;
                     }
@@ -381,18 +462,20 @@ AppWindow* create_window(WindowCreateDesc desc)
                         LOG_INFO("xbutton down: 5");
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_PRESS,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_5,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_5,
                         });
                         win32_input.mouse_button_state |= MB_5;
                     } else if (ri.data.mouse.usButtonFlags & RI_MOUSE_BUTTON_5_UP) {
                         LOG_INFO("xbutton up: 5");
                         array_add(queue, WindowEvent{
                             .type = WE_MOUSE_RELEASE,
+                            .mouse.modifiers = modifier_state,
+                            .mouse.button = MB_5,
                             .mouse.x = event.mouse.x,
                             .mouse.y = event.mouse.y,
-                            .mouse.button = MB_5,
                         });
                         win32_input.mouse_button_state &= ~MB_5;
                     }
@@ -511,17 +594,19 @@ AppWindow* create_window(WindowCreateDesc desc)
             case WM_SYSKEYDOWN:
                 result = DefWindowProcA(hwnd, message, wparam, lparam);
             case WM_KEYDOWN: {
-                if (wparam == VK_CONTROL) modifier_state |= MF_CTRL;
-                else if (wparam == VK_SHIFT) modifier_state |= MF_SHIFT;
-                else if (wparam == VK_MENU) modifier_state |= MF_ALT;
+                u16 vk_code      = u16(wparam & 0xFFFF);
+                u8 scancode      = u16(lparam >> 16) & 0xFF;
+                u16 repeat_count = u16(lparam & 0xFFFF);
+                bool prev_state  = (lparam >> 30) & 0x1;
 
-                u8 scancode = (i16)(lparam >> 16) & 0xff;
-                u16 repeat_count = lparam & 0xff;
+                if (vk_code == VK_CONTROL) modifier_state |= MF_CTRL;
+                else if (vk_code == VK_SHIFT) modifier_state |= MF_SHIFT;
+                else if (vk_code == VK_MENU) modifier_state |= MF_ALT;
 
                 event.key = {
                     .modifiers = modifier_state,
                     .keycode = keycode_from_scancode(scancode),
-                    .prev_state = (u32)((lparam >> 30) & 0x1),
+                    .prev_state = prev_state
                 };
 
                 if (event.key.keycode != KC_UNKNOWN) {
@@ -541,23 +626,38 @@ AppWindow* create_window(WindowCreateDesc desc)
                 }
 
                 if (event.key.keycode == KC_UNKNOWN) LOG_ERROR("unknown keycode from scancode: 0x%X", scancode);
-                else if (false) LOG_INFO("keycode: 0x%X (%.*s), scancode: 0x%X, prev_state: %d", event.key.keycode, STRFMT(string_from_enum((KeyCode_)event.key.keycode)), scancode, event.key.prev_state);
+                else if (false)
+                    LOG_INFO("KEYDOWN: %.*s [0x%X]; scancode: 0x%X; modifiers: [0x%X]; prev_state: %d",
+                             STRFMT(string_from_enum((KeyCode_)event.key.keycode)), event.key.keycode,
+                             scancode,
+                             event.key.modifiers,
+                             event.key.prev_state);
             } break;
             case WM_SYSKEYUP:
-                result = DefWindowProcA(hwnd, message, wparam, lparam);
+                //result = DefWindowProcA(hwnd, message, wparam, lparam);
             case WM_KEYUP: {
-                if (wparam == VK_CONTROL) modifier_state &= ~MF_CTRL;
-                else if (wparam == VK_SHIFT) modifier_state &= ~MF_SHIFT;
-                else if (wparam == VK_MENU) modifier_state &= ~MF_ALT;
+                u16 vk_code     = u16(wparam & 0xFFFF);
+                u8 scancode     = u16(lparam >> 16) & 0xFF;
+                bool prev_state = (lparam >> 30) & 0x1;
 
-                u8 scancode = (i16)(lparam >> 16) & 0xff;
+                if (vk_code == VK_CONTROL) modifier_state &= ~MF_CTRL;
+                else if (vk_code == VK_SHIFT) modifier_state &= ~MF_SHIFT;
+                else if (vk_code == VK_MENU) modifier_state &= ~MF_ALT;
 
                 event.type = WE_KEY_RELEASE;
                 event.key = {
                     .modifiers = modifier_state,
                     .keycode = keycode_from_scancode(scancode),
-                    .prev_state = (u32)((lparam >> 30) & 0x1)
+                    .prev_state = prev_state,
                 };
+
+                if (event.key.keycode == KC_UNKNOWN) LOG_ERROR("unknown keycode from scancode: 0x%X", scancode);
+                else if (false)
+                    LOG_INFO("KEYUP: %.*s [0x%X]; scancode: 0x%X; modifiers: [0x%X]; prev_state: %d",
+                             STRFMT(string_from_enum((KeyCode_)event.key.keycode)), event.key.keycode,
+                             scancode,
+                             event.key.modifiers,
+                             event.key.prev_state);
             } break;
             case WM_SETCURSOR:
                 if ((lparam & 0xFFFF) == HTCLIENT && current_cursor != MC_NORMAL) {

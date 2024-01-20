@@ -3402,8 +3402,7 @@ next_node:;
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    app.animating = false;
-    if (gui.capture_text[0] != gui.capture_text[1]) app.animating = true;
+    app.animating = text_input_enabled();
     gui_end_frame();
 
     Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0, 1);

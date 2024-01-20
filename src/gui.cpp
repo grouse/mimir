@@ -790,8 +790,6 @@ void gui_end_frame() EXPORT
     // TODO(jesper): removing this means you can shift-tab circularly through a window's focusable widgets, but cycling forward doesn't work due to how the window grabs focus if nothing is, to avoid other awkward behaviours. Will want to revist this eventually
     gui.prev_focusable_widget = GUI_ID_INVALID;
 
-    gui.events.count = 0;
-
     GuiId old_focused = gui.focused_window;
     GuiId old = gui.hot_window;
 
@@ -1306,12 +1304,8 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
             clear_focus();
         }
 
-
-        for (i32 i = 0; i < gui.events.count; i++) {
-            WindowEvent it = gui.events[i];
-
-            if (it.type == WE_INPUT && it.input.id == TEXT_INPUT) {
-                if (gui.edit.cursor != gui.edit.selection) {
+        for (TextEvent text; get_input_text(TEXT_INPUT, &text, gui.input.editbox);) {
+            if (gui.edit.cursor != gui.edit.selection) {
                 i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                 i32 end = MAX(gui.edit.cursor, gui.edit.selection);
                     if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
@@ -1322,22 +1316,19 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
 
                     i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
                     gui.edit.offset = MIN(gui.edit.offset, new_offset);
-                    action = GUI_CHANGE;
+                action = GUI_CHANGE;
+            }
+
+            if (gui.edit.length+text.length <= (i32)sizeof gui.edit.buffer) {
+                for (i32 i = gui.edit.length + text.length-1; i > gui.edit.cursor; i--) {
+                    gui.edit.buffer[i] = gui.edit.buffer[i-text.length];
                 }
 
-                if (gui.edit.length+it.input.text.length <= (i32)sizeof gui.edit.buffer) {
-                    for (i32 i = gui.edit.length + it.input.text.length-1; i > gui.edit.cursor; i--) {
-                        gui.edit.buffer[i] = gui.edit.buffer[i-it.input.text.length];
-                    }
-
-                    memcpy(gui.edit.buffer+gui.edit.cursor, it.input.text.c, it.input.text.length);
-                    gui.edit.length += it.input.text.length;
-                    gui.edit.cursor += it.input.text.length;
-                    gui.edit.selection = gui.edit.cursor;
-                    action = GUI_CHANGE;
-                }
-
-                array_remove(&gui.events, i--);
+                memcpy(gui.edit.buffer+gui.edit.cursor, text.c, text.length);
+                gui.edit.length += text.length;
+                gui.edit.cursor += text.length;
+                gui.edit.selection = gui.edit.cursor;
+                action = GUI_CHANGE;
             }
 
             if (gui.edit.length == sizeof gui.edit.buffer) break;
@@ -2781,14 +2772,6 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
 
 bool gui_input(WindowEvent event) EXPORT
 {
-    if (event.type == WE_INPUT &&
-        event.input.id == TEXT_INPUT &&
-        event.input.map == gui.input.editbox)
-    {
-        array_add(&gui.events, event);
-        return true;
-    }
-
     switch (event.type) {
     case WE_MOUSE_MOVE:
         gui.mouse.dx += event.mouse.dx;

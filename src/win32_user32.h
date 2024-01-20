@@ -87,6 +87,19 @@
 #define WM_EXITSIZEMOVE                 0x0232
 #define WM_SETCURSOR                    0x0020
 #define WM_NCHITTEST                    0x0084
+#define WM_ACTIVATE                     0x0006
+
+#define WA_INACTIVE                     0
+#define WA_ACTIVE                       1
+#define WA_CLICKACTIVE                  2
+
+#define KF_EXTENDED 0x0100
+#define KF_DLGMODE  0x0800
+#define KF_MENUMODE 0x1000
+#define KF_ALTDOWN  0x2000
+#define KF_REPEAT   0x4000
+#define KF_UP       0x8000
+
 
 #define HTCLIENT                        1
 

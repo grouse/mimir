@@ -237,9 +237,6 @@ struct GuiContext {
     HashTable<GuiId, GuiMenu> menus;
     DynamicArray<GuiWindow> windows;
 
-    DynamicArray<WindowEvent> events;
-    bool capture_text[2];
-
     Vector2 drag_start_mouse;
     Vector2 drag_start_data[2];
 

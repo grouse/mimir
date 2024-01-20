@@ -11,6 +11,7 @@ struct InputMap {
     HashTable<InputId, i32> edges;
     HashTable<InputId, bool> held;
     HashTable<InputId, f32[2]> axes;
+    HashTable<InputId, DynamicArray<TextEvent>> text;
 };
 
 struct {
@@ -41,8 +42,7 @@ String string_from_enum(KeyCode_ kc)
     case KC_PAGE_UP: return "KC_PAGE_UP";
     case KC_PAGE_DOWN: return "KC_PAGE_DOWN";
     case KC_SPACE: return "KC_SPACE";
-    case KC_LSHIFT: return "KC_LSHIFT";
-    case KC_RSHIFT: return "KC_RSHIFT";
+    case KC_SHIFT: return "KC_SHIFT";
     case KC_CTRL: return "KC_CTRL";
     case KC_ALT: return "KC_ALT";
     case KC_LBRACKET: return "KC_LBRACKET";
@@ -230,6 +230,9 @@ bool translate_input_event(
             for (InputDesc it : map->by_type[TEXT][0]) {
                 array_insert(queue, 0, { WE_INPUT, .input = { map_id, it.id, it.type, .text = event.text } });
                 handled = handled || !(it.flags & FALLTHROUGH);
+
+                auto *text = map_find_emplace(&map->text, it.id);
+                array_add(text, event.text);
             }
             break;
         case WE_MOUSE_WHEEL:
@@ -444,6 +447,21 @@ bool translate_input_event(
     DynamicArray<WindowEvent> *queue,
     WindowEvent event) INTERNAL
 {
+    if (false) switch (event.type) {
+    case WE_KEY_PRESS:
+        LOG_INFO("KEY_PRESS: %.*s [0x%X]; modifiers: [0x%X]; prev_state: %d",
+                 STRFMT(string_from_enum((KeyCode_)event.key.keycode)), event.key.keycode,
+                 event.key.modifiers,
+                 event.key.prev_state);
+        break;
+    case WE_KEY_RELEASE:
+        LOG_INFO("KEY_RELEASE: %.*s [0x%X]; modifiers: [0x%X]; prev_state: %d",
+                 STRFMT(string_from_enum((KeyCode_)event.key.keycode)), event.key.keycode,
+                 event.key.modifiers,
+                 event.key.prev_state);
+        break;
+    }
+
     for (auto it : reverse(input.layers)) if (translate_input_event(queue, it, event)) return true;
     return translate_input_event(queue, input.active_map, event);
 }
@@ -453,6 +471,23 @@ bool text_input_enabled() EXPORT
     if (input.active_map != -1 && input.maps[input.active_map].by_type[TEXT][0].count) return true;
     for (auto it : input.layers) if (input.maps[it].by_type[TEXT][0].count) return true;
     return false;
+}
+
+bool get_input_text(InputId id, TextEvent *dst, InputMapId map_id) EXPORT
+{
+    if (map_id == INPUT_MAP_ANY) {
+        for (auto it : reverse(input.layers)) if (get_input_text(id, dst, it)) return true;
+        map_id = input.active_map;
+    }
+
+    if (map_id == -1) return false;
+    InputMap *map = &input.maps[map_id];
+    auto *text = map_find(&map->text, id);
+    if (!text || text->count == 0) return false;
+
+    *dst = text->at(0);
+    array_remove(text, 0);
+    return true;
 }
 
 bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id) EXPORT

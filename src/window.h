@@ -45,8 +45,7 @@ enum KeyCode_ : u8 {
 
     KC_SPACE,
 
-    KC_LSHIFT,
-    KC_RSHIFT,
+    KC_SHIFT,
     KC_CTRL,
     KC_ALT,
     KC_LSUPER,
