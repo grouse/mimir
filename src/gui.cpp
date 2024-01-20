@@ -469,7 +469,13 @@ void init_gui() EXPORT
         { CONFIRM,      EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
         { CONFIRM_CONT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_TAB } },
         { CANCEL,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
-        { CANCEL,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+    });
+
+    init_input_map(gui.input.lister, {
+        { FORWARD, EDGE_DOWN, KEYBOARD, .keyboard = { KC_DOWN  } },
+        { BACK,    EDGE_DOWN, KEYBOARD, .keyboard = { KC_UP    } },
+        { CONFIRM, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
+        { CANCEL,  EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC   } },
     });
 
     init_input_map(gui.input.tree, {
@@ -1308,14 +1314,14 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
             if (gui.edit.cursor != gui.edit.selection) {
                 i32 start = MIN(gui.edit.cursor, gui.edit.selection);
                 i32 end = MAX(gui.edit.cursor, gui.edit.selection);
-                    if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
+                if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
 
-                    memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-start);
-                    gui.edit.length -= end-start;
-                    gui.edit.cursor = gui.edit.selection = start;
+                memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-start);
+                gui.edit.length -= end-start;
+                gui.edit.cursor = gui.edit.selection = start;
 
-                    i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
-                    gui.edit.offset = MIN(gui.edit.offset, new_offset);
+                i32 new_offset = codepoint_index_from_byte_index({ gui.edit.buffer, gui.edit.length }, gui.edit.cursor);
+                gui.edit.offset = MIN(gui.edit.offset, new_offset);
                 action = GUI_CHANGE;
             }
 
@@ -2662,45 +2668,64 @@ void gui_vscrollbar_id(
 GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPORT
 {
     GuiAction result = GUI_NONE;
-#if 0
+    *selected_item = CLAMP(*selected_item, 0, items.count-1);
 
-    GuiLister *lister = gui_find_or_create_lister(id);
-
-    GuiWindow *wnd = gui_current_window();
+    gui_handle_focus_grabbing(id);
+    if (gui_input_layer(id, gui.input.lister)) {
+        if (get_input_edge(CANCEL, gui.input.lister)) result = GUI_CANCEL;
+        if (get_input_edge(CONFIRM, gui.input.lister)) result = GUI_END;
+        if (get_input_edge(FORWARD, gui.input.lister)) *selected_item = MIN(*selected_item+1, items.count-1);
+        if (get_input_edge(BACK, gui.input.lister)) *selected_item = MAX(*selected_item-1, 0);
+    }
 
     FontAtlas *font = &gui.fonts.base;
     f32 item_height = font->line_height;
 
-    Rect r = gui_layout_widget_fill();
-    gui_begin_layout({ .type = GUI_LAYOUT_COLUMN, .pos = { r.pos.x + 1, r.pos.y + 1 }, .size = r.size - Vector2{ 2.0f, 2.0f }});
-    defer { gui_end_layout(); };
+    Rect rect = split_rect({ .margin = gui.style.margin });
+    Rect border = shrink_rect(&rect, 1);
 
-    i32 next_selected_item = CLAMP(*selected_item, 0, items.count-1);
-    if (gui_capture(gui.capture_keyboard)) {
-        for (WindowEvent e : gui.events) {
-            switch (e.type) {
-            case WE_KEY_PRESS:
-                switch (e.key.keycode) {
-                case KC_DOWN:
-                    next_selected_item = MIN((*selected_item)+1, items.count-1);
-                    break;
-                case KC_UP:
-                    next_selected_item = MAX((*selected_item)-1, 0);
-                    break;
-                case KC_ESC:
-                    result = GUI_CANCEL;
-                    break;
-                case KC_ENTER:
-                    *selected_item = next_selected_item;
-                    result = GUI_END;
-                    break;
-                default: break;
-                }
-                break;
-            default: break;
-            }
+    Vector3 bg = gui.style.bg_dark1;
+    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
+    Vector3 selected_bg = gui.style.accent_bg;
+    Vector3 selected_hot_bg = gui.style.accent_bg_hot;
+    Vector3 hot_bg = gui.style.bg_hot;
+
+    gui_draw_rect(border, border_col);
+    gui_draw_rect(rect, bg);
+
+    gui_push_id(id);
+    gui_push_layout({ .rect = rect, .flags = LAYOUT_ROOT|EXPAND_Y });
+    gui_push_clip_rect(rect);
+
+    defer {
+        gui_pop_clip_rect();
+        gui_pop_layout();
+        gui_pop_id();
+    };
+
+    i32 start = 0, end = items.count;
+    for (i32 i = start; i < end; i++) {
+        Rect item_r = split_row({ item_height });
+        GuiId item_id = gui_gen_id(i);
+
+        if (gui_clicked(item_id, item_r)) {
+            *selected_item = i;
+            result = GUI_CHANGE;
         }
+
+        // TODO(jesper): border
+        if (i == *selected_item && gui.hot == item_id) gui_draw_rect(item_r, selected_hot_bg);
+        else if (i == *selected_item) gui_draw_rect(item_r, selected_bg);
+        else if (gui.hot == item_id) gui_draw_rect(item_r, hot_bg);
+
+        gui_textbox(items[i], item_r);
     }
+
+
+
+#if 0
+    GuiLister *lister = gui_find_or_create_lister(id);
+    GuiWindow *wnd = gui_current_window();
 
     if (*selected_item != next_selected_item) {
         *selected_item = next_selected_item;
@@ -2717,22 +2742,6 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
         lister->offset = MAX(lister->offset, 0);
     }
 
-
-    Vector3 bg = gui.style.bg_dark1;
-    Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
-    Vector3 selected_bg = gui.style.accent_bg;
-    Vector3 selected_hot_bg = gui.style.accent_bg_hot;
-    Vector3 hot_bg = gui.style.bg_hot;
-
-    gui_draw_rect(r.pos, r.size, bg);
-    gui_draw_rect({ r.pos.x, r.pos.y }, { r.size.x, 1 }, border_col);
-    gui_draw_rect({ r.pos.x, r.pos.y+r.size.y-1}, { r.size.x, 1 }, border_col);
-    gui_draw_rect({ r.pos.x+r.size.x-1, r.pos.y }, { 1, r.size.y }, border_col);
-    gui_draw_rect({ r.pos.x, r.pos.y }, { 1, r.size.y }, border_col);
-    // NOTE(jesper): I'm not using draw_line_rect at this point because there's something I don't understand
-    // going on with the pixel coordinate calculations for opengl line drawing
-    //gfx_draw_line_rect(r.pos, r.size, gui.style.lister.border, cmdbuf);
-
     f32 step_size = 5.0f;
     f32 total_height = item_height*items.count;
 
@@ -2747,24 +2756,6 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
     f32 offset = fmodf(lister->offset, item_height);
 
     // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
-    for (i32 i = start; i < end; i++) {
-        Vector2 size{ 0, item_height };
-        Vector2 pos = gui_layout_widget(&size);
-        pos.y -= offset;
-
-        GuiId item_id = GUI_ID_INTERNAL(id, i+10);
-
-        if (gui_clicked(item_id, pos, size)) {
-            *selected_item = i;
-            result = GUI_CHANGE;
-        }
-
-        if (i == *selected_item && gui.hot == item_id) gui_draw_rect(pos, size, r2, selected_hot_bg);
-        else if (i == *selected_item) gui_draw_rect(pos, size, r2, selected_bg);
-        else if (gui.hot == item_id) gui_draw_rect(pos, size, r2, hot_bg);
-
-        gui_textbox(items[i], pos, r2);
-    }
 
 #endif
     return result;

@@ -2864,6 +2864,7 @@ void update_and_render()
 
         GuiAction edit_action = gui_editbox_id(id, "");
         if (edit_action & (GUI_CHANGE)) {
+            app.lister.selected_item = 0;
             String needle{ gui.edit.buffer, gui.edit.length };
             if (needle.length == 0) {
                 array_copy(&app.lister.filtered, app.lister.values);

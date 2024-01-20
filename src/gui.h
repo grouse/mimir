@@ -148,18 +148,18 @@ struct SplitDesc {
         struct { f32 h, _w; };
     };
     f32 factor;
-    f32 margin;
+    f32 margin; // TODO(jesper): should this default init to gui.style.margin?
     u32 flags;
     u32 rflags = flags;
 };
 
 
 struct GuiWindowStateFlags {
-    u32 active:        1 = false;
-    u32 was_active:    1 = false;
-    u32 hidden:        1 = true;
-    u32 has_voverflow: 1 = false;
-    u32 has_hoverflow: 1 = false;
+    u32 active        : 1 = false;
+    u32 was_active    : 1 = false;
+    u32 hidden        : 1 = true;
+    u32 has_voverflow : 1 = false;
+    u32 has_hoverflow : 1 = false;
 };
 
 struct GuiWindow {
@@ -249,6 +249,7 @@ struct GuiContext {
         InputMapId button;
         InputMapId checkbox;
         InputMapId dropdown;
+        InputMapId lister;
     } input;
 
     struct {
