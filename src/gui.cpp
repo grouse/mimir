@@ -528,8 +528,7 @@ void gui_hot(GuiId id) EXPORT
 {
     if (gui.pressed == id ||
         (gui.pressed == GUI_ID_INVALID &&
-         (gui.hot_window == gui.windows[gui.current_window].id ||
-          gui.current_window == GUI_BACKGROUND)))
+         (gui.hot_window == gui.windows[gui.current_window].id)))
     {
         gui.next_hot = id;
     }
