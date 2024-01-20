@@ -2543,7 +2543,9 @@ void gui_vscrollbar_id(
     gui_draw_rect(scroll_rect, gui.style.bg_dark0);
 
     LayoutRect parent = *gui_parent_layout();
-    if (point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] })) {
+    if (gui.hot_window == gui_current_window()->id &&
+        point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] }))
+    {
         push_input_layer(gui.input.scrollarea);
         if (f32 delta; get_input_axis(SCROLL, &delta, gui.input.scrollarea)) {
             *foffset += line_height*delta;
@@ -2616,6 +2618,7 @@ void gui_vscrollbar_id(
     gui_push_id(id);
     defer { gui_pop_id(); };
 
+    // TODO(jesper): the way scrollbars interact with layouting is so damn confusing and needs to be fixed.
     LayoutRect parent = *gui_parent_layout();
 
     Rect up_rect     = split_top({ gui.style.scrollbar.thickness });
@@ -2626,7 +2629,9 @@ void gui_vscrollbar_id(
 
     gui_draw_rect(scroll_rect, gui.style.bg_dark0);
 
-    if (point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] })) {
+    if (gui.hot_window == gui_current_window()->id &&
+        point_in_rect(gui_mouse(), { parent.r[0], parent.r[1] }))
+    {
         push_input_layer(gui.input.scrollarea);
         if (f32 delta; get_input_axis(SCROLL, &delta, gui.input.scrollarea)) {
             *offset -= step_size*delta;
