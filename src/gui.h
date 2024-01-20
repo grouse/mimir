@@ -208,6 +208,11 @@ struct GuiDialog {
     GuiBodyProc proc;
 };
 
+struct GuiScrollArea {
+    GuiId id;
+    Vector2 offset;
+};
+
 struct GuiContext {
     DynamicArray<f32> vertices;
     GLuint vbo;
@@ -235,6 +240,7 @@ struct GuiContext {
 
     HashTable<GuiId, u32> flags;
     HashTable<GuiId, GuiMenu> menus;
+    HashTable<GuiId, GuiScrollArea> scroll_areas;
     DynamicArray<GuiWindow> windows;
 
     Vector2 drag_start_mouse;

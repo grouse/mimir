@@ -2686,8 +2686,14 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
     FontAtlas *font = &gui.fonts.base;
     f32 item_height = font->line_height;
 
-    Rect rect = split_rect({ .margin = gui.style.margin });
-    Rect border = shrink_rect(&rect, 1);
+    GuiScrollArea *scroll_area = map_find_emplace(&gui.scroll_areas, id, {});
+
+    Rect vrect = split_rect({ .margin = gui.style.margin });
+    Rect border = shrink_rect(&vrect, 1);
+    Rect scroll = split_right(&vrect, gui.style.scrollbar.thickness);
+
+    Rect rect = vrect;
+    rect.tl.y -= scroll_area->offset.y;
 
     Vector3 bg = gui.style.bg_dark1;
     Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
@@ -2696,73 +2702,48 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
     Vector3 hot_bg = gui.style.bg_hot;
 
     gui_draw_rect(border, border_col);
-    gui_draw_rect(rect, bg);
+    gui_draw_rect(vrect, bg);
 
     gui_push_id(id);
     gui_push_layout({ .rect = rect, .flags = LAYOUT_ROOT|EXPAND_Y });
-    gui_push_clip_rect(rect);
 
     defer {
-        gui_pop_clip_rect();
         gui_pop_layout();
         gui_pop_id();
     };
 
-    i32 start = 0, end = items.count;
-    for (i32 i = start; i < end; i++) {
-        Rect item_r = split_row({ item_height });
-        GuiId item_id = gui_gen_id(i);
+    {
+        gui_push_clip_rect(vrect);
+        defer { gui_pop_clip_rect(); };
 
-        if (gui_clicked(item_id, item_r)) {
-            *selected_item = i;
-            result = GUI_CHANGE;
+        i32 start = 0, end = items.count;
+        for (i32 i = start; i < end; i++) {
+            Rect item_r = split_row({ item_height });
+            GuiId item_id = gui_gen_id(i);
+
+            if (gui_clicked(item_id, item_r)) {
+                *selected_item = i;
+                result = GUI_CHANGE;
+            }
+
+            // TODO(jesper): border
+            if (i == *selected_item && gui.hot == item_id) gui_draw_rect(item_r, selected_hot_bg);
+            else if (i == *selected_item) gui_draw_rect(item_r, selected_bg);
+            else if (gui.hot == item_id) gui_draw_rect(item_r, hot_bg);
+
+            gui_textbox(items[i], item_r);
         }
-
-        // TODO(jesper): border
-        if (i == *selected_item && gui.hot == item_id) gui_draw_rect(item_r, selected_hot_bg);
-        else if (i == *selected_item) gui_draw_rect(item_r, selected_bg);
-        else if (gui.hot == item_id) gui_draw_rect(item_r, hot_bg);
-
-        gui_textbox(items[i], item_r);
     }
 
+    f32 total_height = gui_current_layout()->rect.br.y+scroll_area->offset.y - vrect.tl.y;
 
-
-#if 0
-    GuiLister *lister = gui_find_or_create_lister(id);
-    GuiWindow *wnd = gui_current_window();
-
-    if (*selected_item != next_selected_item) {
-        *selected_item = next_selected_item;
-
-        f32 selected_item_y0 = (*selected_item)*item_height;
-        f32 selected_item_y1 = selected_item_y0 + item_height;
-
-        if (selected_item_y0 - lister->offset < 0) {
-            lister->offset += selected_item_y0 - lister->offset;
-        } else if (selected_item_y1 - lister->offset > r.size.y) {
-            lister->offset += selected_item_y1 - lister->offset - r.size.y + 2;
+    // TODO(jesper): the way scrollbars interact with layouting is so damn confusing and needs to be fixed.
+    GUI_LAYOUT({ .rect = vrect }) {
+        GUI_LAYOUT({ .rect = scroll, .flags = LAYOUT_ROOT }) {
+            gui_vscrollbar(&scroll_area->offset.y, total_height, item_height);
         }
-
-        lister->offset = MAX(lister->offset, 0);
     }
 
-    f32 step_size = 5.0f;
-    f32 total_height = item_height*items.count;
-
-    gui_vscrollbar_id(GUI_ID_INDEX(id, 1), &lister->offset, total_height, step_size);
-
-    Rect r2 = gui_layout_widget_fill();
-    gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = r2.pos, .size = r2.size });
-    defer { gui_end_layout(); };
-
-    i32 start = lister->offset / item_height;
-    i32 end = MIN(items.count, (start + r2.size.y / item_height)+2);
-    f32 offset = fmodf(lister->offset, item_height);
-
-    // TODO(jesper): a lot of this stuff is the same between dropdown, sub-menu, and lister
-
-#endif
     return result;
 }
 
