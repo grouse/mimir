@@ -2952,7 +2952,7 @@ next_node:;
         if (edit_action == GUI_END &&
             (app.lister.selected_item < 0 || app.lister.selected_item >= app.lister.filtered.count))
         {
-            gui.focused = id;
+            gui_focus(id);
         }
 
         GuiAction lister_action = gui_lister_id(id, app.lister.filtered, &app.lister.selected_item);
@@ -2967,13 +2967,13 @@ next_node:;
                 view_set_buffer(app.current_view, buffer);
 
                 app.lister.active = false;
-                gui.focused = GUI_ID_INVALID;
+                gui_focus(GUI_ID_INVALID);
             }
         } else if (lister_action == GUI_CANCEL) {
             // TODO(jesper): this results in 1 frame of empty lister window being shown because
             // we don't really have a good way to close windows from within the window
             app.lister.active = false;
-            gui.focused = GUI_ID_INVALID;
+            gui_focus(GUI_ID_INVALID);
         }
 
         if (!app.lister.active) {
@@ -2995,7 +2995,7 @@ next_node:;
         calculate_num_visible_lines(&view);
 
         gui_handle_focus_grabbing(view.gui_id);
-        if (gui_clicked(view.gui_id, view.rect)) gui.focused = view.gui_id;
+        if (gui_clicked(view.gui_id, view.rect)) gui_focus(view.gui_id);
 
         gui_push_layout({ .rect = view.rect });
         defer { gui_pop_layout(); };
@@ -3052,9 +3052,9 @@ next_node:;
                 //     gui_hot_rect(mid, mpos, msize);
                 //     if (gui_pressed(mid)) {
                 //         if (gui.focused == mid) {
-                //             gui.focused = GUI_ID_INVALID;
+                //             gui_focus(GUI_ID_INVALID);
                 //         } else {
-                //             gui.focused = mid;
+                //             gui_focus(mid);
                 //         }
                 //     }
                 //
@@ -3105,7 +3105,7 @@ next_node:;
                 //                 gui_clicked(lid, rect_p, rect_s))
                 //             {
                 //                 active_buffer = b->id;
-                //                 gui.focused = GUI_ID_INVALID;
+                //                 gui_focus(GUI_ID_INVALID);
                 //             }
                 //         }
                 //
@@ -3192,7 +3192,7 @@ next_node:;
 
         view.text_rect = *gui_current_layout();
         gui_hot_rect(view.gui_id, view.text_rect);
-        if (gui_clicked(view.gui_id, view.text_rect)) gui.focused = view.gui_id;
+        if (gui_clicked(view.gui_id, view.text_rect)) gui_focus(view.gui_id);
 
         // TODO(jesper): this probably signifies the caret APIs aren't all ready yet and it might
         // make sense for this path to go away completely when they are, but I won't completely discount that

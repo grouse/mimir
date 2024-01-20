@@ -533,6 +533,24 @@ void gui_hot(GuiId id) EXPORT
     }
 }
 
+void gui_focus(GuiId id) EXPORT
+{
+    if (gui.focused == id) return;
+    if (GUI_DEBUG_FOCUSED) LOG_INFO("gui focusing: %u", id);
+
+    gui.focused = id;
+    //gui.focused_window = gui_current_window()->id;
+}
+
+void gui_focus_window(GuiId id) EXPORT
+{
+    if (gui.focused_window == id) return;
+    if (GUI_DEBUG_FOCUSED) LOG_INFO("gui focusing window: %u", id);
+
+    gui.focused_window = id;
+    //gui_focus(GUI_ID_INVALID);
+}
+
 bool gui_hot_rect(GuiId id, Rect rect) EXPORT
 {
     Vector2 mouse = gui_mouse();
@@ -558,14 +576,13 @@ bool gui_pressed(GuiId id) EXPORT
     if (gui.pressed == id && !get_input_mouse(MB_PRIMARY, HOLD)) {
         if (GUI_DEBUG_PRESSED) LOG_INFO("clearing gui pressed");
         gui.pressed = GUI_ID_INVALID;
-        if (gui.focused == id) gui.focused = gui.focused_window;
         return false;
     }
 
     if (gui.hot == id && get_input_mouse(MB_PRIMARY)) {
-        if (GUI_DEBUG_PRESSED) LOG_INFO("gui pressed: %d", id);
+        if (GUI_DEBUG_PRESSED) LOG_INFO("gui pressed: %u", id);
         gui.pressed = id;
-        gui.focused = id;
+        gui_focus(id);
         return true;
     }
 
@@ -599,7 +616,7 @@ bool gui_drag(
 
     if (gui.pressed == id) {
         gui_hot(id);
-        gui.focused_window = gui_current_window()->id;
+        gui_focus_window(gui_current_window()->id);
     }
 
     return gui.dragging == id;
@@ -609,13 +626,13 @@ void gui_handle_focus_grabbing(GuiId id) INTERNAL
 {
     if (gui.focused_window == gui_current_window()->id) {
         if (gui.focused == GUI_ID_INVALID || gui.pressed == id) {
-            gui.focused = id;
+            gui_focus(id);
         }
 
         if (gui.focused == id) {
             push_input_layer(gui.input.base);
-            if (get_input_edge(FOCUS_NEXT, INPUT_MAP_ANY)) gui.focused = GUI_ID_INVALID;
-            if (get_input_edge(FOCUS_PREV, INPUT_MAP_ANY)) gui.focused = gui.prev_focusable_widget;
+            if (get_input_edge(FOCUS_NEXT, INPUT_MAP_ANY)) gui_focus(GUI_ID_INVALID);
+            if (get_input_edge(FOCUS_PREV, INPUT_MAP_ANY)) gui_focus(gui.prev_focusable_widget);
             if (get_input_edge(FOCUS_CLEAR, INPUT_MAP_ANY)) clear_focus();
         }
 
@@ -625,7 +642,7 @@ void gui_handle_focus_grabbing(GuiId id) INTERNAL
 
 void clear_focus() INTERNAL
 {
-    gui.focused = gui.focused_window;
+    gui_focus(gui.focused_window);
 }
 
 
@@ -764,7 +781,7 @@ void gui_end_frame() EXPORT
     glBufferData(GL_ARRAY_BUFFER, gui.vertices.count * sizeof gui.vertices[0], gui.vertices.data, GL_STREAM_DRAW);
 
     if (GUI_DEBUG_HOT && gui.hot != gui.next_hot) {
-        LOG_INFO("next hot id: %d", gui.next_hot);
+        LOG_INFO("next hot id: %u", gui.next_hot);
     }
 
     gui.hot = gui.next_hot;
@@ -779,7 +796,7 @@ void gui_end_frame() EXPORT
 
     for (GuiWindow &wnd : gui.windows) {
         if (!wnd.state.active && gui.focused_window == wnd.id) {
-            gui.focused_window = GUI_ID_INVALID;
+            gui_focus_window(GUI_ID_INVALID);
             break;
         }
     }
@@ -788,7 +805,7 @@ void gui_end_frame() EXPORT
     for (Rect &r : gui.overlay_rects) {
         if (point_in_rect(gui_mouse(), r)) {
             gui.hot_window = gui.windows[GUI_OVERLAY].id;
-            if (gui.focused_window == GUI_ID_INVALID) gui.focused_window = gui.windows[GUI_OVERLAY].id;
+            if (gui.focused_window == GUI_ID_INVALID) gui_focus_window(gui.windows[GUI_OVERLAY].id);
             gui.windows[GUI_OVERLAY].state.active = true;
             break;
         }
@@ -807,7 +824,7 @@ void gui_end_frame() EXPORT
         gui.hot_window != GUI_ID_INVALID)
     {
         gui.hot = gui.hot_window;
-        if (GUI_DEBUG_HOT) LOG_INFO("setting gui hot to the hot window: %d", gui.hot);
+        if (GUI_DEBUG_HOT) LOG_INFO("setting gui hot to the hot window: %u", gui.hot);
     }
 
     if (gui.hot_window == GUI_ID_INVALID) {
@@ -815,23 +832,23 @@ void gui_end_frame() EXPORT
     }
 
     if (gui.focused_window == GUI_ID_INVALID) {
-        gui.focused_window = gui.windows[GUI_BACKGROUND].id;
+        gui_focus_window(gui.windows[GUI_BACKGROUND].id);
     }
 
     if (GUI_DEBUG_HOT && old != gui.hot_window) {
-        LOG_INFO("hot window: %d", gui.hot_window);
+        LOG_INFO("hot window: %u", gui.hot_window);
     }
 
     GuiId old_focused_widget = gui.focused;
     if (GUI_DEBUG_FOCUSED && old_focused_widget != gui.focused) {
-        LOG_INFO("focused widget: %d", gui.focused);
-        LOG_INFO("old focused widget: %d", old_focused_widget);
+        LOG_INFO("focused widget: %u", gui.focused);
+        LOG_INFO("old focused widget: %u", old_focused_widget);
         old_focused_widget = gui.focused;
     }
 
     if (GUI_DEBUG_FOCUSED && old_focused != gui.focused_window) {
-        LOG_INFO("focused window: %d", gui.focused_window);
-        LOG_INFO("old focused window: %d", old_focused);
+        LOG_INFO("focused window: %u", gui.focused_window);
+        LOG_INFO("old focused window: %u", old_focused);
     }
 }
 
@@ -899,7 +916,8 @@ GuiWindow* push_window_to_top(i32 index) INTERNAL
     if (gui.current_window == index) gui.current_window = gui.windows.count-1;
 
     GuiWindow *wnd = gui_current_window();
-    gui.focused_window = wnd->id;
+    gui_focus(GUI_ID_INVALID);
+    gui_focus_window(wnd->id);
     return wnd;
 }
 
@@ -1167,7 +1185,7 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
     gui_handle_focus_grabbing(id);
 
     gui_hot_rect(id, rect);
-    if (gui_pressed(id)) gui.focused = id;
+    if (gui_pressed(id)) gui_focus(id);
     else if (get_input_mouse(MB_PRIMARY) &&
              gui.hot != id && gui.focused == id)
     {
@@ -1274,7 +1292,7 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
 
         if (get_input_edge(CONFIRM, gui.input.editbox)) {
             action = GUI_END;
-            gui.focused = GUI_ID_INVALID;
+            gui_focus(gui.focused_window);
         }
 
         if (get_input_edge(CANCEL, gui.input.editbox)) {
@@ -1288,8 +1306,8 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
 
             if (it.type == WE_INPUT && it.input.id == TEXT_INPUT) {
                 if (gui.edit.cursor != gui.edit.selection) {
-                    i32 start = MIN(gui.edit.cursor, gui.edit.selection);
-                    i32 end = MAX(gui.edit.cursor, gui.edit.selection);
+                i32 start = MIN(gui.edit.cursor, gui.edit.selection);
+                i32 end = MAX(gui.edit.cursor, gui.edit.selection);
                     if (start == end) end = utf8_incr({ gui.edit.buffer, gui.edit.length }, end);
 
                     memmove(gui.edit.buffer+start, gui.edit.buffer+end, gui.edit.length-start);
@@ -1544,7 +1562,7 @@ GuiId gui_create_window_id(GuiId id, GuiWindowDesc desc) EXPORT
 {
     for (auto it : iterator(gui.windows)) {
         if (it->id == id) {
-            LOG_ERROR("window with id %d already exists", id);
+            LOG_ERROR("window with id %u already exists", id);
             return id;
         }
     }
@@ -1623,7 +1641,7 @@ bool gui_begin_window_id(GuiId id) EXPORT
 {
     i32 index = gui_find_window_index(id);
     if (index == -1) {
-        LOG_ERROR("window with id %d does not exist", id);
+        LOG_ERROR("window with id %u does not exist", id);
         return false;
     }
 
@@ -1661,8 +1679,8 @@ bool gui_begin_window_internal(
 
     defer {
         if (wnd->state.hidden) {
-            if (gui.focused == wnd->id) gui.focused = GUI_ID_INVALID;
-            if (gui.focused_window == wnd->id) gui.focused_window = GUI_ID_INVALID;
+            if (gui.focused == wnd->id) gui_focus(GUI_ID_INVALID);
+            if (gui.focused_window == wnd->id) gui_focus_window(GUI_ID_INVALID);
 
             wnd->command_buffer.commands.count = 0;
             gui_pop_command_buffer(nullptr);
@@ -1699,10 +1717,8 @@ bool gui_begin_window_internal(
         gui.focused_window == id &&
         get_input_mouse(MB_PRIMARY))
     {
-        gui.focused_window = GUI_ID_INVALID;
+        gui_focus_window(GUI_ID_INVALID);
     }
-
-    if (gui.focused_window == id && gui.focused == GUI_ID_INVALID) gui.focused = gui.focused_window;
 
     // NOTE(jesper): the window keyboard nav is split between begin/end because children of the window
     // should be given a chance to respond to certain key events first
@@ -1710,7 +1726,7 @@ bool gui_begin_window_internal(
     if (gui.focused_window == id) {
         push_input_layer(gui.input.window);
         if (get_input_edge(WINDOW_CLEAR, gui.input.window))
-            gui.focused_window = GUI_ID_INVALID;
+            gui_focus_window(GUI_ID_INVALID);
         if (get_input_edge(WINDOW_CLOSE, gui.input.window)) {
             wnd->state.hidden = true;
             return false;
@@ -2234,7 +2250,7 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect
     }
 
     gui_begin_menu_id(id, menu, rect, 0u);
-    if (menu->active) gui.focused = id;
+    if (menu->active) gui_focus(id);
 
     Vector2 text_p{
         rect.tl.x+gui.style.dropdown.margin,
@@ -2260,7 +2276,7 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect
             if (gui_clicked(row_id, row)) {
                 selected_index = it.index;
                 menu->active = false;
-                gui.focused = GUI_ID_INVALID;
+                gui_focus(GUI_ID_INVALID);
                 break;
             }
 
@@ -2797,7 +2813,7 @@ bool gui_begin_tree_id(GuiId id, String label, bool selected) EXPORT
     gui_hot_rect(id, rect);
     if (gui_clicked(btn_id, btn_rect)) {
         flags ^= GUI_ACTIVE;
-        gui.focused = id;
+        gui_focus(id);
     }
     gui_pressed(id);
     gui_handle_focus_grabbing(id);
