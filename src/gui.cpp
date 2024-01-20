@@ -467,6 +467,8 @@ void init_gui() EXPORT
         { DELETE,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_DELETE } },
         { DELETE_BACK,  EDGE_DOWN, KEYBOARD, .keyboard = { KC_BACKSPACE } },
         { CONFIRM,      EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
+        { CONFIRM_CONT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_TAB } },
+        { CANCEL,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
         { CANCEL,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
     });
 
@@ -1293,6 +1295,12 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
         if (get_input_edge(CONFIRM, gui.input.editbox)) {
             action = GUI_END;
             gui_focus(gui.focused_window);
+        }
+
+        // NOTE(jesper): bit of a special case; we want to confirm the editbox value and focus the next widget in line. I'm not sure if there are other types where I want it to behave this way. If there is, should probably make this work cleaner in the input/focus grab handling
+        if (get_input_edge(CONFIRM_CONT, gui.input.editbox)) {
+            action = GUI_END;
+            gui_focus(GUI_ID_INVALID);
         }
 
         if (get_input_edge(CANCEL, gui.input.editbox)) {

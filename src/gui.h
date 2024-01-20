@@ -28,6 +28,8 @@ enum {
     CURSOR_LEFT,
     CURSOR_RIGHT,
     DELETE_BACK,
+
+    CONFIRM_CONT,
 };
 
 #define GUI_ID gui_gen_id(__COUNTER__*1000 + __LINE__)
