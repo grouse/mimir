@@ -870,7 +870,7 @@ void gui_textbox(GlyphsData text, Rect rect) EXPORT
 }
 
 
-void gui_textbox(String str, Rect rect, FontAtlas *font) EXPORT
+void gui_textbox(String str, Rect rect, FontAtlas *font /*= &gui.fonts.base */) EXPORT
 {
     SArena scratch = tl_scratch_arena();
     GlyphsData td = calc_glyphs_data(str, font, scratch);
@@ -879,7 +879,7 @@ void gui_textbox(String str, Rect rect, FontAtlas *font) EXPORT
     gui_draw_text(td, pos, gui.style.fg);
 }
 
-void gui_textbox(String str, FontAtlas *font) EXPORT
+void gui_textbox(String str, FontAtlas *font /*= &gui.fonts.base*/) EXPORT
 {
     SArena scratch = tl_scratch_arena();
     GlyphsData td = calc_glyphs_data(str, font, scratch);
@@ -890,7 +890,6 @@ void gui_textbox(String str, FontAtlas *font) EXPORT
     gui_draw_text(td, pos, gui.style.fg);
 }
 
-void gui_textbox(String str) EXPORT  { return gui_textbox(str, &gui.fonts.base); }
 void gui_textbox(String str, u32 flags) EXPORT
 {
     SArena scratch = tl_scratch_arena();
