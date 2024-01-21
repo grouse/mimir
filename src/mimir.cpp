@@ -26,6 +26,19 @@ extern "C" const TSLanguage* tree_sitter_comment();
 #define DEBUG_TREE_SITTER_COLORS 0
 #define DEBUG_TREE_SITTER_INJECTIONS 0
 
+enum {
+    APP_INPUT = APP_INPUT_ID_START,
+
+    EDIT_MODE,
+    INSERT_MODE,
+
+    FUZZY_FIND_FILE,
+
+    COPY_RANGE,
+    CUT_RANGE,
+    DELETE_RANGE,
+};
+
 enum EditMode {
     MODE_EDIT,
     MODE_INSERT,
@@ -213,6 +226,11 @@ struct Application {
     TSQuery *highlights[LANGUAGE_COUNT];
     TSQuery *injections[LANGUAGE_COUNT];
 
+    struct {
+        InputMapId insert;
+        InputMapId edit;
+    } input;
+
     EditMode mode, next_mode;
 
     DynamicArray<String> process_command_names;
@@ -308,7 +326,7 @@ bool buffer_valid(BufferId buffer_id)
 
 TSLogger ts_logger  {
     .payload = nullptr,
-    .log = [](void *payload, TSLogType type, const char *msg) {
+    .log = [](void */*payload*/, TSLogType type, const char *msg) {
         const char *type_s = nullptr;
         switch (type) {
         case TSLogTypeParse: type_s = "parse"; break;
@@ -831,6 +849,31 @@ void init_app(Array<String> args)
         }});
 
     init_gui();
+
+    init_input_map(app.input.edit, {
+        { INSERT_MODE,     EDGE_DOWN, KEYBOARD, .keyboard = { KC_I } },
+        { CANCEL,          EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+
+        { UNDO,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_U } },
+        { REDO,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_R } },
+
+        { SAVE,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_S, MF_CTRL } },
+
+        { FUZZY_FIND_FILE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_O } },
+
+        { PASTE,           EDGE_DOWN, KEYBOARD, .keyboard = { KC_P } },
+        { COPY_RANGE,      EDGE_DOWN, KEYBOARD, .keyboard = { KC_Y } },
+        { CUT_RANGE,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_X } },
+        { DELETE_RANGE,    EDGE_DOWN, KEYBOARD, .keyboard = { KC_D } },
+    });
+
+    init_input_map(app.input.insert, {
+        { EDIT_MODE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { TEXT_INPUT, TEXT },
+    });
+
+    app.mode = app.next_mode = MODE_EDIT;
+    //set_input_map(app.input.edit);
 
     map_set(&app.language_map, "cpp", LANGUAGE_CPP);
     map_set(&app.language_map, "comment", LANGUAGE_COMMENT);
@@ -2334,129 +2377,55 @@ void exec_process_command()
     }
 }
 
-void app_event(WindowEvent event)
-{
-    if (gui_input(event)) {
-        app.animating = true;
-    }
+void update_and_render();
 
+void app_gather_input(AppWindow *wnd)
+{
     SArena scratch = tl_scratch_arena();
 
-    View *view = app.current_view;
+    input_begin_frame();
+    if (!app_needs_render()) wait_for_next_event(wnd);
 
-    // NOTE(jesper): the input processing procedure contains a bunch of buffer undo history
-    // management in order to record the cursor position in the history groups, so that when
-    // a user undo/redo the cursor is repositioned to where it was before/after the edit
+    WindowEvent event;
+    while (next_event(wnd, &event)) {
+        gui_input(event);
 
-    // TODO(jesper): figure out if there's a better way for us to signal that the event results
-    // in an update/redraw. If nothing else, the app.animating variable name just feels wrong at
-    // this point, especially when I don't even have anything animating
+        View *view = app.current_view;
 
-    switch (event.type) {
-    case WE_QUIT:
-        exit(0);
-        break;
-    case WE_TEXT:
-        if (app.mode == MODE_INSERT) {
-            write_string(view, view->buffer, String{ (char*)&event.text.c[0], event.text.length });
-            app.animating = true;
-        }
-        break;
-    case WE_KEY_PRESS:
-        if (gui.focused != view->gui_id) break;
-        app.animating = true;
-        if (app.mode == MODE_EDIT) {
-            switch (event.key.keycode) {
-            case KC_SLASH:
-                app.incremental_search.start_caret = view->caret.byte_offset;
-                app.incremental_search.start_mark = view->mark.byte_offset;
-                app.incremental_search.active = true;
-                app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
+        switch (event.type) {
+        case WE_QUIT:
+            exit(0);
+            break;
+        case WE_RESIZE:
+            if (app_change_resolution({ (f32)event.resize.width, (f32)event.resize.height })) {
+                glViewport(0, 0, event.resize.width, event.resize.height);
+
+                // TODO(jesper): I don't really understand why I can't just set this to true
+                // and let the main loop handle it. It appears as if we get stuck in WM_SIZE message
+                // loop until you stop resizing
+                //app.animating = true;
+
+                // TODO(jesper): this feels super iffy. I kind of want some arena push/restore
+                // points or something that can be used for local reset of the allocators
+                RESET_ALLOC(mem_frame);
+
+                update_and_render();
+                present_window(wnd);
+            }
+            break;
+        case WE_INPUT:
+            switch (event.input.id) {
+            case INSERT_MODE:
+                app.next_mode = MODE_INSERT;
+                app.current_view->mark = app.current_view->caret;
                 break;
-            case KC_GRAVE:
-                // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
-                // textual fall-back version which doesn't handle comments or strings
-                if (auto buffer = get_buffer(view->buffer); buffer) {
-                    i64 f = buffer_seek_first_forward(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset-1);
-                    i64 b = buffer_seek_first_back(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset+1);
-
-                    if (f != -1 && f != view->caret.byte_offset &&
-                        (b < line_start_offset(view->caret.wrapped_line, view->lines) ||
-                         b > line_end_offset(view->caret.wrapped_line, view->lines, view->buffer)))
-                    {
-                        view->caret.byte_offset = f;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                        break;
-                    }
-
-                    i64 offset = b == -1 || f-view->caret.byte_offset < view->caret.byte_offset-b ? f : b;
-                    if (offset == -1) break;
-
-                    char l = char_at(buffer, offset);
-                    bool forward = false;
-                    char r;
-                    switch (l) {
-                    case '{': r = '}'; forward = true; break;
-                    case '}': r = '{'; break;
-                    case '[': r = ']'; forward = true; break;
-                    case ']': r = '['; break;
-                    case '(': r = ')'; forward = true; break;
-                    case ')': r = '('; break;
-                    default:
-                        LOG_ERROR("unexpected char '%c'", l);
-                        return;
-                    }
-
-                    i32 level = 1;
-                    while (level >= 1) {
-                        offset = forward ?
-                            buffer_seek_first_forward(view->buffer, {l, r}, offset) :
-                            buffer_seek_first_back(view->buffer, {l, r}, offset);
-
-                        char c = char_at(buffer, offset);
-                        if (c == l) level++;
-                        else if (c == r) level--;
-                    }
-
-                    if (offset >= 0) {
-                        view->caret.byte_offset = offset;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                    }
-                } break;
-            case KC_ESC:
-                FREE(mem_dynamic, app.incremental_search.str.data);
-                app.incremental_search.str = {};
+            case EDIT_MODE:
+                app.next_mode = MODE_EDIT;
                 break;
-            case KC_F5: exec_process_command(); break;
-            case KC_Q:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                ASSERT(!view->lines_dirty);
-                view_seek_byte_offset(view, buffer_seek_beginning_of_line(view->buffer, view->lines, view->caret.wrapped_line));
+            case SAVE:
+                buffer_save(app.current_view->buffer);
                 break;
-            case KC_E:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                ASSERT(!view->lines_dirty);
-                view_seek_byte_offset(view, buffer_seek_end_of_line(view->buffer, view->lines, view->caret.wrapped_line));
-                break;
-            case KC_RBRACKET:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                ASSERT(!view->lines_dirty);
-                view_seek_line(view, buffer_seek_next_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
-                break;
-            case KC_LBRACKET:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                ASSERT(!view->lines_dirty);
-                view_seek_line(view, buffer_seek_prev_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
-                break;
-            case KC_U: buffer_undo(view->buffer); break;
-            case KC_R: buffer_redo(view->buffer); break;
-            case KC_M:
-                if (event.key.modifiers == MF_CTRL) SWAP(view->mark, view->caret);
-                else view->mark = view->caret;
-                break;
-            case KC_O:
+            case FUZZY_FIND_FILE:
                 app.lister.active = true;
                 app.lister.selected_item = 0;
 
@@ -2466,316 +2435,392 @@ void app_event(WindowEvent event)
                 list_files(&app.lister.values, "./", mem_dynamic, FILE_LIST_RECURSIVE);
                 array_copy(&app.lister.filtered, app.lister.values);
                 break;
-            case KC_D:
-                if (buffer_valid(view->buffer)) {
-                    ASSERT(!view->lines_dirty);
-                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
-                    if (r.end == r.start) break;
+            }
+            break;
 
-                    BufferHistoryScope h(view->buffer);
-                    if (buffer_remove(view->buffer, r.start, r.end)) {
-                        view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        view->mark = view->caret;
-                        move_view_to_caret(view);
-                    }
-                } break;
-            case KC_X: {
-                    BufferHistoryScope h(view->buffer);
+        case WE_KEY_PRESS:
+            if (gui.focused != view->gui_id) break;
+            app.animating = true;
+            if (app.mode == MODE_EDIT) {
+                switch (event.key.keycode) {
+                case KC_SLASH:
+                    app.incremental_search.start_caret = view->caret.byte_offset;
+                    app.incremental_search.start_mark = view->mark.byte_offset;
+                    app.incremental_search.active = true;
+                    app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
+                    break;
+                case KC_GRAVE:
+                    // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
+                    // textual fall-back version which doesn't handle comments or strings
+                    if (auto buffer = get_buffer(view->buffer); buffer) {
+                        i64 f = buffer_seek_first_forward(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset-1);
+                        i64 b = buffer_seek_first_back(view->buffer, {'{','}', '[',']', '(',')'}, view->caret.byte_offset+1);
 
-                    ASSERT(!view->lines_dirty);
-                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
-                    String str = buffer_read(view->buffer, r.start, r.end, scratch);
-                    set_clipboard_data(str);
-
-                    if (buffer_remove(view->buffer, r.start, r.end)) {
-                        view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        view->mark = view->caret;
-                        move_view_to_caret(view);
-                    }
-                } break;
-            case KC_Y: {
-                    ASSERT(!view->lines_dirty);
-                    Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
-                    set_clipboard_data(buffer_read(view->buffer, r.start, r.end, scratch));
-                } break;
-            case KC_N:
-                if (app.incremental_search.str.length > 0) {
-                    i64 offset = event.key.modifiers == MF_CTRL ?
-                        buffer_seek_back(view->buffer, app.incremental_search.str, view->caret.byte_offset) :
-                        buffer_seek_forward(view->buffer, app.incremental_search.str, view->caret.byte_offset);
-
-                    if (offset != view->caret.byte_offset) {
-                        view->caret.byte_offset = offset;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        if (app.incremental_search.set_mark) view->mark = view->caret;
-
-                        move_view_to_caret(view);
-                    }
-                } break;
-            case KC_P:
-                write_string(view, view->buffer, read_clipboard_str(scratch), VIEW_SET_MARK);
-                break;
-            case KC_W:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_byte_offset(view, buffer_seek_next_word(view->buffer, view->caret.byte_offset));
-                break;
-            case KC_B:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_byte_offset(view, buffer_seek_prev_word(view->buffer, view->caret.byte_offset));
-                break;
-            case KC_J:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_line(view, view->caret.wrapped_line+1);
-                break;
-            case KC_K:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_line(view, view->caret.wrapped_line-1);
-                break;
-            case KC_I:
-                app.next_mode = MODE_INSERT;
-                view->mark = view->caret;
-                break;
-            case KC_L:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
-                ASSERT(!view->lines_dirty);
-                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                move_view_to_caret(view);
-                break;
-            case KC_H:
-                if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
-                view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
-                ASSERT(!view->lines_dirty);
-                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                move_view_to_caret(view);
-                break;
-            case KC_S:
-                // TODO(jesper): save all?
-                if (event.key.modifiers == MF_CTRL) buffer_save(view->buffer);
-                break;
-            case KC_TAB:
-                if (auto buffer = get_buffer(view->buffer); buffer) {
-                    i32 line = calc_unwrapped_line(view->caret.wrapped_line, view->lines);
-                    Range_i32 r{ line, line };
-                    if (event.key.modifiers & MF_CTRL) {
-                        r = range_i32(line, calc_unwrapped_line(view->mark.wrapped_line, view->lines));
-                    }
-
-                    bool recalc_caret = false, recalc_mark = false;
-                    defer {
-                        if (recalc_caret) {
+                        if (f != -1 && f != view->caret.byte_offset &&
+                            (b < line_start_offset(view->caret.wrapped_line, view->lines) ||
+                             b > line_end_offset(view->caret.wrapped_line, view->lines, view->buffer)))
+                        {
+                            view->caret.byte_offset = f;
                             view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                            break;
+                        }
+
+                        i64 offset = b == -1 || f-view->caret.byte_offset < view->caret.byte_offset-b ? f : b;
+                        if (offset == -1) break;
+
+                        char l = char_at(buffer, offset);
+                        bool forward = false;
+                        char r;
+                        switch (l) {
+                        case '{': r = '}'; forward = true; break;
+                        case '}': r = '{'; break;
+                        case '[': r = ']'; forward = true; break;
+                        case ']': r = '['; break;
+                        case '(': r = ')'; forward = true; break;
+                        case ')': r = '('; break;
+                        default:
+                            LOG_ERROR("unexpected char '%c'", l);
+                            return;
+                        }
+
+                        i32 level = 1;
+                        while (level >= 1) {
+                            offset = forward ?
+                                buffer_seek_first_forward(view->buffer, {l, r}, offset) :
+                                buffer_seek_first_back(view->buffer, {l, r}, offset);
+
+                            char c = char_at(buffer, offset);
+                            if (c == l) level++;
+                            else if (c == r) level--;
+                        }
+
+                        if (offset >= 0) {
+                            view->caret.byte_offset = offset;
+                            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                        }
+                    } break;
+                case KC_ESC:
+                    FREE(mem_dynamic, app.incremental_search.str.data);
+                    app.incremental_search.str = {};
+                    break;
+                case KC_F5: exec_process_command(); break;
+                case KC_Q:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    ASSERT(!view->lines_dirty);
+                    view_seek_byte_offset(view, buffer_seek_beginning_of_line(view->buffer, view->lines, view->caret.wrapped_line));
+                    break;
+                case KC_E:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    ASSERT(!view->lines_dirty);
+                    view_seek_byte_offset(view, buffer_seek_end_of_line(view->buffer, view->lines, view->caret.wrapped_line));
+                    break;
+                case KC_RBRACKET:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    ASSERT(!view->lines_dirty);
+                    view_seek_line(view, buffer_seek_next_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
+                    break;
+                case KC_LBRACKET:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    ASSERT(!view->lines_dirty);
+                    view_seek_line(view, buffer_seek_prev_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
+                    break;
+                case KC_M:
+                    if (event.key.modifiers == MF_CTRL) SWAP(view->mark, view->caret);
+                    else view->mark = view->caret;
+                    break;
+                case KC_N:
+                    if (app.incremental_search.str.length > 0) {
+                        i64 offset = event.key.modifiers == MF_CTRL ?
+                            buffer_seek_back(view->buffer, app.incremental_search.str, view->caret.byte_offset) :
+                            buffer_seek_forward(view->buffer, app.incremental_search.str, view->caret.byte_offset);
+
+                        if (offset != view->caret.byte_offset) {
+                            view->caret.byte_offset = offset;
+                            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            if (app.incremental_search.set_mark) view->mark = view->caret;
+
                             move_view_to_caret(view);
                         }
-
-                        if (recalc_mark) {
-                            view->mark = recalculate_caret(view->mark, view->buffer, view->lines);
+                    } break;
+                case KC_W:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_byte_offset(view, buffer_seek_next_word(view->buffer, view->caret.byte_offset));
+                    break;
+                case KC_B:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_byte_offset(view, buffer_seek_prev_word(view->buffer, view->caret.byte_offset));
+                    break;
+                case KC_J:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_line(view, view->caret.wrapped_line+1);
+                    break;
+                case KC_K:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_line(view, view->caret.wrapped_line-1);
+                    break;
+                case KC_L:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                    ASSERT(!view->lines_dirty);
+                    view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                    move_view_to_caret(view);
+                    break;
+                case KC_H:
+                    if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
+                    ASSERT(!view->lines_dirty);
+                    view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                    move_view_to_caret(view);
+                    break;
+                case KC_TAB:
+                    if (auto buffer = get_buffer(view->buffer); buffer) {
+                        i32 line = calc_unwrapped_line(view->caret.wrapped_line, view->lines);
+                        Range_i32 r{ line, line };
+                        if (event.key.modifiers & MF_CTRL) {
+                            r = range_i32(line, calc_unwrapped_line(view->mark.wrapped_line, view->lines));
                         }
-                    };
 
-                    BufferHistoryScope h(view->buffer);
-
-                    if (event.key.modifiers & MF_SHIFT) {
-                        struct Edit { i64 offset; i32 bytes_to_remove; };
-                        DynamicArray<Edit> edits{ .alloc = scratch };
-                        for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view->lines)) {
-                            i64 line_start = line_start_offset(l, view->lines);
-
-                            String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
-
-                            i32 vcol = 0;
-                            i32 i;
-                            for (i = 0, vcol = 0; i < current_indent.length && vcol < buffer->tab_width; i++) {
-                                if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
-                                else vcol += 1;
+                        bool recalc_caret = false, recalc_mark = false;
+                        defer {
+                            if (recalc_caret) {
+                                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                                move_view_to_caret(view);
                             }
-                            i32 bytes_to_remove = i;
 
-                            if (i > 0) array_add(&edits, { line_start, bytes_to_remove });
-                        }
+                            if (recalc_mark) {
+                                view->mark = recalculate_caret(view->mark, view->buffer, view->lines);
+                            }
+                        };
 
-                        for (i32 i = edits.count-1; i >= 0; i--) {
-                            Edit edit = edits[i];
+                        BufferHistoryScope h(view->buffer);
 
-                            if (buffer_remove(view->buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
-                                if (view->caret.byte_offset >= edit.offset) {
-                                    view->caret.byte_offset -= edit.bytes_to_remove;
+                        if (event.key.modifiers & MF_SHIFT) {
+                            struct Edit { i64 offset; i32 bytes_to_remove; };
+                            DynamicArray<Edit> edits{ .alloc = scratch };
+                            for (i32 l = r.start; l <= r.end; l = next_unwrapped_line(l, view->lines)) {
+                                i64 line_start = line_start_offset(l, view->lines);
+
+                                String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
+
+                                i32 vcol = 0;
+                                i32 i;
+                                for (i = 0, vcol = 0; i < current_indent.length && vcol < buffer->tab_width; i++) {
+                                    if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                                    else vcol += 1;
+                                }
+                                i32 bytes_to_remove = i;
+
+                                if (i > 0) array_add(&edits, { line_start, bytes_to_remove });
+                            }
+
+                            for (i32 i = edits.count-1; i >= 0; i--) {
+                                Edit edit = edits[i];
+
+                                if (buffer_remove(view->buffer, edit.offset, edit.offset+edit.bytes_to_remove)) {
+                                    if (view->caret.byte_offset >= edit.offset) {
+                                        view->caret.byte_offset -= edit.bytes_to_remove;
+                                        recalc_caret = true;
+                                    }
+
+                                    if (view->mark.byte_offset > edit.offset) {
+                                        view->mark.byte_offset -= edit.bytes_to_remove;
+                                        recalc_mark = true;
+                                    }
+                                }
+                            }
+
+                        } else {
+                            for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view->lines)) {
+                                i64 line_start = line_start_offset(l, view->lines);
+
+                                i64 new_offset;
+                                if (buffer->indent_with_tabs) new_offset = buffer_insert(view->buffer, line_start, "\t");
+                                else {
+                                    String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
+
+                                    i32 vcol = 0;
+                                    for (i32 i = 0; i < current_indent.length; i++) {
+                                        if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                                        else vcol += 1;
+                                    }
+
+                                    i32 w = buffer->tab_width - vcol % buffer->tab_width;
+                                    char *spaces = ALLOC_ARR(*scratch, char, w);
+                                    memset(spaces, ' ', w);
+                                    new_offset = buffer_insert(view->buffer, line_start, { spaces, w });
+                                }
+
+                                if (view->caret.byte_offset >= line_start) {
+                                    view->caret.byte_offset += new_offset - line_start;
                                     recalc_caret = true;
                                 }
 
-                                if (view->mark.byte_offset > edit.offset) {
-                                    view->mark.byte_offset -= edit.bytes_to_remove;
+                                if (view->mark.byte_offset > line_start) {
+                                    view->mark.byte_offset += new_offset - line_start;
                                     recalc_mark = true;
                                 }
                             }
                         }
-
-                    } else {
-                        for (i32 l = r.end; l >= r.start; l = prev_unwrapped_line(l, view->lines)) {
-                            i64 line_start = line_start_offset(l, view->lines);
-
-                            i64 new_offset;
-                            if (buffer->indent_with_tabs) new_offset = buffer_insert(view->buffer, line_start, "\t");
-                            else {
-                                String current_indent = get_indent_for_line(view->buffer, view->lines, l, scratch);
-
-                                i32 vcol = 0;
-                                for (i32 i = 0; i < current_indent.length; i++) {
-                                    if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
-                                    else vcol += 1;
-                                }
-
-                                i32 w = buffer->tab_width - vcol % buffer->tab_width;
-                                char *spaces = ALLOC_ARR(*scratch, char, w);
-                                memset(spaces, ' ', w);
-                                new_offset = buffer_insert(view->buffer, line_start, { spaces, w });
-                            }
-
-                            if (view->caret.byte_offset >= line_start) {
-                                view->caret.byte_offset += new_offset - line_start;
-                                recalc_caret = true;
-                            }
-
-                            if (view->mark.byte_offset > line_start) {
-                                view->mark.byte_offset += new_offset - line_start;
-                                recalc_mark = true;
-                            }
-                        }
-                    }
-                } break;
-            default: break;
-            }
-        } else if (app.mode == MODE_INSERT) {
-            switch (event.key.keycode) {
-            case KC_ESC:
-                app.next_mode = MODE_EDIT;
-                break;
-            case KC_LEFT:
-                view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
-                ASSERT(!view->lines_dirty);
-                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                move_view_to_caret(view);
-                break;
-            case KC_RIGHT:
-                view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
-                ASSERT(!view->lines_dirty);
-                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                move_view_to_caret(view);
-                break;
-            case KC_ENTER:
-                if (buffer_valid(view->buffer)) {
-                    BufferHistoryScope h(view->buffer);
+                    } break;
+                default: break;
+                }
+            } else if (app.mode == MODE_INSERT) {
+                switch (event.key.keycode) {
+                case KC_LEFT:
+                    view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
                     ASSERT(!view->lines_dirty);
-                    String indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
-                    write_string(view, view->buffer, buffer_newline_str(view->buffer));
-                    write_string(view, view->buffer, indent);
-                } break;
-            case KC_TAB:
-                if (Buffer *buffer = get_buffer(view->buffer); buffer) {
-                    if (buffer->indent_with_tabs) write_string(view, view->buffer, "\t");
-                    else {
-                        String current_indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
+                    view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                    move_view_to_caret(view);
+                    break;
+                case KC_RIGHT:
+                    view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                    ASSERT(!view->lines_dirty);
+                    view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                    move_view_to_caret(view);
+                    break;
+                case KC_ENTER:
+                    if (buffer_valid(view->buffer)) {
+                        BufferHistoryScope h(view->buffer);
+                        ASSERT(!view->lines_dirty);
+                        String indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
+                        write_string(view, view->buffer, buffer_newline_str(view->buffer));
+                        write_string(view, view->buffer, indent);
+                    } break;
+                case KC_TAB:
+                    if (Buffer *buffer = get_buffer(view->buffer); buffer) {
+                        if (buffer->indent_with_tabs) write_string(view, view->buffer, "\t");
+                        else {
+                            String current_indent = get_indent_for_line(view->buffer, view->lines, view->caret.wrapped_line, scratch);
 
-                        i32 vcol = 0;
-                        for (i32 i = 0; i < current_indent.length; i++) {
-                            if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
-                            else vcol += 1;
+                            i32 vcol = 0;
+                            for (i32 i = 0; i < current_indent.length; i++) {
+                                if (current_indent[i] == '\t') vcol += buffer->tab_width - vcol % buffer->tab_width;
+                                else vcol += 1;
+                            }
+
+
+                            i32 w = buffer->tab_width - vcol % buffer->tab_width;
+                            char *spaces = ALLOC_ARR(*scratch, char, w);
+                            memset(spaces, ' ', w);
+                            write_string(view, view->buffer, { spaces, w });
                         }
 
+                    } break;
+                case KC_BACKSPACE:
+                    if (buffer_valid(view->buffer)) {
+                        BufferHistoryScope h(view->buffer);
+                        i64 start = buffer_prev_offset(view->buffer, view->caret.byte_offset);
+                        if (buffer_remove(view->buffer, start, view->caret.byte_offset)) {
+                            view->caret.byte_offset = start;
+                            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            move_view_to_caret(view);
+                        }
+                    } break;
+                case KC_DELETE:
+                    if (buffer_valid(view->buffer)) {
+                        BufferHistoryScope h(view->buffer);
+                        i64 end = buffer_next_offset(view->buffer, view->caret.byte_offset);
+                        if (buffer_remove(view->buffer, view->caret.byte_offset, end)) {
+                            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                            move_view_to_caret(view);
+                        }
+                    } break;
 
-                        i32 w = buffer->tab_width - vcol % buffer->tab_width;
-                        char *spaces = ALLOC_ARR(*scratch, char, w);
-                        memset(spaces, ' ', w);
-                        write_string(view, view->buffer, { spaces, w });
-                    }
-
-                } break;
-            case KC_BACKSPACE:
-                if (buffer_valid(view->buffer)) {
-                    BufferHistoryScope h(view->buffer);
-                    i64 start = buffer_prev_offset(view->buffer, view->caret.byte_offset);
-                    if (buffer_remove(view->buffer, start, view->caret.byte_offset)) {
-                        view->caret.byte_offset = start;
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        move_view_to_caret(view);
-                    }
-                } break;
-            case KC_DELETE:
-                if (buffer_valid(view->buffer)) {
-                    BufferHistoryScope h(view->buffer);
-                    i64 end = buffer_next_offset(view->buffer, view->caret.byte_offset);
-                    if (buffer_remove(view->buffer, view->caret.byte_offset, end)) {
-                        view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
-                        move_view_to_caret(view);
-                    }
-                } break;
-
-            default: break;
+                default: break;
+                }
             }
-        }
 
-        if (app.mode == MODE_EDIT || app.mode == MODE_INSERT) {
-            switch (event.key.keycode) {
-            case KC_PAGE_DOWN:
-                // TODO(jesper: page up/down should take current caret line into account when moving
-                // view to caret, so that it remains where it was proportionally
-                if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_line(view, view->caret.wrapped_line+view->lines_visible-1);
-                break;
-            case KC_PAGE_UP:
-                // TODO(jesper: page up/down should take current caret line into account when moving
-                // view to caret, so that it remains where it was proportionally
-                if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
-                view_seek_line(view, view->caret.wrapped_line-view->lines_visible-1);
-                break;
-            default: break;
+            if (app.mode == MODE_EDIT || app.mode == MODE_INSERT) {
+                switch (event.key.keycode) {
+                case KC_PAGE_DOWN:
+                    // TODO(jesper: page up/down should take current caret line into account when moving
+                    // view to caret, so that it remains where it was proportionally
+                    if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_line(view, view->caret.wrapped_line+view->lines_visible-1);
+                    break;
+                case KC_PAGE_UP:
+                    // TODO(jesper: page up/down should take current caret line into account when moving
+                    // view to caret, so that it remains where it was proportionally
+                    if (event.text.modifiers != MF_SHIFT) view->mark = view->caret;
+                    view_seek_line(view, view->caret.wrapped_line-view->lines_visible-1);
+                    break;
+                default: break;
+                }
             }
+            break;
+        case WE_MOUSE_MOVE:
+            if (gui.hot == view->gui_id &&
+                event.mouse.button == MB_PRIMARY &&
+                point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
+            {
+                set_caret_xy(view, event.mouse.x, event.mouse.y);
+                app.animating = true;
+            } break;
+        case WE_MOUSE_PRESS:
+            if (gui.hot == view->gui_id &&
+                event.mouse.button == MB_PRIMARY &&
+                point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
+            {
+                set_caret_xy(view, event.mouse.x, event.mouse.y);
+                view->mark = view->caret;
+                app.animating = true;
+            } break;
+        case WE_MOUSE_WHEEL:
+            app.animating = true;
+            break;
         }
-        break;
-    case WE_MOUSE_MOVE:
-        if (gui.hot == view->gui_id &&
-            event.mouse.button == MB_PRIMARY &&
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
-        {
-            set_caret_xy(view, event.mouse.x, event.mouse.y);
-            app.animating = true;
-        } break;
-    case WE_MOUSE_PRESS:
-        if (gui.hot == view->gui_id &&
-            event.mouse.button == MB_PRIMARY &&
-            point_in_rect({ (f32)event.mouse.x, (f32)event.mouse.y }, view->rect))
-        {
-            set_caret_xy(view, event.mouse.x, event.mouse.y);
-            view->mark = view->caret;
-            app.animating = true;
-        } break;
-    case WE_MOUSE_WHEEL:
-        // // TODO(jesper): make a decision/option whether this should be moving
-        // // the caret or not. My current gut feeling says no, as a way to allow a
-        // // kind of temporary scroll back to check on something, that you then get
-        // // taken back to the current caret when you type something
-        //
-        // view->voffset += event.mouse_wheel.delta;
-        // if (view->line_offset == 0 && view->voffset > 0) view->voffset = 0;
-        //
-        // if (view->voffset > app.mono.line_height) {
-        //     f32 div = view->voffset / app.mono.line_height;
-        //     view->line_offset = MAX(0, view->line_offset-1*div);
-        //     view->voffset -= app.mono.line_height*div;
-        // } else if (view->voffset < -app.mono.line_height) {
-        //     f32 div = view->voffset / -app.mono.line_height;
-        //     view->line_offset += 1*div;
-        //     view->voffset += app.mono.line_height*div;
-        // }
-        //
-        // ASSERT(!view->lines_dirty);
-        // view->line_offset = MIN(view->line_offset, view->lines.count - 3);
-        //
+    }
+
+    View *view = app.current_view;
+    if (get_input_edge(UNDO, app.input.edit)) buffer_undo(view->buffer);
+    if (get_input_edge(REDO, app.input.edit)) buffer_redo(view->buffer);
+
+    if (get_input_edge(PASTE, app.input.edit)) {
+        write_string(view, view->buffer, read_clipboard_str(scratch), VIEW_SET_MARK);
+    }
+
+    for (TextEvent text; get_input_text(TEXT_INPUT, &text, app.input.insert);) {
+        write_string(view, view->buffer, String{ (char*)&text.c[0], text.length });
         app.animating = true;
-        break;
-    default: break;
+    }
+
+    if (get_input_edge(COPY_RANGE, app.input.edit)) {
+        ASSERT(!view->lines_dirty);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+        set_clipboard_data(buffer_read(view->buffer, r.start, r.end, scratch));
+    }
+
+    if (get_input_edge(DELETE_RANGE, app.input.edit)) {
+        ASSERT(!view->lines_dirty);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+
+        if (r.end != r.start) {
+            BufferHistoryScope h(view->buffer);
+            if (buffer_remove(view->buffer, r.start, r.end)) {
+                view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
+                view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+                view->mark = view->caret;
+                move_view_to_caret(view);
+            }
+        }
+    }
+
+    if (get_input_edge(CUT_RANGE, app.input.edit)) {
+        BufferHistoryScope h(view->buffer);
+
+        ASSERT(!view->lines_dirty);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+        String str = buffer_read(view->buffer, r.start, r.end, scratch);
+        set_clipboard_data(str);
+
+        if (buffer_remove(view->buffer, r.start, r.end)) {
+            view->caret = view->caret.byte_offset > view->mark.byte_offset ? view->mark : view->caret;
+            view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
+            view->mark = view->caret;
+            move_view_to_caret(view);
+        }
     }
 }
 
@@ -2796,11 +2841,9 @@ void update_and_render()
             buffer_history(app.current_view->buffer, { .type = BUFFER_HISTORY_GROUP_END });
             if (app.current_view->mark.byte_offset > app.current_view->caret.byte_offset) app.current_view->mark = app.current_view->caret;
         }
-    }
 
-    app.mode = app.next_mode;
-    // if (app.mode == MODE_INSERT || gui.capture_text[0]) enable_text_input();
-    // else disable_text_input();
+        app.mode = app.next_mode;
+    }
 
     gfx_begin_frame();
     gui_begin_frame();
@@ -2997,6 +3040,11 @@ next_node:;
 
         gui_handle_focus_grabbing(view.gui_id);
         if (gui_clicked(view.gui_id, view.rect)) gui_focus(view.gui_id);
+
+        switch (app.mode) {
+        case MODE_EDIT: gui_input_layer(view.gui_id, app.input.edit); break;
+        case MODE_INSERT: gui_input_layer(view.gui_id, app.input.insert); break;
+        }
 
         gui_push_layout({ .rect = view.rect });
         defer { gui_pop_layout(); };
@@ -3399,12 +3447,13 @@ next_node:;
         }
     }
 
+    gui_end_frame();
+
     Vector3 clear_color = linear_from_sRGB(app.bg);
     glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
     app.animating = text_input_enabled();
-    gui_end_frame();
 
     Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
 
