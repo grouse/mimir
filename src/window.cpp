@@ -23,6 +23,25 @@ struct {
     InputMapId active_map = -1;
 } input{};
 
+String string_from_enum(WindowEventType type) EXPORT
+{
+    switch (type) {
+    case WE_MOUSE_PRESS: return "WE_MOUSE_PRESS";
+    case WE_MOUSE_RELEASE: return "WE_MOUSE_RELEASE";
+    case WE_MOUSE_MOVE: return "WE_MOUSE_MOVE";
+    case WE_MOUSE_WHEEL: return "WE_MOUSE_WHEEL";
+    case WE_KEY_PRESS: return "WE_KEY_PRESS";
+    case WE_KEY_RELEASE: return "WE_KEY_RELEASE";
+    case WE_TEXT: return "WE_TEXT";
+    case WE_RESIZE: return "WE_RESIZE";
+    case WE_QUIT: return "WE_QUIT";
+    case WE_INPUT: return "WE_INPUT";
+    case WE_MAX: return "WE_MAX";
+    }
+
+    return "UNKNOWN";
+}
+
 String string_from_enum(KeyCode_ kc)
 {
     switch (kc) {
@@ -145,6 +164,7 @@ void reset_input_map(InputMapId map_id) INTERNAL
 
 void input_begin_frame() EXPORT
 {
+    if (false) LOG_INFO("beginning input frame");
     if (auto *it = map_find(&input.mouse, EDGE_DOWN); it) *it = 0;
     if (auto *it = map_find(&input.mouse, EDGE_UP); it) *it = 0;
 
@@ -159,6 +179,7 @@ void set_input_map(InputMapId id) EXPORT
 {
     LOG_INFO("switching input map: [%d] %.*s", id, STRFMT(input.maps[id].name));
     reset_input_map(input.active_map);
+    reset_input_map(id);
     input.active_map = id;
     input.layers.count = 0;
 }
@@ -166,6 +187,7 @@ void set_input_map(InputMapId id) EXPORT
 void push_input_layer(InputMapId layer) EXPORT
 {
     PANIC_IF(layer < 0, "Invalid input layer id: %d", layer);
+    if (false) LOG_INFO("pushing input layer: [%d] %.*s", layer, STRFMT(input.maps[layer].name));
     array_add(&input.queued_layers, layer);
 }
 
@@ -440,6 +462,7 @@ bool translate_input_event(
 
     }
 
+    if (false && handled) LOG_INFO("translated input event: %.*s", STRFMT(string_from_enum((WindowEventType)event.type)));
     return handled;
 }
 
