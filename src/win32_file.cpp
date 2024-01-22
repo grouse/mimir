@@ -179,6 +179,7 @@ void list_files(DynamicArray<String> *dst, String dir, String ext, Allocator mem
 
         WIN32_FIND_DATAA ffd{};
         HANDLE ff = FindFirstFileA(f, &ffd);
+        if (ff == INVALID_HANDLE_VALUE) continue;
 
         do {
             if (ffd.cFileName[0] == '.') continue;
