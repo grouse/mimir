@@ -1,8 +1,8 @@
 #ifndef WIN32_OPENGL_H
 #define WIN32_OPENGL_H
 
-#include "platform.h"
-#include "win32_lite.h"
+#include "core/platform.h"
+#include "core/win32_lite.h"
 
 #define WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB             0x20A9
 
@@ -159,7 +159,7 @@ extern "C" {
 }
 
 void* gl_get_proc(const char *name, HMODULE gl_dll);
-void load_opengl_procs(HANDLE gl_dll);
+void load_opengl_procs(HMODULE gl_dll);
 
 #define LOAD_GL_ARB_PROC(proc, dll) proc = (proc##ARB_t*)gl_get_proc(#proc "ARB", dll)
 #define LOAD_GL_PROC(proc, dll) proc = (proc##_t*)gl_get_proc(#proc, dll)

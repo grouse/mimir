@@ -1,11 +1,11 @@
 #ifndef GFX_OPENGL_H
 #define GFX_OPENGL_H
 
-#include "maths.h"
-#include "array.h"
+#include "core/maths.h"
+#include "core/array.h"
 
 #if defined(_WIN32)
-#include "win32_lite.h"
+#include "core/win32_lite.h"
 #include "win32_opengl.h"
 #elif defined(__linux__)
 #include "linux_opengl.h"

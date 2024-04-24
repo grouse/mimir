@@ -1,11 +1,11 @@
 #include "font.h"
 
-#include "core.h"
-#include "platform.h"
-#include "maths.h"
+#include "core/core.h"
+#include "core/platform.h"
+#include "core/maths.h"
+#include "core/file.h"
 #include "assets.h"
 #include "gfx_opengl.h"
-#include "file.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_malloc(x,u)  ((void)(u),malloc(x))

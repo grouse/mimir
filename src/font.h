@@ -8,8 +8,8 @@
 
 #include "stb/stb_truetype.h"
 
-#include "string.h"
-#include "hash_table.h"
+#include "core/string.h"
+#include "core/hash_table.h"
 #include "gfx_opengl.h"
 
 struct Glyph {

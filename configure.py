@@ -135,17 +135,21 @@ include_path(mimir, "$root/external")
 
 cxx(mimir, "assets.cpp")
 cxx(mimir, "font.cpp")
-cxx(mimir, "core.cpp")
-cxx(mimir, "memory.cpp")
-cxx(mimir, "string.cpp")
 
 meta(mimir, "gui.cpp")
 meta(mimir, "window.cpp")
 meta(mimir, "font.cpp")
 meta(mimir, "assets.cpp")
-meta(mimir, "maths.cpp")
-meta(mimir, "string.cpp")
 
+cxx(mimir, "core/core.cpp")
+cxx(mimir, "core/memory.cpp")
+cxx(mimir, "core/string.cpp")
+cxx(mimir, "core/thread.cpp")
+cxx(mimir, "core/file.cpp")
+cxx(mimir, "core/maths.cpp")
+
+meta(mimir, "core/maths.cpp")
+meta(mimir, "core/string.cpp")
 
 if args.render == "opengl":
     define(mimir, "GFX_OPENGL")
@@ -163,9 +167,6 @@ if target_os == "win32":
     cxx(mimir, "win32_mimir.cpp")
     cxx(mimir, "win32_opengl.cpp")
     cxx(mimir, "win32_window.cpp")
-    cxx(mimir, "win32_file.cpp")
-    cxx(mimir, "win32_memory.cpp")
-    cxx(mimir, "win32_thread.cpp")
 
     lib(mimir, "user32")
     lib(mimir, "shell32")
@@ -176,9 +177,6 @@ if target_os == "win32":
 if target_os == "linux":
     cxx(mimir, "linux_opengl.cpp")
     cxx(mimir, "linux_window.cpp")
-    cxx(mimir, "linux_file.cpp")
-    cxx(mimir, "linux_memory.cpp")
-    cxx(mimir, "linux_thread.cpp")
 
     lib(mimir, "X11")
     lib(mimir, "Xi")

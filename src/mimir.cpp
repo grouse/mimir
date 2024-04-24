@@ -1,11 +1,10 @@
-#include "platform.h"
-#include "core.h"
-#include "maths.h"
-#include "memory.h"
+#include "core/platform.h"
+#include "core/core.h"
+#include "core/maths.h"
+#include "core/memory.h"
 #include "window.h"
 #include "process.h"
 
-#include "maths.cpp"
 #include "gui.cpp"
 #include "fzy.cpp"
 

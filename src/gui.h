@@ -1,13 +1,13 @@
 #ifndef GUI_H
 #define GUI_H
 
-#include "maths.h"
-#include "array.h"
-#include "string.h"
+#include "core/maths.h"
+#include "core/array.h"
+#include "core/string.h"
 #include "window.h"
 #include "assets.h"
 #include "font.h"
-#include "core.h"
+#include "core/core.h"
 
 #include <initializer_list>
 

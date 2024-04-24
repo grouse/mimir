@@ -1,13 +1,13 @@
 #include "win32_opengl.h"
 #include "window.h"
-#include "hash_table.h"
-#include "maths.h"
-#include "array.h"
+#include "core/hash_table.h"
+#include "core/maths.h"
+#include "core/array.h"
 
-#include "win32_user32.h"
-#include "win32_lite.h"
-#include "win32_core.h"
-#include "win32_gdi32.h"
+#include "core/win32_user32.h"
+#include "core/win32_lite.h"
+#include "core/win32_core.h"
+#include "core/win32_gdi32.h"
 
 
 struct {
@@ -714,7 +714,7 @@ AppWindow* create_window(WindowCreateDesc desc)
 
     wglMakeCurrent(dummy_hdc, dummy_glrc);
 
-    HANDLE gl_dll = LoadLibraryA("opengl32.dll");
+    HMODULE gl_dll = LoadLibraryA("opengl32.dll");
     LOAD_GL_ARB_PROC(wglChoosePixelFormat, gl_dll);
     LOAD_GL_ARB_PROC(wglCreateContextAttribs, gl_dll);
 

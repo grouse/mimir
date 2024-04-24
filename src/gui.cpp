@@ -5,13 +5,13 @@
 #include "gen/gfx_opengl.h"
 #include "gen/window.h"
 
-#include "core.h"
-#include "file.h"
+#include "core/core.h"
+#include "core/file.h"
 #include "assets.h"
-#include "array.h"
-#include "memory.h"
+#include "core/array.h"
+#include "core/memory.h"
 #include "window.h"
-#include "maths.h"
+#include "core/maths.h"
 
 #define GUI_DEBUG_HOT 0
 #define GUI_DEBUG_PRESSED 0
@@ -411,6 +411,10 @@ GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size) INTERNAL
 
 void init_gui() EXPORT
 {
+    gui.vertices.alloc = mem_frame;
+    gui.layout_stack.alloc = mem_frame;
+    gui.overlay_rects.alloc = mem_frame;
+
     array_add(&gui.id_stack, { 0xdeadbeef });
 
     glGenBuffers(1, &gui.vbo);
@@ -725,14 +729,14 @@ void gui_begin_frame() EXPORT
     gui_push_command_buffer();
 
     for (GuiWindow &wnd : gui.windows) {
-        array_reset(&wnd.command_buffer.commands, mem_frame, wnd.command_buffer.commands.capacity);
+        array_reset(&wnd.command_buffer.commands, wnd.command_buffer.commands.capacity);
         wnd.state.was_active = wnd.state.active;
         wnd.state.active = false;
     }
 
-    array_reset(&gui.vertices, mem_frame, gui.vertices.count);
-    array_reset(&gui.layout_stack, mem_frame, gui.layout_stack.count);
-    array_reset(&gui.overlay_rects, mem_frame, gui.overlay_rects.count);
+    array_reset(&gui.vertices, gui.vertices.count);
+    array_reset(&gui.layout_stack, gui.layout_stack.count);
+    array_reset(&gui.overlay_rects, gui.overlay_rects.count);
 
     // NOTE(jesper): when resolution changes the root and overlay "windows" have to adjust their
     // clip rects as well

@@ -1,11 +1,11 @@
 #include "win32_opengl.h"
-#include "win32_gdi32.h"
+#include "core/win32_gdi32.h"
 
-#include "core.h"
-#include "maths.h"
+#include "core/core.h"
+#include "core/maths.h"
 
-#include "win32_lite.h"
-#include "win32_core.h"
+#include "core/win32_lite.h"
+#include "core/win32_core.h"
 
 void* gl_get_proc(const char *name, HMODULE gl_dll)
 {
@@ -14,7 +14,7 @@ void* gl_get_proc(const char *name, HMODULE gl_dll)
     return proc;
 }
 
-void load_opengl_procs(HANDLE gl_dll)
+void load_opengl_procs(HMODULE gl_dll)
 {
     LOAD_GL_ARB_PROC(wglGetExtensionsString, gl_dll);
 

@@ -224,6 +224,8 @@ void init_gfx(Vector2 resolution) EXPORT
         glEnable(GL_DEBUG_OUTPUT);
     }
 
+    gfx.frame_vertices.alloc = mem_frame;
+
     glDebugMessageCallback(gl_debug_proc, nullptr);
     gfx_change_resolution(resolution);
 
@@ -687,7 +689,7 @@ void gfx_draw_line_rect(Vector2 tl, Vector2 size, Vector3 color, GfxCommandBuffe
 
 void gfx_begin_frame() EXPORT
 {
-    array_reset(&gfx.frame_vertices, mem_frame, gfx.frame_vertices.count);
+    array_reset(&gfx.frame_vertices, gfx.frame_vertices.count);
     gfx_reset_command_buffer(&gfx.frame_cmdbuf);
 }
 
@@ -700,7 +702,7 @@ void gfx_flush_transfers() EXPORT
 
 void gfx_reset_command_buffer(GfxCommandBuffer *cmdbuf) EXPORT
 {
-    array_reset(&cmdbuf->commands, mem_frame, cmdbuf->commands.count);
+    array_reset(&cmdbuf->commands, cmdbuf->commands.count);
 }
 
 GfxCommandBuffer gfx_command_buffer() EXPORT
@@ -820,53 +822,6 @@ void gfx_submit_commands(GfxCommandBuffer cmdbuf, Matrix3 view) EXPORT
             break;
         }
     }
-}
-
-Vector3 rgb_unpack(u32 argb) EXPORT
-{
-    Vector3 rgb;
-    rgb.r = ((argb >> 16) & 0xFF) / 255.0f;
-    rgb.g = ((argb >> 8) & 0xFF) / 255.0f;
-    rgb.b = ((argb >> 0) & 0xFF) / 255.0f;
-    return rgb;
-}
-
-Vector4 argb_unpack(u32 argb) EXPORT
-{
-    Vector4 v;
-    v.r = ((argb >> 16) & 0xFF) / 255.0f;
-    v.g = ((argb >> 8) & 0xFF) / 255.0f;
-    v.b = ((argb >> 0) & 0xFF) / 255.0f;
-    v.a = ((argb >> 24) & 0xFF) / 255.0f;
-    return v;
-}
-
-f32 linear_from_sRGB(f32 s) EXPORT
-{
-    if (s <= 0.04045f) {
-        return s / 12.92f;
-    } else {
-        return powf((s + 0.055f) / (1.055f), 2.4f);
-    }
-}
-
-Vector3 linear_from_sRGB(Vector3 sRGB) EXPORT
-{
-    Vector3 l;
-    l.r = linear_from_sRGB(sRGB.r);
-    l.g = linear_from_sRGB(sRGB.g);
-    l.b = linear_from_sRGB(sRGB.b);
-    return l;
-}
-
-Vector4 linear_from_sRGB(Vector4 sRGB) EXPORT
-{
-    Vector4 l;
-    l.r = linear_from_sRGB(sRGB.r);
-    l.g = linear_from_sRGB(sRGB.g);
-    l.b = linear_from_sRGB(sRGB.b);
-    l.a = sRGB.a;
-    return l;
 }
 
 GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height) EXPORT

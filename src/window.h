@@ -1,8 +1,8 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
-#include "string.h"
-#include "maths.h"
+#include "core/string.h"
+#include "core/maths.h"
 
 #include <initializer_list>
 

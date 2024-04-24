@@ -1,6 +1,6 @@
 #include "window.h"
-#include "string.h"
-#include "array.h"
+#include "core/string.h"
+#include "core/array.h"
 
 struct InputMap {
     String name;

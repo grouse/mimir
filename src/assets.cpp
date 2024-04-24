@@ -1,10 +1,10 @@
 #include "assets.h"
-#include "file.h"
+#include "core/file.h"
 #include "gfx_opengl.h"
-#include "hash_table.h"
+#include "core/hash_table.h"
 
 #include "stb/stb_image.h"
-#include "core.h"
+#include "core/core.h"
 
 #include "gen/string.h"
 
