@@ -1,0 +1,3 @@
+[submodule "tools/enki"]
+	path = tools/enki
+	url = git@github.com:grouse/enki.git
