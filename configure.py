@@ -152,6 +152,7 @@ cxx(mimir, "core/string.cpp")
 cxx(mimir, "core/thread.cpp")
 cxx(mimir, "core/file.cpp")
 cxx(mimir, "core/maths.cpp")
+cxx(mimir, "core/process.cpp")
 
 meta(mimir, "core/maths.cpp")
 meta(mimir, "core/string.cpp")
@@ -171,7 +172,6 @@ if args.render == "opengl":
 if target_os == "win32":
     cxx(mimir, "win32_main.cpp")
     cxx(mimir, "win32_opengl.cpp")
-    cxx(mimir, "win32_process.cpp")
 
     lib(mimir, "user32")
     lib(mimir, "shell32")
@@ -182,7 +182,6 @@ if target_os == "win32":
 if target_os == "linux":
     cxx(mimir, "linux_main.cpp")
     cxx(mimir, "linux_opengl.cpp")
-    cxx(mimir, "linux_process.cpp")
 
     lib(mimir, "X11")
     lib(mimir, "Xi")

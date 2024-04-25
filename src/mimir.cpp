@@ -1,9 +1,9 @@
 #include "core/platform.h"
 #include "core/core.h"
 #include "core/maths.h"
+#include "core/process.h"
 #include "core/memory.h"
 #include "window.h"
-#include "process.h"
 
 #include "gui.cpp"
 #include "fzy.cpp"
