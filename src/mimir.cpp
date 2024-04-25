@@ -464,6 +464,48 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
     return lang_range_map;
 }
 
+void ts_update_buffer(Buffer *buffer, TSInputEdit edit)
+{
+    SArena scratch = tl_scratch_arena();
+
+    if (auto lang = app.languages[buffer->language]; lang) {
+        if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
+        for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
+
+        TSParser *parser = ts_parser_new();
+        defer { ts_parser_delete(parser); };
+        ts_parser_set_language(parser, lang);
+        buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
+
+        if (auto inj = app.injections[buffer->language]; inj) {
+            HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
+            for (i32 i = 0; i < lang_range_map.capacity; i++) {
+                auto kv = lang_range_map.slots[i];
+                if (!kv.occupied) continue;
+
+                ts_parser_set_language(parser, app.languages[kv.key]);
+                ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
+
+                SyntaxTree *existing = nullptr;
+                for (auto &st : buffer->subtrees) {
+                    if (st.language == kv.key) {
+                        existing = &st;
+                        break;
+                    }
+                }
+
+                if (existing) {
+                    existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
+                } else {
+                    TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
+                    array_add(&buffer->subtrees, { (Language)kv.key, subtree });
+                }
+            }
+        }
+    }
+}
+
+
 void get_syntax_colors(
     DynamicArray<RangeColor> *colors,
     i64 byte_start,
@@ -1571,49 +1613,11 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
                     view.buffer);
             }
 
-            if (auto lang = app.languages[buffer->language]; lang) {
-
-                TSInputEdit edit{
-                    .start_byte = (u32)byte_start,
-                    .old_end_byte = (u32)byte_end,
-                    .new_end_byte = (u32)byte_start,
-                };
-
-                if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
-                for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
-
-                TSParser *parser = ts_parser_new();
-                defer { ts_parser_delete(parser); };
-                ts_parser_set_language(parser, lang);
-                buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
-
-                if (auto inj = app.injections[buffer->language]; inj) {
-                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
-                    for (i32 i = 0; i < lang_range_map.capacity; i++) {
-                        auto kv = lang_range_map.slots[i];
-                        if (!kv.occupied) continue;
-
-                        ts_parser_set_language(parser, app.languages[kv.key]);
-                        ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
-
-                        SyntaxTree *existing = nullptr;
-                        for (auto &st : buffer->subtrees) {
-                            if (st.language == kv.key) {
-                                existing = &st;
-                                break;
-                            }
-                        }
-
-                        if (existing) {
-                            existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
-                        } else {
-                            TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
-                            array_add(&buffer->subtrees, { (Language)kv.key, subtree });
-                        }
-                    }
-                }
-
-            }
+            ts_update_buffer(buffer, {
+                .start_byte = (u32)byte_start,
+                .old_end_byte = (u32)byte_end,
+                .new_end_byte = (u32)byte_start,
+            });
         } break;
     }
 
@@ -1885,46 +1889,11 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                     view.buffer);
             }
 
-            if (auto lang = app.languages[buffer->language]; lang) {
-                    TSInputEdit edit{
-                        .start_byte = (u32)offset,
-                        .old_end_byte = (u32)offset,
-                        .new_end_byte = (u32)(offset+required_extra_space),
-                    };
-                if (buffer->syntax_tree) ts_tree_edit(buffer->syntax_tree, &edit);
-                for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
-
-                TSParser *parser = ts_parser_new();
-                defer { ts_parser_delete(parser); };
-                ts_parser_set_language(parser, lang);
-                buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
-
-                if (auto inj = app.injections[buffer->language]; inj) {
-                    HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
-                    for (i32 i = 0; i < lang_range_map.capacity; i++) {
-                        auto kv = lang_range_map.slots[i];
-                        if (!kv.occupied) continue;
-
-                        ts_parser_set_language(parser, app.languages[kv.key]);
-                        ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
-
-                        SyntaxTree *existing = nullptr;
-                        for (auto &st : buffer->subtrees) {
-                            if (st.language == kv.key) {
-                                existing = &st;
-                                break;
-                            }
-                        }
-
-                        if (existing) {
-                            existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
-                        } else {
-                            TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
-                            array_add(&buffer->subtrees, { (Language)kv.key, subtree });
-                        }
-                    }
-                }
-            }
+            ts_update_buffer(buffer, {
+                .start_byte = (u32)offset,
+                .old_end_byte = (u32)offset,
+                .new_end_byte = (u32)(offset+required_extra_space),
+            });
         } break;
     }
 
