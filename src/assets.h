@@ -6,6 +6,13 @@
 #include "core/array.h"
 #include "gfx_opengl.h"
 
+#define ASSET_LOAD_PROC(name)\
+    void* name(\
+        AssetHandle handle,\
+        void *existing,\
+        String identifier,\
+        u8 *data, i32 size)\
+
 struct Asset;
 
 struct AssetHandle {

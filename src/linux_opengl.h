@@ -1,7 +1,7 @@
 #ifndef LINUX_OPENGL_H
 #define LINUX_OPENGL_H
 
-#include "platform.h"
+#include "core/platform.h"
 
 #define GL_TRUE 1
 #define GL_FALSE 0

@@ -79,4 +79,6 @@ void load_opengl_procs(HMODULE gl_dll)
 
     LOAD_GL_PROC(glMemoryBarrier, gl_dll);
 
+    LOAD_GL_PROC(wglSwapIntervalEXT, gl_dll);
+    LOAD_GL_PROC(wglGetSwapIntervalEXT, gl_dll);
 }

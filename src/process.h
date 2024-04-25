@@ -1,7 +1,7 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
-#include "string.h"
+#include "core/string.h"
 
 struct Process;
 

@@ -8,9 +8,7 @@
 #include "gui.cpp"
 #include "fzy.cpp"
 
-#include "gen/string.h"
-#include "gen/font.h"
-#include "gen/assets.h"
+#include "gen/internal/mimir.h"
 
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
@@ -199,6 +197,7 @@ struct View {
 };
 
 struct Application {
+    AppWindow *wnd;
     FontAtlas mono;
     bool animating = true;
 
@@ -292,6 +291,8 @@ String buffer_newline_str(Buffer *buffer)
     case NEWLINE_LFCR: return "\n\r";
     }
 }
+
+Allocator mem_frame;
 
 Application app{};
 DynamicArray<Buffer> buffers{};
@@ -824,9 +825,19 @@ void view_set_buffer(View *view, BufferId buffer)
     view->lines_dirty = true;
 }
 
-void init_app(Array<String> args)
+int app_main(Array<String> args)
 {
     SArena scratch = tl_scratch_arena();
+
+    Vector2i resolution{ 1280, 720 };
+    if (i32 data[2];
+        parse_cmd_argument(args.data, args.count, "--resolution", data))
+    {
+        resolution[0] = data[0];
+        resolution[1] = data[1];
+    }
+
+    app.wnd = create_window({"mimir", resolution.x, resolution.y });
 
     fzy_init_table();
 
@@ -839,6 +850,10 @@ void init_app(Array<String> args)
         ASSETS_DIR,
     };
 
+    extern ASSET_LOAD_PROC(gfx_load_texture_asset);
+    extern ASSET_LOAD_PROC(gfx_load_shader_asset);
+    extern ASSET_LOAD_PROC(load_string_asset);
+
     init_assets(
         { asset_folders, ARRAY_COUNT(asset_folders) },
         AssetTypesDesc{ .types = {
@@ -847,6 +862,7 @@ void init_app(Array<String> args)
             { ".glsl", typeid(ShaderAsset),  &gfx_load_shader_asset,  nullptr },
         }});
 
+    init_gfx(get_client_resolution(app.wnd));
     init_gui();
 
     init_input_map(app.input.edit, {
@@ -971,6 +987,24 @@ void init_app(Array<String> args)
     }
 
     debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
+
+
+    u64 last_time, current_time = wall_timestamp();
+    while (true) {
+        RESET_ALLOC(mem_frame);
+
+        gfx_begin_frame();
+
+        last_time = current_time;
+        current_time = wall_timestamp();
+        //f32 dt = wall_duration_s(last_time, current_time);
+
+        app_gather_input(app.wnd);
+        update_and_render();
+        present_window(app.wnd);
+    }
+
+    return 0;
 }
 
 bool app_change_resolution(Vector2 resolution)
@@ -2376,17 +2410,14 @@ void exec_process_command()
     }
 }
 
-void update_and_render();
-
-void app_gather_input(AppWindow *wnd)
+void app_gather_input(AppWindow *wnd) INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
     input_begin_frame();
     if (!app_needs_render()) wait_for_next_event(wnd);
 
-    WindowEvent event;
-    while (next_event(wnd, &event)) {
+    for (WindowEvent event; next_event(wnd, &event);) {
         gui_input(event);
 
         View *view = app.current_view;
@@ -2412,29 +2443,25 @@ void app_gather_input(AppWindow *wnd)
                 present_window(wnd);
             }
             break;
-        case WE_INPUT:
-            switch (event.input.id) {
-            case INSERT_MODE:
-                app.next_mode = MODE_INSERT;
-                app.current_view->mark = app.current_view->caret;
-                break;
-            case EDIT_MODE:
-                app.next_mode = MODE_EDIT;
-                break;
-            case SAVE:
-                buffer_save(app.current_view->buffer);
-                break;
-            case FUZZY_FIND_FILE:
-                app.lister.active = true;
-                app.lister.selected_item = 0;
+        case INSERT_MODE:
+            app.next_mode = MODE_INSERT;
+            app.current_view->mark = app.current_view->caret;
+            break;
+        case EDIT_MODE:
+            app.next_mode = MODE_EDIT;
+            break;
+        case SAVE:
+            buffer_save(app.current_view->buffer);
+            break;
+        case FUZZY_FIND_FILE:
+            app.lister.active = true;
+            app.lister.selected_item = 0;
 
-                for (String s : app.lister.values) FREE(mem_dynamic, s.data);
-                app.lister.values.count = 0;
+            for (String s : app.lister.values) FREE(mem_dynamic, s.data);
+            app.lister.values.count = 0;
 
-                list_files(&app.lister.values, "./", mem_dynamic, FILE_LIST_RECURSIVE);
-                array_copy(&app.lister.filtered, app.lister.values);
-                break;
-            }
+            list_files(&app.lister.values, "./", mem_dynamic, FILE_LIST_RECURSIVE);
+            array_copy(&app.lister.filtered, app.lister.values);
             break;
 
         case WE_KEY_PRESS:
@@ -2787,13 +2814,13 @@ void app_gather_input(AppWindow *wnd)
 
     if (get_input_edge(COPY_RANGE, app.input.edit)) {
         ASSERT(!view->lines_dirty);
-        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, false);
         set_clipboard_data(buffer_read(view->buffer, r.start, r.end, scratch));
     }
 
     if (get_input_edge(DELETE_RANGE, app.input.edit)) {
         ASSERT(!view->lines_dirty);
-        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, false);
 
         if (r.end != r.start) {
             BufferHistoryScope h(view->buffer);
@@ -2810,7 +2837,7 @@ void app_gather_input(AppWindow *wnd)
         BufferHistoryScope h(view->buffer);
 
         ASSERT(!view->lines_dirty);
-        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, event.key.modifiers == MF_CTRL);
+        Range_i64 r = caret_range(view->caret, view->mark, view->lines, view->buffer, false);
         String str = buffer_read(view->buffer, r.start, r.end, scratch);
         set_clipboard_data(str);
 
@@ -2823,7 +2850,7 @@ void app_gather_input(AppWindow *wnd)
     }
 }
 
-void update_and_render()
+void update_and_render() INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
@@ -3045,7 +3072,7 @@ next_node:;
         case MODE_INSERT: gui_input_layer(view.gui_id, app.input.insert); break;
         }
 
-        gui_push_layout({ .rect = view.rect });
+        gui_push_layout({ view.rect });
         defer { gui_pop_layout(); };
 
         BufferId active_buffer = view.buffer;

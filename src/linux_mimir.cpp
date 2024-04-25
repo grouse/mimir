@@ -1,30 +1,36 @@
 #include "linux_opengl.h"
 #include "mimir.cpp"
 
-#include "linux_opengl.cpp"
 #include "linux_process.cpp"
-#include "linux_thread.cpp"
-#include "linux_file.cpp"
 
 #include "external/MurmurHash/MurmurHash3.cpp"
 
+#include <unistd.h>
+
 Allocator mem_frame;
+String exe_path;
 
 int main(int argc, char **argv)
 {
 	init_default_allocators();
 	mem_frame = linear_allocator(100*1024*1024);
-	init_core(argc, argv);
 
+	char *p = last_of(argv[0], '/');
+	if (argv[0][0] == '/') {
+		exe_path = { argv[0], (i32)(p-argv[0]) };
+	} else {
+		char buffer[PATH_MAX];
+		char *wd = getcwd(buffer, sizeof buffer);
+		PANIC_IF(wd == nullptr, "current working dir exceeds PATH_MAX");
+
+		exe_path = join_path(
+			{ wd, (i32)strlen(wd) },
+			{ argv[0], (i32)(p-argv[0]) },
+			mem_dynamic);
+	}
 
     Vector2 resolution{ 1024, 720 };
-
-    LinuxWindow wnd = create_opengl_window("plumber", resolution);
-    load_opengl_procs();
-    init_clipboard(wnd.dsp, wnd.handle);
-
-	core.cursors[MC_NORMAL] = XCreateFontCursor(wnd.dsp, XC_left_ptr);
-	core.cursors[MC_SIZE_NW_SE] = XCreateFontCursor(wnd.dsp, XC_bottom_right_corner);
+    AppWindow *wnd = create_window({"plumber", i32(resolution.x), i32(resolution.y) });
 
 	Array<String> args{};
 	if (argc > 1) {
@@ -34,78 +40,25 @@ int main(int argc, char **argv)
 		}
 	}
 
-    init_gfx(resolution);
     init_app(args);
 
-    timespec last_time = monotonic_time();
+    u64 last_time, current_time = wall_timestamp();
 
     DynamicArray<WindowEvent> input_stream{};
     array_reserve(&input_stream, 2);
 
     while (true) {
-        timespec current_time = monotonic_time();
-        i64 elapsed = time_difference(last_time, current_time);
-        last_time = current_time;
-
-        f32 dt = (i32)elapsed / 1000000000.0f;
-        (void)dt;
-
-        RESET_ALLOC(mem_tmp);
         RESET_ALLOC(mem_frame);
 
-        g_mouse.left_was_pressed = g_mouse.left_pressed;
+        last_time = current_time;
+        current_time = wall_timestamp();
+        f32 dt = wall_duration_s(last_time, current_time);
 
-        XEvent event;
-        while (XPending(wnd.dsp)) {
-            XNextEvent(wnd.dsp, &event);
+        (void)dt;
 
-			input_stream.count = 0;
-			linux_input_event(&input_stream, wnd.ic, event);
-			for (WindowEvent e : input_stream) app_event(e);
-
-            switch (event.type) {
-            case PropertyNotify: {
-                    char *name = XGetAtomName(wnd.dsp, event.xproperty.atom);
-                    if (name) {
-                        LOG_INFO(
-                            "window %p: PropertyNotify: %s %s time=%lu",
-                            wnd, name,
-                            (event.xproperty.state == PropertyDelete) ? "deleted" : "changed",
-                            event.xproperty.time);
-                        XFree(name);
-                    }
-                } break;
-            case MotionNotify: {
-                    g_mouse.dx = event.xmotion.x - g_mouse.x;
-                    g_mouse.dy = event.xmotion.y - g_mouse.y;
-                    g_mouse.x = event.xmotion.x;
-                    g_mouse.y = event.xmotion.y;
-                } break;
-            case ButtonPress:
-                if (event.xbutton.button == 1) {
-                    g_mouse.left_pressed = true;
-                }
-                break;
-            case ButtonRelease:
-                if (event.xbutton.button == 1) {
-                    g_mouse.left_pressed = false;
-                }
-                break;
-            }
-        }
-
-        gui.mouse.x = g_mouse.x;
-        gui.mouse.y = g_mouse.y;
-        gui.mouse.dx = g_mouse.dx;
-        gui.mouse.dy = g_mouse.dy;
-        gui.mouse.left_pressed = g_mouse.left_pressed;
-        gui.mouse.left_was_pressed = g_mouse.left_was_pressed;
-
+        app_gather_input(wnd);
         update_and_render();
-        glXSwapBuffers(wnd.dsp, wnd.handle);
-
-        XDefineCursor(wnd.dsp, wnd.handle, core.cursors[core.current_cursor]);
-        set_cursor(MC_NORMAL);
+        present_window(wnd);
     }
 
     return 0;

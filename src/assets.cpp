@@ -6,7 +6,7 @@
 #include "stb/stb_image.h"
 #include "core/core.h"
 
-#include "gen/string.h"
+#include "gen/core/string.h"
 
 i32 next_asset_type_id = 0;
 

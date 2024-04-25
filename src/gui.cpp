@@ -151,13 +151,13 @@ void gui_pop_layout() EXPORT
         parent && parent->flags & EXPAND_XY)
     {
         if (parent->flags & EXPAND_X) {
-            parent->rect.tl.x = MAX(parent->rect.tl.x, layout->rect.tl.x);
-            parent->rect.br.x = MAX(parent->rect.br.x, parent->rect.tl.x);
+            parent->rem.tl.x = MAX(parent->rem.tl.x, layout->rem.tl.x);
+            parent->rem.br.x = MAX(parent->rem.br.x, parent->rem.tl.x);
         }
 
         if (parent->flags & EXPAND_Y) {
-            parent->rect.tl.y = MAX(parent->rect.tl.y, layout->rect.tl.y);
-            parent->rect.br.y = MAX(parent->rect.br.y, parent->rect.tl.y);
+            parent->rem.tl.y = MAX(parent->rem.tl.y, layout->rem.tl.y);
+            parent->rem.br.y = MAX(parent->rem.br.y, parent->rem.tl.y);
         }
     }
 
@@ -242,28 +242,28 @@ LayoutRect expand_rect(LayoutRect *layout, f32 amount) EXPORT { return expand_re
 LayoutRect shrink_rect(LayoutRect *layout, Vector2 amount) EXPORT
 {
     LayoutRect result = *layout;
-    result.rect = shrink_rect(&layout->rect, amount);
+    result.rem = shrink_rect(&layout->rem, amount);
     return result;
 }
 
 LayoutRect expand_rect(LayoutRect *layout, Vector2 amount) EXPORT
 {
     if (layout->flags & EXPAND_X) {
-        f32 diff = amount.x - (layout->rect.br.x - layout->rect.tl.x);
-        if (diff > 0) layout->rect.br.x += diff;
+        f32 diff = amount.x - (layout->rem.br.x - layout->rem.tl.x);
+        if (diff > 0) layout->rem.br.x += diff;
     } else {
-        amount.x = MIN(amount.x, layout->rect.br.x-layout->rect.tl.x);
+        amount.x = MIN(amount.x, layout->rem.br.x-layout->rem.tl.x);
     }
 
     if (layout->flags & EXPAND_Y) {
-        f32 diff = amount.y - (layout->rect.br.y - layout->rect.tl.y);
-        if (diff > 0) layout->rect.br.y += diff;
+        f32 diff = amount.y - (layout->rem.br.y - layout->rem.tl.y);
+        if (diff > 0) layout->rem.br.y += diff;
     } else {
-        amount.y = MIN(amount.y, layout->rect.br.x-layout->rect.tl.x);
+        amount.y = MIN(amount.y, layout->rem.br.x-layout->rem.tl.x);
     }
 
     LayoutRect result = *layout;
-    result.rect = shrink_rect(&layout->rect, amount);
+    result.rem = shrink_rect(&layout->rem, amount);
     return result;
 }
 
@@ -309,7 +309,7 @@ LayoutRect split_row(LayoutRect *layout, SplitDesc desc) EXPORT
 
 LayoutRect make_layout_rect(SplitDesc desc, Rect rect) INTERNAL
 {
-    LayoutRect result{ rect, .flags = desc.rflags };
+    LayoutRect result{ rect, desc.rflags };
     if (desc.margin) shrink_rect(&result, desc.margin);
     return result;
 }
@@ -318,7 +318,7 @@ LayoutRect split_row_internal(LayoutRect *layout, SplitDesc desc) INTERNAL
 {
     desc.rflags |= SPLIT_COL;
 
-    f32 height = desc.factor > 0 ? MAX(desc.h, desc.factor*layout->bsize().y) : desc.h;
+    f32 height = desc.factor > 0 ? MAX(desc.h, desc.factor*layout->bounds.size().y) : desc.h;
     if (height == 0) height = layout->size().y;
 
     f32 width = MAX(desc._w, layout->size().x);
@@ -327,21 +327,21 @@ LayoutRect split_row_internal(LayoutRect *layout, SplitDesc desc) INTERNAL
     if (layout->flags & EXPAND_Y) {
         // TODO(jesper): expand_top/bottom(&layout->rect, diff) ?
         f32 diff = height - layout->size().y;
-        if (diff > 0) layout->rect.br.y += diff;
+        if (diff > 0) layout->rem.br.y += diff;
     } else {
         height = MIN(height, layout->size().y);
     }
 
     if (layout->flags & EXPAND_X) {
         f32 diff = width - layout->size().x;
-        if (diff > 0) layout->rect.br.x += diff;
+        if (diff > 0) layout->rem.br.x += diff;
     } else {
         width = MIN(width, layout->size().x);
     }
 
     Rect rect;
-    if (desc.flags & SPLIT_BOTTOM) rect = split_bottom(&layout->rect, height);
-    else rect = split_top(&layout->rect, height);
+    if (desc.flags & SPLIT_BOTTOM) rect = split_bottom(&layout->rem, height);
+    else rect = split_top(&layout->rem, height);
     // TODO(jesper): LAYOUT_ALIGN if width < layout->size().x
     rect.br.x = rect.tl.x + width;
 
@@ -352,7 +352,7 @@ LayoutRect split_col_internal(LayoutRect *layout, SplitDesc desc) INTERNAL
 {
     desc.rflags &= ~SPLIT_COL;
 
-    f32 width = desc.factor > 0 ? MAX(desc.w, desc.factor*layout->bsize().x) : desc.w;
+    f32 width = desc.factor > 0 ? MAX(desc.w, desc.factor*layout->bounds.size().x) : desc.w;
     if (width == 0) width = layout->size().x;
 
     f32 height = MAX(desc._h, layout->size().y);
@@ -361,22 +361,22 @@ LayoutRect split_col_internal(LayoutRect *layout, SplitDesc desc) INTERNAL
     f32 diff = width - layout->size().x;
     if (layout->flags & EXPAND_X && diff > 0) {
         // TODO(jesper): expand_left/right(&layout->rect, diff) ?
-        if (layout->flags & SPLIT_RIGHT) layout->rect.tl.x -= diff;
-        else layout->rect.br.x += diff;
+        if (layout->flags & SPLIT_RIGHT) layout->rem.tl.x -= diff;
+        else layout->rem.br.x += diff;
     } else {
         width = MIN(width, layout->size().x);
     }
 
     if (layout->flags & EXPAND_Y) {
         f32 diff = height - layout->size().y;
-        if (diff > 0) layout->rect.br.y += diff;
+        if (diff > 0) layout->rem.br.y += diff;
     } else {
         height = MIN(height, layout->size().y);
     }
 
     Rect rect;
-    if (desc.flags & SPLIT_RIGHT) rect = split_right(&layout->rect, width);
-    else rect = split_left(&layout->rect, width);
+    if (desc.flags & SPLIT_RIGHT) rect = split_right(&layout->rem, width);
+    else rect = split_left(&layout->rem, width);
     // TODO(jesper): LAYOUT_ALIGN if height < layout->size().y
     rect.br.y = rect.tl.y + height;
 
@@ -398,11 +398,12 @@ LayoutRect split_rect(LayoutRect *layout, SplitDesc desc) EXPORT
     }
 }
 
-GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size) INTERNAL
+GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size, Vector2 max_size /*= {}*/) INTERNAL
 {
     GuiMenu *menu = map_find_emplace(
         &gui.menus, id, {
-            .size = { MAX(initial_size.x, gui.style.menu.min_width), initial_size.y }
+            .size = { MAX(initial_size.x, gui.style.menu.min_width), initial_size.y },
+            .max_size = max_size,
         });
 
     return menu;
@@ -411,9 +412,10 @@ GuiMenu* gui_find_or_create_menu(GuiId id, Vector2 initial_size) INTERNAL
 
 void init_gui() EXPORT
 {
-    gui.vertices.alloc = mem_frame;
-    gui.layout_stack.alloc = mem_frame;
-    gui.overlay_rects.alloc = mem_frame;
+    PANIC_IF(!mem_frame, "mem_frame not initialised");
+    gui.vertices = { .alloc = mem_frame };
+    gui.layout_stack = { .alloc = mem_frame };
+    gui.overlay_rects = { .alloc = mem_frame };
 
     array_add(&gui.id_stack, { 0xdeadbeef });
 
@@ -433,12 +435,10 @@ void init_gui() EXPORT
         .size = gfx.resolution,
     });
 
-    array_add(&gui.layout_stack, {
-        .rect = { { 0, 0 }, gfx.resolution }
-    });
+    array_add(&gui.layout_stack, { { { 0, 0 }, gfx.resolution } });
 
     gui.fonts.base  = create_font("fonts/Ubuntu/Ubuntu-Regular.ttf", 18);
-    gui.fonts.icons = create_font("fonts/NerdFont/UbuntuNerdFont-Regular.ttf", 18);
+    gui.fonts.icons = create_font("fonts/NerdFont/UbuntuNerdFont-Regular.ttf", 16);
 
     {
         SArena scratch = tl_scratch_arena();
@@ -743,7 +743,7 @@ void gui_begin_frame() EXPORT
     gui.windows[GUI_BACKGROUND].client_rect.br = gfx.resolution;
     gui.windows[GUI_OVERLAY].client_rect.br = gfx.resolution;
 
-    gui_push_layout({ .rect = { { 0, 0 }, gfx.resolution }});
+    gui_push_layout({ { { 0, 0 }, gfx.resolution }});
 }
 
 void gui_end_frame() EXPORT
@@ -863,7 +863,7 @@ void gui_end_frame() EXPORT
 
 void gui_render() EXPORT
 {
-    Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
+    Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0);
 
     gfx_submit_commands(gui.windows[GUI_BACKGROUND].command_buffer, view);
     for (auto &wnd : slice(gui.windows, 2)) gfx_submit_commands(wnd.command_buffer, view);
@@ -893,7 +893,7 @@ void gui_textbox(String str, FontAtlas *font /*= &gui.fonts.base*/) EXPORT
     GlyphsData td = calc_glyphs_data(str, font, scratch);
 
     // TODO(jesper): what I want here is some kind of flag/property on the parent layout that allows a child to query for appropriate row/column dimension to fit. E.g. a row-layout parent with a fixed-height per item, and only if the parent doesn't have such, then it uses the calculated height
-    Rect rect = split_rect({ td.bounds.x, td.bounds.y, .margin = gui.style.margin }).rect;
+    Rect rect = split_rect({ td.bounds.x, td.bounds.y, .margin = gui.style.margin }).rem;
     Vector2 pos{ rect.tl.x, calc_center(rect.tl.y, rect.br.y, font->line_height) };
     gui_draw_text(td, pos, gui.style.fg);
 }
@@ -1070,13 +1070,8 @@ bool gui_checkbox_id(GuiId id, bool *checked, Rect rect) EXPORT
 
 bool gui_checkbox_id(GuiId id, bool *checked) EXPORT
 {
-    bool toggled = false;
-
-    GUI_ROW({ gui.style.checkbox.size+6 }) {
-        toggled = gui_checkbox_id(id, checked, split_col({ gui.style.checkbox.size, .margin = gui.style.margin }));
-    }
-
-    return toggled;
+    Rect rect = split_col({ gui.style.checkbox.size, .margin = gui.style.margin, .flags = SPLIT_SQUARE });
+    return gui_checkbox_id(id, checked, rect);
 }
 
 bool gui_checkbox_id(GuiId id, String label, bool *checked) EXPORT
@@ -1087,7 +1082,7 @@ bool gui_checkbox_id(GuiId id, String label, bool *checked) EXPORT
 
     f32 height = MAX(gui.style.checkbox.size, td.bounds.y);
     LayoutRect layout = split_rect({ td.bounds.x+gui.style.checkbox.size+6, height, .margin = gui.style.margin });
-    Rect rect = layout.rect;
+    Rect rect = layout.rem;
     Rect c_rect = split_col(&layout, { gui.style.checkbox.size, .margin = gui.style.margin, .flags = SPLIT_SQUARE });
     Rect t_rect = split_col(&layout, { td.bounds.x+4*gui.style.margin, c_rect.size().y, .margin = gui.style.margin });
 
@@ -1190,6 +1185,8 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
     GuiAction action = GUI_NONE;
 
     bool was_focused = gui.focused == id;
+    bool was_pressed = gui.pressed == id;
+
     gui_handle_focus_grabbing(id);
 
     gui_hot_rect(id, rect);
@@ -1208,6 +1205,9 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
         memcpy(gui.edit.buffer, initial_string.data, initial_string.length);
         gui.edit.length = initial_string.length;
         gui.edit.offset = gui.edit.cursor = gui.edit.selection = 0;
+
+        gui.edit.cursor = gui.edit.length;
+        gui.edit.selection = 0;
     } else if (gui.focused != id && was_focused) {
         action = GUI_CANCEL;
     }
@@ -1345,17 +1345,16 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
         }
     }
 
-    String str = was_focused ? String{ gui.edit.buffer, gui.edit.length } : initial_string;
+    String str = gui.focused == id ? String{ gui.edit.buffer, gui.edit.length } : initial_string;
     Array<GlyphRect> glyphs = calc_glyph_rects(str, &gui.fonts.base, scratch);
 
     Rect border = shrink_rect(&rect, gui.style.edit.border);
+    Rect text_clip_rect = rect;
     Rect text_rect = rect; shrink_rect(&text_rect, gui.style.edit.margin);
 
-    Rect text_clip_rect = text_rect;
-
     Vector2 text_pos{ text_rect.tl.x, calc_center(text_rect.tl.y, text_rect.br.y, gui.fonts.base.line_height) };
-    Vector2 cursor_pos = text_rect.tl;
-    Vector2 text_pan{};
+
+    f32 text_pan = 0;
 
     Vector3 selection_bg = gui.style.bg_light0;
 
@@ -1366,65 +1365,55 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
     gui_draw_rect(border, border_col);
     gui_draw_rect(rect, bg);
 
-
+    f32 cursor_pos = rect.tl.x;
     if (glyphs.count > 0) {
         i32 offset = gui.focused == id ? gui.edit.offset : 0;
 
         if (gui.focused == id) {
-            text_pan.x = gui.edit.offset < glyphs.count ?
+            text_pan = gui.edit.offset < glyphs.count ?
                 -glyphs[gui.edit.offset].x0 :
                 -glyphs[gui.edit.offset-1].x1;
 
-            if (gui_pressed(id)) {
+            // TODO(jesper): this is incomplete. I need to figure out a good way to determine the difference between widget being pressed as a result of focusing on it, vs being pressed as a result of already being focused and wanting to drag the cursor around. The current get_mouse_input (used by gui_pressed with friends) only check current state of mouse, there's no consumption of decrementing like there are for other edges, and I haven't figured out how I want to handle these things just yet
+            if (was_focused && was_pressed && gui.pressed == id) {
                 i32 new_cursor;
                 for (new_cursor = 0; new_cursor < glyphs.count; new_cursor++) {
                     GlyphRect g = glyphs.data[new_cursor];
-                    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
+                    Vector2 mouse = gui_mouse();
                     Vector2 rel = mouse - rect.tl;
-                    if (rel.x >= g.x0 + text_pan.x && rel.x <= g.x1 + text_pan.x) {
+                    if (rel.x < g.x0+text_pan || (rel.x >= g.x0+text_pan && rel.x <= g.x1+text_pan)) {
+                        if (rel.x >= (g.x0 + g.x1)/2 + text_pan) new_cursor++;
                         break;
                     }
                 }
+
                 gui.edit.cursor = byte_index_from_codepoint_index(str, new_cursor);
                 gui.edit.selection = gui.edit.cursor;
-            } else if (gui.pressed == id) {
-                i32 new_selection;
-                for (new_selection = 0; new_selection < glyphs.count; new_selection++) {
-                    GlyphRect g = glyphs.data[new_selection];
-                    Vector2 mouse = { (f32)gui.mouse.x, (f32)gui.mouse.y };
-                    Vector2 rel = mouse - rect.tl;
-                    if (rel.x >= g.x0 + text_pan.x && rel.x <= g.x1 + text_pan.x) {
-                        break;
-                    }
-                }
-                gui.edit.selection = byte_index_from_codepoint_index(str, new_selection);
             }
 
             i32 cursor_ci = codepoint_index_from_byte_index(str, gui.edit.cursor);
-            cursor_pos.x += cursor_ci < glyphs.count ? glyphs[cursor_ci].x0 : glyphs[cursor_ci-1].x1;
-            while ((cursor_pos.x + text_pan.x) > text_clip_rect.br.x) {
+            cursor_pos += cursor_ci < glyphs.count ? glyphs[cursor_ci].x0 : glyphs[cursor_ci-1].x1;
+            while ((cursor_pos + text_pan) > text_clip_rect.br.x) {
                 gui.edit.offset++;
-                text_pan = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_pan = gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f;
             }
 
-            while ((cursor_pos.x + text_pan.x < text_clip_rect.tl.x)) {
+            while ((cursor_pos + text_pan < text_clip_rect.tl.x)) {
                 gui.edit.offset--;
-                text_pan = { gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f, 0.0f };
+                text_pan = gui.edit.offset < glyphs.count ? -glyphs[gui.edit.offset].x0 : 0.0f;
             }
 
-            // TODO(jesper): this completely broken, fix it
             if (gui.edit.selection != gui.edit.cursor) {
-                f32 x0 = cursor_pos.x;
-                f32 x1 = rect.tl.x + 1.0f;
-
+                f32 selection_pos = rect.tl.x;
                 i32 selection_ci = codepoint_index_from_byte_index(str, gui.edit.selection);
-                x1 += selection_ci < glyphs.count ? glyphs[selection_ci].x0 : glyphs[selection_ci-1].x1;
+                selection_pos += selection_ci < glyphs.count ? glyphs[selection_ci].x0 : glyphs[selection_ci-1].x1;
 
-                if (x0 > x1) SWAP(x0, x1);
+                f32 x0 = MIN(cursor_pos, selection_pos);
+                f32 x1 = MAX(cursor_pos, selection_pos);
 
                 gui_draw_rect(
-                    Vector2{ x0, cursor_pos.y } + text_pan,
-                    Vector2{ x1-x0, gui.fonts.base.line_height },
+                    Vector2{ x0+text_pan, rect.tl.y },
+                    Vector2{ x1-x0, rect.size().y },
                     selection_bg);
             }
         }
@@ -1435,7 +1424,7 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
                 .glyphs = slice(glyphs, offset),
             };
             gui_push_clip_rect(text_clip_rect);
-            gui_draw_text(subset, text_pos + text_pan, fg);
+            gui_draw_text(subset, text_pos + Vector2{ text_pan, text_pan }, fg);
             gui_pop_clip_rect();
         }
     }
@@ -1443,8 +1432,8 @@ GuiAction gui_editbox_id(GuiId id, String initial_string, Rect rect) EXPORT
 
     if (gui.focused == id) {
         gui_draw_rect(
-            cursor_pos + text_pan,
-            Vector2{ 1.0f, gui.fonts.base.line_height },
+            { cursor_pos+text_pan, rect.tl.y },
+            Vector2{ 1.0f, rect.size().y },
             fg);
     }
 
@@ -1492,19 +1481,19 @@ GuiAction gui_editbox_id(GuiId id, i32 *value) EXPORT
     return action;
 }
 
-GuiAction gui_editbox_id(GuiId id, f32 *value, i32 width) EXPORT
+GuiAction gui_editbox_id(GuiId id, u64 *value) EXPORT
 {
     char buffer[100];
 
     String str = gui.focused == id ?
         String{ gui.edit.buffer, gui.edit.length } :
-        stringf(buffer, sizeof buffer, "%.3f", *value);
+        stringf(buffer, sizeof buffer, "%llu", *value);
 
-    GuiAction action = gui_editbox_id(id, str, width);
-    if (action == GUI_END) f32_from_string(gui_editbox_str(), value);
-
+    GuiAction action = gui_editbox_id(id, str);
+    if (action == GUI_END) u64_from_string(gui_editbox_str(), value);
     return action;
 }
+
 
 GuiAction gui_editbox_id(GuiId id, f32 *value, Rect rect) EXPORT
 {
@@ -1520,20 +1509,6 @@ GuiAction gui_editbox_id(GuiId id, f32 *value, Rect rect) EXPORT
     return action;
 }
 
-GuiAction gui_editbox_id(GuiId id, f32 *value, f32 width) EXPORT
-{
-    f32 height = gui.fonts.base.line_height + gui.style.edit.padding.y;
-    Rect rect = split_col({ width, height, .margin = gui.style.margin });
-    return gui_editbox_id(id, value, rect);
-}
-
-GuiAction gui_editbox_id(GuiId id, i32 *value, f32 width) EXPORT
-{
-    f32 height = gui.fonts.base.line_height + gui.style.edit.padding.y;
-    Rect rect = split_col({ width, height, .margin = gui.style.margin });
-    return gui_editbox_id(id, value, rect);
-}
-
 GuiAction gui_editbox_id(GuiId id, i32 *value, Rect rect) EXPORT
 {
     char buffer[100];
@@ -1544,6 +1519,20 @@ GuiAction gui_editbox_id(GuiId id, i32 *value, Rect rect) EXPORT
 
     GuiAction action = gui_editbox_id(id, str, rect);
     if (action == GUI_END) i32_from_string(gui_editbox_str(), value);
+
+    return action;
+}
+
+GuiAction gui_editbox_id(GuiId id, u64 *value, Rect rect) EXPORT
+{
+    char buffer[100];
+
+    String str = gui.focused == id ?
+        String{ gui.edit.buffer, gui.edit.length } :
+        stringf(buffer, sizeof buffer, "%llu", *value);
+
+    GuiAction action = gui_editbox_id(id, str, rect);
+    if (action == GUI_END) u64_from_string(gui_editbox_str(), value);
 
     return action;
 }
@@ -1679,8 +1668,8 @@ bool gui_begin_window_internal(
 
     gui_push_id(id);
     gui_push_layout({
-        .rect = { wnd->pos, wnd->pos+wnd->size },
-        .flags = LAYOUT_ROOT | EXPAND_XY,
+        { wnd->pos, wnd->pos+wnd->size },
+        LAYOUT_ROOT | EXPAND_XY,
     });
     gui_push_command_buffer();
 
@@ -1701,12 +1690,15 @@ bool gui_begin_window_internal(
     Rect border = shrink_rect(gui_current_layout(), gui.style.window.border);
 
     bool do_titlebar = !(wnd->flags & GUI_NO_TITLE);
-
     LayoutRect titlebar_rect = do_titlebar ? split_top({ gui.style.window.title_height }): LayoutRect{};
 
     LayoutRect title_rect = titlebar_rect;
+    split_left(&title_rect, { 5 });
+
     f32 close_s = title_rect.size().y;
-    Rect close_rect = !(wnd->flags & GUI_NO_CLOSE) ? split_right(&title_rect, { close_s, close_s-gui.style.window.margin }) : Rect{};
+    Rect close_rect = !(wnd->flags & GUI_NO_CLOSE)
+        ? split_right(&title_rect, { close_s, close_s-gui.style.window.margin }).bounds
+        : Rect{};
 
     GuiId title_id = GUI_ID;
     GuiId close_id = GUI_ID;
@@ -1751,7 +1743,7 @@ bool gui_begin_window_internal(
 
     {
         gui_push_clip_rect(title_rect);
-        gui_draw_text(title, title_rect.rect.tl, gui.style.window.title_fg, &gui.fonts.base);
+        gui_draw_text(title, title_rect.rem.tl, gui.style.window.title_fg, &gui.fonts.base);
         gui_pop_clip_rect();
     }
 
@@ -1773,8 +1765,8 @@ bool gui_begin_window_internal(
     gui_push_clip_rect(wnd->client_rect);
 
     if (!(wnd->flags & GUI_NO_VOVERFLOW_SCROLL) && wnd->state.has_voverflow) {
-        gui_current_layout()->rect.tl.y -= wnd->scroll_offset.y;
-        gui_current_layout()->rect.br.y -= wnd->scroll_offset.y;
+        gui_current_layout()->rem.tl.y -= wnd->scroll_offset.y;
+        gui_current_layout()->rem.br.y -= wnd->scroll_offset.y;
     }
 
     return !wnd->state.hidden;
@@ -1842,12 +1834,12 @@ void gui_end_window() EXPORT
     }
 
     if (!(wnd->flags & GUI_NO_VOVERFLOW_SCROLL)) {
-        f32 total_height = gui_current_layout()->rect.br.y+wnd->scroll_offset.y - content_rect.tl.y;
+        f32 total_height = gui_current_layout()->rem.br.y+wnd->scroll_offset.y - content_rect.tl.y;
         if (wnd->state.has_voverflow) {
             gui_push_clip_rect(vscroll_rect);
 
-            gui_push_layout({ .rect = content_rect, .flags = LAYOUT_ROOT });
-            gui_push_layout({ .rect = vscroll_rect });
+            gui_push_layout({ content_rect, LAYOUT_ROOT });
+            gui_push_layout({ vscroll_rect });
             gui_vscrollbar(&wnd->scroll_offset.y, total_height, 10);
             gui_pop_layout();
             gui_pop_layout();
@@ -1860,20 +1852,20 @@ void gui_end_window() EXPORT
     if ((wnd->flags & (GUI_NO_RESIZE|GUI_NO_HOVERFLOW_SCROLL)) == (GUI_NO_RESIZE|GUI_NO_HOVERFLOW_SCROLL) &&
         gui_current_layout()->flags & EXPAND_X)
     {
-        wnd->size.x = gui_current_layout()->rect.tl.x - gui_current_layout()->r[0].x + gui.style.window.margin;
+        wnd->size.x = gui_current_layout()->rem.tl.x - gui_current_layout()->bounds.tl.x + gui.style.window.margin;
     }
 
     if ((wnd->flags & (GUI_NO_RESIZE |GUI_NO_VOVERFLOW_SCROLL)) == (GUI_NO_RESIZE|GUI_NO_VOVERFLOW_SCROLL) &&
         gui_current_layout()->flags & EXPAND_Y)
     {
-        wnd->size.y = gui_current_layout()->rect.tl.y - gui_current_layout()->r[0].y + gui.style.window.margin;
+        wnd->size.y = gui_current_layout()->rem.tl.y - gui_current_layout()->bounds.tl.y + gui.style.window.margin;
     }
 }
 
 GuiAction gui_2d_gizmo_translate_axis_id(
     GuiId id,
     Vector2 *position,
-    Matrix3 cs_from_ws,
+    Matrix3 ss_from_ws,
     Vector2 axis) EXPORT
 {
     GuiAction action = GUI_NONE;
@@ -1886,29 +1878,27 @@ GuiAction gui_2d_gizmo_translate_axis_id(
     GfxCommandBuffer *cmdbuf = array_tail(gui.draw_stack);
 
     Vector2 n{ axis.y, -axis.x };
-    Vector2 p = (cs_from_ws*Vector3{ .xy = *position, 1 }).xy;
+    Vector2 p = (ss_from_ws*Vector3{ .xy = *position, 1 }).xy;
 
     // base
-    Vector2 size = cs_from_ss({ .xy = GIZMO_ARROW_SIZE }).xy;
+    Vector2 size = GIZMO_ARROW_SIZE;
     Vector2 br = p + 0.5f*size.y*n + axis*size.x;
     Vector2 tr = p - 0.5f*size.y*n + axis*size.x;
     Vector2 tl = p - 0.5f*size.y*n;
     Vector2 bl = p + 0.5f*size.y*n;
 
     // tip
-    Vector2 tsize = cs_from_ss({ .xy = GIZMO_ARROW_TIP_SIZE }).xy;
+    Vector2 tsize = GIZMO_ARROW_TIP_SIZE;
     // NOTE(jesper): -axis to cause a 1px overlap in base and tip to hackily avoid
     // any wonkyness with hit detection between mouse and the edge of the tip and bar
-    Vector2 toffset = -cs_from_ss({ .xy = axis }).xy;
+    Vector2 toffset = -axis;
     Vector2 t0 = p + toffset + axis*size.x - 0.5f*tsize.y*n;
     Vector2 t1 = p + toffset + axis*size.x + axis*tsize.x;
     Vector2 t2 = p + toffset + axis*size.x + 0.5f*tsize.y*n;
 
-    Vector2 mouse{ (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 cs_mouse = cs_from_ss({ .xy = mouse, 1 }).xy;
-
-    if (point_in_rect(cs_mouse, tl, tr, br, tl) ||
-        point_in_triangle(cs_mouse, t0, t1, t2))
+    Vector2 mouse = gui_mouse();
+    if (point_in_rect(mouse, tl, tr, br, tl) ||
+        point_in_triangle(mouse, t0, t1, t2))
     {
         gui_hot(id);
     }
@@ -1919,8 +1909,8 @@ GuiAction gui_2d_gizmo_translate_axis_id(
             action = GUI_BEGIN;
         } else if (gui.mouse.dx != 0 || gui.mouse.dy != 0) {
             action = GUI_CHANGE;
-            Matrix3 ws_from_cs = inverse(cs_from_ws);
-            Vector2 d = (ws_from_cs*cs_from_ss({ .xy = mouse - gui.drag_start_mouse })).xy;
+            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Vector2 d = (ws_from_ss*Vector3{ .xy = (gui_mouse()- gui.drag_start_mouse) }).xy;
             *position = gui.drag_start_data[0] + dot(axis, d) * axis;
         }
     } else if (was_dragging) {
@@ -1941,7 +1931,7 @@ GuiAction gui_2d_gizmo_translate_axis_id(
 GuiAction gui_2d_gizmo_size_axis_id(
     GuiId id,
     Vector2 position, Vector2 *size,
-    Matrix3 cs_from_ws,
+    Matrix3 ss_from_ws,
     Vector2 axis,
     f32 multiple /*= 0*/) EXPORT
 {
@@ -1955,34 +1945,32 @@ GuiAction gui_2d_gizmo_size_axis_id(
     GfxCommandBuffer *cmdbuf = array_tail(gui.draw_stack);
 
     Vector2 n{ axis.y, -axis.x };
-    Vector2 p = (cs_from_ws*Vector3{ .xy = position, 1 }).xy;
+    Vector2 p = (ss_from_ws*Vector3{ .xy = position, 1 }).xy;
 
     // TODO(jesper): this is a bit ugly to do a yflip on the visual representation of the axis, needed because
     // of the y-flipped mouse vs gl-coordinates and the way I do the size calculations
     Vector2 vaxis{ axis.x, -axis.y };
 
     // base
-    Vector2 bsize = cs_from_ss({ .xy = GIZMO_ARROW_SIZE }).xy;
+    Vector2 bsize = GIZMO_ARROW_SIZE;
     Vector2 br = p + 0.5f*bsize.y*n + vaxis*bsize.x;
     Vector2 tr = p - 0.5f*bsize.y*n + vaxis*bsize.x;
     Vector2 tl = p - 0.5f*bsize.y*n;
     Vector2 bl = p + 0.5f*bsize.y*n;
 
     // tip
-    Vector2 tsize = cs_from_ss({ .xy = GIZMO_ARROW_TIP_SIZE }).xy;
+    Vector2 tsize = GIZMO_ARROW_TIP_SIZE;
     // NOTE(jesper): -1 axis to cause a 1px overlap in base and tip to not cause
     // any wonkyness with mouse dragging across the arrow
-    Vector2 toffset = -cs_from_ss({ .xy = vaxis }).xy;
+    Vector2 toffset = -vaxis;
     Vector2 t0 = p + toffset + vaxis*bsize.x - 0.5f*tsize.y*n;
     Vector2 t1 = p + toffset + vaxis*bsize.x + 0.5f*tsize.y*n;
     Vector2 t2 = t1 + vaxis*tsize.x;
     Vector2 t3 = t0 + vaxis*tsize.x;
 
-    Vector2 mouse { (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 cs_mouse = cs_from_ss({ .xy = mouse, 1 }).xy;
-
-    if (point_in_rect(cs_mouse, tl, tr, br, tl) ||
-        point_in_rect(cs_mouse, t0, t1, t2, t3))
+    Vector2 mouse = gui_mouse();
+    if (point_in_rect(mouse, tl, tr, br, tl) ||
+        point_in_rect(mouse, t0, t1, t2, t3))
     {
         gui_hot(id);
     }
@@ -1993,8 +1981,8 @@ GuiAction gui_2d_gizmo_size_axis_id(
         else if (gui.mouse.dx || gui.mouse.dy) {
             action = GUI_CHANGE;
 
-            Matrix3 ws_from_cs = inverse(cs_from_ws);
-            Vector2 delta = (ws_from_cs*cs_from_ss({ .xy = axis*dot(mouse, axis) - axis*dot(gui.drag_start_mouse, axis) })).xy;
+            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Vector2 delta = (ws_from_ss*Vector3{ .xy = axis*dot(mouse, axis) - axis*dot(gui.drag_start_mouse, axis) }).xy;
             delta.y = -delta.y;
             if (multiple) delta = round_to(delta, multiple);
             *size = gui.drag_start_data[0] + delta;
@@ -2021,7 +2009,7 @@ GuiAction gui_2d_gizmo_size_axis_id(
 GuiAction gui_2d_gizmo_translate_plane_id(
     GuiId id,
     Vector2 *position,
-    Matrix3 cs_from_ws) EXPORT
+    Matrix3 ss_from_ws) EXPORT
 {
     // TODO(jesper): these wigets need to support a rotated camera
     GuiAction action = GUI_NONE;
@@ -2032,19 +2020,17 @@ GuiAction gui_2d_gizmo_translate_plane_id(
 
     GfxCommandBuffer *cmdbuf = array_tail(gui.draw_stack);
 
-    Vector2 size = cs_from_ss({ 20, 20 }).xy;
-    Vector2 p = (cs_from_ws*Vector3{ .xy = *position, 1 }).xy;
+    Vector2 size = { 20, 20 };
+    Vector2 p = (ss_from_ws*Vector3{ .xy = *position, 1 }).xy;
 
-    Vector2 offset = cs_from_ss({ 10, -10 }).xy;
+    Vector2 offset = { 10, -10 };
     Vector2 br = p + offset + Vector2{ size.x, 0.0f };
     Vector2 tr = p + offset + Vector2{ size.x, -size.y };
     Vector2 tl = p + offset + Vector2{ 0.0f, -size.y };
     Vector2 bl = p + offset;
 
-    Vector2 mouse{ (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 cs_mouse = cs_from_ss({ .xy = mouse, 1 }).xy;
-
-    if (point_in_rect(cs_mouse, tl, tr, br, bl)) {
+    Vector2 mouse = gui_mouse();
+    if (point_in_rect(mouse, tl, tr, br, bl)) {
         gui_hot(id);
     }
 
@@ -2053,8 +2039,8 @@ GuiAction gui_2d_gizmo_translate_plane_id(
         if (!was_dragging) action = GUI_BEGIN;
         else if (gui.mouse.dx != 0 || gui.mouse.dy != 0) {
             action = GUI_CHANGE;
-            Matrix3 ws_from_cs = inverse(cs_from_ws);
-            Vector2 d = (ws_from_cs*cs_from_ss({ .xy = mouse - gui.drag_start_mouse })).xy;
+            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Vector2 d = (ws_from_ss*Vector3{ .xy = mouse - gui.drag_start_mouse }).xy;
             *position = gui.drag_start_data[0] + d;
         }
     } else if (was_dragging) {
@@ -2073,29 +2059,29 @@ GuiAction gui_2d_gizmo_translate_plane_id(
 GuiAction gui_2d_gizmo_translate_id(
     GuiId id,
     Vector2 *position,
-    Matrix3 cs_from_ws) EXPORT
+    Matrix3 ss_from_ws) EXPORT
 {
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    GuiAction a0 = gui_2d_gizmo_translate_axis(position, cs_from_ws, { 1.0f, 0.0f });
-    GuiAction a1 = gui_2d_gizmo_translate_axis(position, cs_from_ws, { 0.0f, -1.0f });
-    GuiAction a2 = gui_2d_gizmo_translate_plane(position, cs_from_ws);
+    GuiAction a0 = gui_2d_gizmo_translate_axis(position, ss_from_ws, { 1.0f, 0.0f });
+    GuiAction a1 = gui_2d_gizmo_translate_axis(position, ss_from_ws, { 0.0f, -1.0f });
+    GuiAction a2 = gui_2d_gizmo_translate_plane(position, ss_from_ws);
     return (GuiAction)MAX(a0, MAX(a1, a2));
 }
 
 GuiAction gui_2d_gizmo_translate_id(
     GuiId id,
     Vector2 *position,
-    Matrix3 cs_from_ws,
+    Matrix3 ss_from_ws,
     f32 multiple) EXPORT
 {
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    GuiAction a0 = gui_2d_gizmo_translate_axis(position, cs_from_ws, { 1.0f, 0.0f });
-    GuiAction a1 = gui_2d_gizmo_translate_axis(position, cs_from_ws, { 0.0f, -1.0f });
-    GuiAction a2 = gui_2d_gizmo_translate_plane(position, cs_from_ws);
+    GuiAction a0 = gui_2d_gizmo_translate_axis(position, ss_from_ws, { 1.0f, 0.0f });
+    GuiAction a1 = gui_2d_gizmo_translate_axis(position, ss_from_ws, { 0.0f, -1.0f });
+    GuiAction a2 = gui_2d_gizmo_translate_plane(position, ss_from_ws);
 
     position->x = round_to(position->x, multiple);
     position->y = round_to(position->y, multiple);
@@ -2107,34 +2093,34 @@ GuiAction gui_2d_gizmo_translate_id(
 GuiAction gui_2d_gizmo_size_id(
     GuiId id,
     Vector2 position, Vector2 *size,
-    Matrix3 cs_from_ws) EXPORT
+    Matrix3 ss_from_ws) EXPORT
 {
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    GuiAction a0 = gui_2d_gizmo_size_axis(position, size, cs_from_ws, { 1.0f, 0.0f });
-    GuiAction a1 = gui_2d_gizmo_size_axis(position, size, cs_from_ws, { 0.0f, 1.0f });
+    GuiAction a0 = gui_2d_gizmo_size_axis(position, size, ss_from_ws, { 1.0f, 0.0f });
+    GuiAction a1 = gui_2d_gizmo_size_axis(position, size, ss_from_ws, { 0.0f, 1.0f });
     return (GuiAction)MAX(a0, a1);
 }
 
 GuiAction gui_2d_gizmo_size_id(
     GuiId id,
     Vector2 position, Vector2 *size,
-    Matrix3 cs_from_ws,
+    Matrix3 ss_from_ws,
     f32 multiple) EXPORT
 {
     gui_push_id(id);
     defer { gui_pop_id(); };
 
-    GuiAction a0 = gui_2d_gizmo_size_axis(position, size, cs_from_ws, { 1.0f, 0.0f }, multiple);
-    GuiAction a1 = gui_2d_gizmo_size_axis(position, size, cs_from_ws, { 0.0f, 1.0f }, multiple);
+    GuiAction a0 = gui_2d_gizmo_size_axis(position, size, ss_from_ws, { 1.0f, 0.0f }, multiple);
+    GuiAction a1 = gui_2d_gizmo_size_axis(position, size, ss_from_ws, { 0.0f, 1.0f }, multiple);
     return (GuiAction)MAX(a0, a1);
 }
 
 GuiAction gui_2d_gizmo_size_square_id(
     GuiId id,
     Vector2 *center, Vector2 *size,
-    Matrix3 cs_from_ws,
+    Matrix3 ss_from_ws,
     f32 multiple /*= 0*/) EXPORT
 {
     gui_push_id(id);
@@ -2151,16 +2137,14 @@ GuiAction gui_2d_gizmo_size_square_id(
     Vector2 rsize = multiple ? round_to(*size, multiple) : *size;
     Vector2 rcenter = multiple ? round_to(*center, multiple) : *center;
 
-    Vector2 p = (cs_from_ws*Vector3{ .xy = rcenter, 1 }).xy;
-    Vector2 half_size = 0.5f * (cs_from_ws*Vector3{ .xy = rsize }).xy;
+    Vector2 p = (ss_from_ws*Vector3{ .xy = rcenter, 1 }).xy;
+    Vector2 half_size = 0.5f * (ss_from_ws*Vector3{ .xy = rsize }).xy;
     Vector2 tl = p - half_size;
     Vector2 br = p + half_size;
     Vector2 tr{ br.x, tl.y };
     Vector2 bl{ tl.x, br.y };
 
-    Vector2 mouse{ (f32)gui.mouse.x, (f32)gui.mouse.y };
-    Vector2 cs_mouse = cs_from_ss({ .xy = mouse, 1 }).xy;
-
+    Vector2 mouse = gui_mouse();
     Vector2 corners[] = { tl, br, tr, bl };
 
     GuiId corner_ids[] = {
@@ -2171,11 +2155,11 @@ GuiAction gui_2d_gizmo_size_square_id(
     };
 
 
-    Vector2 bsize = cs_from_ss({ .xy = GIZMO_CORNER_SIZE }).xy;
+    Vector2 bsize = GIZMO_CORNER_SIZE;
     for (i32 i = 0; i < ARRAY_COUNT(corners); i++) {
         GuiId id = corner_ids[i];
 
-        if (point_in_rect(cs_mouse, corners[i], bsize)) {
+        if (point_in_rect(mouse, corners[i], bsize)) {
             gui_hot(id);
         }
 
@@ -2195,8 +2179,8 @@ GuiAction gui_2d_gizmo_size_square_id(
     }
 
     if (action == GUI_CHANGE) {
-        Matrix3 ws_from_cs = inverse(cs_from_ws);
-        Vector2 delta = (ws_from_cs*cs_from_ss({ .xy = mouse - gui.drag_start_mouse })).xy;
+        Matrix3 ws_from_ss = inverse(ss_from_ws);
+        Vector2 delta = (ws_from_ss*Vector3{ .xy = mouse - gui.drag_start_mouse }).xy;
         if (multiple) delta = round_to(delta, multiple);
 
         if (gui.pressed == corner_ids[1] || gui.pressed == corner_ids[2]) {
@@ -2216,8 +2200,8 @@ GuiAction gui_2d_gizmo_size_square_id(
         }
     }
 
-    GuiAction a0 = gui_2d_gizmo_size_axis(*center, size, cs_from_ws, { 1.0f, 0.0f }, multiple);
-    GuiAction a1 = gui_2d_gizmo_size_axis(*center, size, cs_from_ws, { 0.0f, 1.0f }, multiple);
+    GuiAction a0 = gui_2d_gizmo_size_axis(*center, size, ss_from_ws, { 1.0f, 0.0f }, multiple);
+    GuiAction a1 = gui_2d_gizmo_size_axis(*center, size, ss_from_ws, { 0.0f, 1.0f }, multiple);
     action = MAX(action, MAX(a0, a1));
 
     return action;
@@ -2245,7 +2229,7 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect
     Rect expand = shrink_rect(&icon_r, 3);
     shrink_rect(&expand, 1);
 
-    GuiMenu *menu = gui_find_or_create_menu(id, rect.size());
+    GuiMenu *menu = gui_find_or_create_menu(id, rect.size(), { 0, 100 });
 
     gui_handle_focus_grabbing(id);
     if (gui_input_layer(id, gui.input.dropdown)) {
@@ -2259,26 +2243,61 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect
     gui_begin_menu_id(id, menu, rect, 0u);
     if (menu->active) gui_focus(id);
 
-    Vector2 text_p{
-        rect.tl.x+gui.style.dropdown.margin,
-        calc_center(rect.tl.y, rect.br.y, font->line_height)
-    };
-
-    if (current_index >= 0) gui_draw_text(td, text_p, gui.style.fg);
     Vector3 border_col = gui.focused == id ? gui.style.accent_bg : gui.style.bg_light1;
     gui_draw_rect(expand.tl, { 1, expand.size().y }, border_col);
     gui_draw_icon(gui.icons.down, icon_r);
 
+    String filter = "";
+    i32 selected_index = current_index;
+
+    bool close_menu = false;
+    if (!menu->active) {
+        Vector2 text_p{
+            rect.tl.x+gui.style.dropdown.margin,
+            calc_center(rect.tl.y, rect.br.y, font->line_height)
+        };
+
+        if (current_index >= 0) gui_draw_text(td, text_p, gui.style.fg);
+    } else {
+        String curr = current_index >= 0 ? labels[current_index] : "";
+        auto action = gui_editbox_id(id, curr, rect);
+
+        filter = gui_editbox_str();
+        if (action == GUI_CHANGE) current_index = -1;
+        else if (action == GUI_CANCEL) close_menu = true;
+    }
+
     menu->parent_wnd = gui_push_overlay({ menu->pos, menu->pos+menu->size }, menu->active );
 
-    i32 selected_index = current_index;
+    // TODO(jesper): pretty hacky, having to deal with a lot of weird push/pop state for menus right now that I need to investigate and clean up. id-stack, clip-rect stack, draw-stack, overlay, layout. Some happening early in gui_begin_menu, some happening in push_overlay, all of them closed in gui_end_menu which assumes they all were opened and not cancelled in between
+    if (close_menu) {
+        menu->active = false;
+        gui_end_menu();
+    }
+
+    const f32 item_height = font->line_height+4;
+
+    // NOTE(jesper): this is starting to look a lot like a lister. TODO?
     if (menu->active) {
+        GuiScrollArea *scroll_area = nullptr;
+        LayoutRect vscroll_r{};
+        Rect view_r = { menu->pos, menu->pos+menu->size };
+
+        if (menu->has_overflow_y) {
+            scroll_area = map_find_emplace(&gui.scroll_areas, id);
+            vscroll_r = split_right({ gui.style.scrollbar.thickness });
+            gui_current_layout()->rem.tl.y -= scroll_area->offset.y;
+        }
+
         for (auto it : iterator(labels)) {
             SArena scratch = tl_scratch_arena();
             GlyphsData td = calc_glyphs_data(it, &gui.fonts.base, scratch);
 
+            if (filter && !string_contains(it, filter)) continue;
+            if (current_index == -1) current_index = it.index;
+
             GuiId row_id = gui_gen_id(it.index);
-            Rect row = split_row({td.font->line_height+4});
+            Rect row = split_row({item_height});
 
             if (gui_clicked(row_id, row)) {
                 selected_index = it.index;
@@ -2291,6 +2310,11 @@ i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect
 
             Vector2 text_p{ row.tl.x+4, calc_center(row.tl.y, row.br.y, td.font->line_height) };
             gui_draw_text(td, text_p, gui.style.fg);
+        }
+
+        if (menu->has_overflow_y) {
+            f32 total_height = gui_current_layout()->rem.br.y+scroll_area->offset.y - view_r.tl.y;
+            gui_vscrollbar_id(id, &scroll_area->offset.y, total_height, item_height, vscroll_r, view_r);
         }
 
         gui_end_menu();
@@ -2383,7 +2407,7 @@ bool gui_begin_menu_id(GuiId id, GuiMenu *menu, Rect rect, u32 flags) EXPORT
             };
         }
 
-        gui_push_layout({ sub_rect, .flags = LAYOUT_ROOT|EXPAND_XY });
+        gui_push_layout({ sub_rect, LAYOUT_ROOT|EXPAND_XY });
         menu->pos = sub_rect.tl;
     }
 
@@ -2430,17 +2454,32 @@ void gui_end_menu(GuiId id /*= GUI_ID_INVALID */) EXPORT
     GuiMenu *menu = map_find(&gui.menus, id);
     ASSERT(menu);
 
-    //if (menu->active)
-    {
+    LayoutRect *layout = gui_current_layout();
+    if (layout->flags & EXPAND_XY) {
+        menu->size.x = MAX(menu->size.x, layout->rem.br.x-layout->bounds.tl.x);
+        menu->size.y = MAX(menu->size.y, layout->rem.br.y-layout->bounds.tl.y);
+    }
+
+    if (menu->size.x == 0 || menu->size.y == 0) {
+        menu->active = false;
+    }
+
+    if (menu->max_size.x > 0 && menu->size.x > menu->max_size.x) {
+        menu->size.x = menu->max_size.x;
+        menu->has_overflow_x = true;
+    }
+
+    if (menu->max_size.y > 0 && menu->size.y > menu->max_size.y) {
+        menu->size.y = menu->max_size.y;
+        menu->has_overflow_y = true;
+    }
+
+    if (menu->active) {
         Vector3 bg = bgr_unpack(0xFF212121);
         gui_draw_rect(menu->pos, menu->size, bg, &gui_current_window()->command_buffer);
         gui_pop_command_buffer(&gui_current_window()->command_buffer);
-    }
-
-    LayoutRect *layout = gui_current_layout();
-    if (layout->flags & EXPAND_XY) {
-        menu->size.x = MAX(menu->size.x, layout->rect.br.x-layout->r[0].x);
-        menu->size.y = MAX(menu->size.y, layout->rect.br.y-layout->r[0].y);
+    } else {
+        gui_pop_command_buffer(nullptr);
     }
 
     gui_pop_clip_rect();
@@ -2451,7 +2490,7 @@ void gui_end_menu(GuiId id /*= GUI_ID_INVALID */) EXPORT
 
 bool gui_begin_context_menu_id(GuiId id, GuiId widget) EXPORT
 {
-    GuiMenu *menu = gui_find_or_create_menu(id, { 50, 10 });
+    GuiMenu *menu = gui_find_or_create_menu(id, { 0, 0 });
 
     if (gui.hot == widget && get_input_mouse(MB_SECONDARY)) {
         menu->active = !menu->active;
@@ -2462,8 +2501,8 @@ bool gui_begin_context_menu_id(GuiId id, GuiId widget) EXPORT
         gui_push_id(id);
 
         gui_push_layout({
-            .rect = { menu->pos, menu->pos + menu->size },
-            .flags = EXPAND_XY | LAYOUT_ROOT,
+            { menu->pos, menu->pos + menu->size },
+            EXPAND_XY | LAYOUT_ROOT,
         });
 
         menu->parent_wnd = gui_push_overlay({ menu->pos, menu->pos+menu->size }, menu->active);
@@ -2481,7 +2520,8 @@ void gui_end_context_menu() EXPORT
     // TODO(jesper): something like this should be happening for all menus, but I don't have a great way of checking if the current hot widget is part of the menu's children, which can be outside of this menu's rect.
     //        Current thinking is that a menu should probably calculate the containing rect of all its sub-menus, which is a seperate rect of its own, and then we can check if the hot widget is inside that rect.
     GuiMenu *menu = map_find(&gui.menus, id);
-    if (get_input_mouse(MB_ANY) &&
+    if (menu->active &&
+        get_input_mouse(MB_ANY) &&
         !point_in_rect(gui_mouse(), { menu->pos, menu->pos+menu->size }))
     {
         menu->active = false;
@@ -2492,6 +2532,17 @@ void gui_close_menu(GuiId id) EXPORT
 {
     GuiMenu *menu = map_find(&gui.menus, id);
     if (menu) menu->active = false;
+}
+
+void gui_close_menu() EXPORT
+{
+    for (auto id : reverse(gui.id_stack)) {
+        GuiMenu *menu = map_find(&gui.menus, id.elem());
+        if (menu) {
+            menu->active = false;
+            return;
+        }
+    }
 }
 
 bool gui_begin_section(GuiId id, LayoutRect layout, u32 initial_state) EXPORT
@@ -2614,7 +2665,7 @@ void gui_vscrollbar_id(
     f32 step_size) EXPORT
 {
     LayoutRect parent = *gui_parent_layout();
-    Rect view_r { parent.r[0], parent.r[1] };
+    Rect view_r { parent.bounds.tl, parent.bounds.br };
     gui_vscrollbar_id(id, offset, total_height, step_size, view_r);
 }
 
@@ -2628,7 +2679,7 @@ void gui_vscrollbar_id(
     Rect rect) EXPORT
 {
     LayoutRect parent = *gui_parent_layout();
-    Rect view_r { parent.r[0], parent.r[1] };
+    Rect view_r { parent.bounds.tl, parent.bounds.br };
     gui_vscrollbar_id(id, foffset, line_current, line_height, lines_total, lines_num_visible, rect, view_r);
 }
 
@@ -2667,6 +2718,8 @@ void gui_vscrollbar_id(
     gui_push_id(id);
     defer { gui_pop_id(); };
 
+    GuiId h_id = GUI_ID;
+
     f32 max_offset = total_height > view_r.size().y ? total_height-view_r.size().y : 0;
 
     if (gui.hot_window == gui_current_window()->id &&
@@ -2687,13 +2740,13 @@ void gui_vscrollbar_id(
     *offset = MAX(*offset, 0);
     *offset = MIN(*offset, max_offset);
 
-    f32 min_h = 10.0f;
+    f32 min_h = 8;
     f32 y0 =  *offset * (rect.size().y / total_height);
     f32 y1 = (*offset + view_r.size().y) * (rect.size().y / total_height);
 
     if (y1-y0 < min_h) {
         y0 = y1-0.5f*min_h;
-        y1 = MAX(rect.size().y, y0+min_h);
+        y1 = MIN(rect.br.y, y0+min_h);
         y0 = MIN(y0, y1-min_h);
     }
 
@@ -2702,8 +2755,8 @@ void gui_vscrollbar_id(
         { rect.br.x, MIN(rect.tl.y + y1, down_r.tl.y) }
     };
 
-    gui_hot_rect(id, handle_r);
-    if (gui_drag(id, { 0, *offset }) && gui.mouse.dy != 0) {
+    gui_hot_rect(h_id, handle_r);
+    if (gui_drag(h_id, { 0, *offset }) && gui.mouse.dy != 0) {
         f32 dy = gui.mouse.y - gui.drag_start_mouse.y;
 
         *offset = gui.drag_start_data[0].y + (dy * (total_height / rect.size().y));
@@ -2711,7 +2764,7 @@ void gui_vscrollbar_id(
         *offset = MAX(*offset, 0);
     }
 
-    gui_draw_button(id, handle_r);
+    gui_draw_button(h_id, handle_r);
 }
 
 GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPORT
@@ -2732,11 +2785,11 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
 
     GuiScrollArea *scroll_area = map_find_emplace(&gui.scroll_areas, id, {});
 
-    Rect vrect = split_rect({ .margin = gui.style.margin });
-    Rect border = shrink_rect(&vrect, 1);
-    Rect scroll = split_right(&vrect, gui.style.scrollbar.thickness);
+    Rect view_r = split_rect({ .margin = gui.style.margin });
+    Rect border = shrink_rect(&view_r, 1);
+    Rect vscroll_r = split_right(&view_r, gui.style.scrollbar.thickness);
 
-    Rect rect = vrect;
+    Rect rect = view_r;
     rect.tl.y -= scroll_area->offset.y;
 
     Vector3 bg = gui.style.bg_dark1;
@@ -2746,10 +2799,10 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
     Vector3 hot_bg = gui.style.bg_hot;
 
     gui_draw_rect(border, border_col);
-    gui_draw_rect(vrect, bg);
+    gui_draw_rect(view_r, bg);
 
     gui_push_id(id);
-    gui_push_layout({ .rect = rect, .flags = LAYOUT_ROOT|EXPAND_Y });
+    gui_push_layout({ rect, LAYOUT_ROOT|EXPAND_Y });
 
     defer {
         gui_pop_layout();
@@ -2757,7 +2810,7 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
     };
 
     {
-        gui_push_clip_rect(vrect);
+        gui_push_clip_rect(view_r);
         defer { gui_pop_clip_rect(); };
 
         i32 start = 0, end = items.count;
@@ -2779,9 +2832,8 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
         }
     }
 
-    f32 total_height = gui_current_layout()->rect.br.y+scroll_area->offset.y - vrect.tl.y;
-
-    gui_vscrollbar(&scroll_area->offset.y, total_height, item_height, scroll, vrect);
+    f32 total_height = gui_current_layout()->rem.br.y+scroll_area->offset.y - view_r.tl.y;
+    gui_vscrollbar(&scroll_area->offset.y, total_height, item_height, vscroll_r, view_r);
     return result;
 }
 
@@ -2797,11 +2849,13 @@ bool gui_input(WindowEvent event) EXPORT
     return false;
 }
 
-bool gui_begin_tree_id(GuiId id, String label, bool selected) EXPORT
+bool gui_begin_tree_id(GuiId id, String label) EXPORT { return gui_begin_tree_id(id, label, false); }
+void gui_tree_leaf_id(GuiId id, String label) EXPORT { gui_begin_tree_id(id, label, true); }
+
+bool gui_begin_tree_id(GuiId id, String label, bool is_leaf) EXPORT
 {
     SArena scratch = tl_scratch_arena();
     u32 &flags = *map_find_emplace(&gui.flags, id, 0u);
-    flags = (flags & ~GUI_SELECTED) | (selected ? GUI_SELECTED : 0);
 
     gui_push_id(id);
     defer { if (!(flags & GUI_ACTIVE)) gui_pop_id(); };
@@ -2809,62 +2863,51 @@ bool gui_begin_tree_id(GuiId id, String label, bool selected) EXPORT
     GlyphsData text = calc_glyphs_data(label, &gui.fonts.base, scratch);
     LayoutRect rect = split_row({ text.font->line_height+4 });
     LayoutRect text_rect = rect;
-    LayoutRect btn_rect = split_left(&text_rect, { rect.size().y, .margin = gui.style.margin });
 
-
-    GuiId btn_id = GUI_ID;
 
     gui_hot_rect(id, rect);
-    if (gui_clicked(btn_id, btn_rect)) {
-        flags ^= GUI_ACTIVE;
-        gui_focus(id);
-    }
     gui_pressed(id);
     gui_handle_focus_grabbing(id);
+
+    GuiId btn_id = GUI_ID;
+    LayoutRect btn_rect;
+
+    if (!is_leaf) {
+        btn_rect = split_left(&text_rect, { rect.size().y, .margin = gui.style.margin, .flags = SPLIT_SQUARE });
+
+        if (gui_clicked(btn_id, btn_rect)) {
+            flags ^= GUI_ACTIVE;
+            gui_focus(id);
+        }
+    }
 
     if (gui.focused == id) flags |= GUI_SELECTED;
 
     if (gui_input_layer(id, gui.input.tree)) {
-        if (get_input_edge(TOGGLE, gui.input.tree))     flags ^= GUI_ACTIVE;
-        if (get_input_edge(ACTIVATE, gui.input.tree))   flags |= GUI_ACTIVE;
-        if (get_input_edge(DEACTIVATE, gui.input.tree)) flags &= ~GUI_ACTIVE;
+        if (!is_leaf) {
+            if (get_input_edge(TOGGLE, gui.input.tree))     flags ^= GUI_ACTIVE;
+            if (get_input_edge(ACTIVATE, gui.input.tree))   flags |= GUI_ACTIVE;
+            if (get_input_edge(DEACTIVATE, gui.input.tree)) flags &= ~GUI_ACTIVE;
+        }
     }
 
     if (flags & GUI_SELECTED) gui_draw_rect(rect, gui.style.accent_bg);
-    String icon = flags & GUI_ACTIVE ? gui.icons.down : gui.icons.right;
-    gui_draw_icon_button(btn_id, icon, btn_rect);
+    else if (gui.hot == id) gui_draw_rect(rect, gui.style.bg_hot);
+
+    if (!is_leaf) {
+        String icon = flags & GUI_ACTIVE ? gui.icons.down : gui.icons.right;
+        gui_draw_icon_button(btn_id, icon, btn_rect);
+    }
+
     gui_textbox(text, text_rect);
 
-    if (flags & GUI_ACTIVE) gui_current_layout()->rect.tl.x += 16;
+    if (flags & GUI_ACTIVE) gui_current_layout()->rem.tl.x += 16;
     return flags & GUI_ACTIVE;
-}
-
-void gui_tree_leaf_id(GuiId id, String label, bool selected) EXPORT
-{
-    SArena scratch = tl_scratch_arena();
-    u32 &flags = *map_find_emplace(&gui.flags, id, 0u);
-    flags = (flags & ~GUI_SELECTED) | (selected ? GUI_SELECTED : 0);
-
-    GlyphsData text = calc_glyphs_data(label, &gui.fonts.base, scratch);
-    Rect rect = split_row({ text.font->line_height+4 });
-
-    gui_hot_rect(id, rect);
-    gui_pressed(id);
-    gui_handle_focus_grabbing(id);
-
-    if (gui.focused == id) flags |= GUI_SELECTED;
-
-    // NOTE(jesper): nothing to do here, just pushing the layer to ensure any input is translated correctly
-    // In the future we may want to return some status to the caller to handle any tree leaf interaction
-    if (gui_input_layer(id, gui.input.tree)) {}
-
-    if (flags & GUI_SELECTED) gui_draw_rect(rect, gui.style.accent_bg);
-    gui_textbox(text, rect);
 }
 
 void gui_end_tree() EXPORT
 {
-    gui_current_layout()->rect.tl.x -= 16;
+    gui_current_layout()->rem.tl.x -= 16;
     gui_pop_id();
 }
 

@@ -153,6 +153,8 @@ struct Camera3 {
     f32 uni_scale = 1.0f;
 };
 
+#include "gen/gfx_opengl.h"
+
 
 void gfx_push_command(GfxCommand cmd, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);
 void gfx_draw_square(Vector2 center, Vector2 size, Vector4 color, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);

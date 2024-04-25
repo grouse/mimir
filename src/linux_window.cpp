@@ -3,21 +3,27 @@
 #include <X11/cursorfont.h>
 #include <X11/extensions/XInput2.h>
 
-#include "memory.h"
 #include "window.h"
-#include "hash_table.h"
+
+#include "core/memory.h"
+#include "core/hash_table.h"
 
 #include "linux_glx.h"
 #include "linux_opengl.h"
 
+#include "gen/internal/window.h"
+
 #define LOG_KEY_PRESS 0
 #define LOG_KEY_RELEASE 0
 
-#include "window.cpp"
-
 struct {
 	int xi_opcode;
-} x11_input{};
+
+    Atom WM_PROTOCOLS;
+    Atom WM_DELETE_WINDOW;
+} x11{};
+
+#define X11_GET_ATOM(dsp, name) x11.name = XInternAtom(dsp, #name, False)
 
 extern Cursor cursors[MC_MAX];
 
@@ -30,6 +36,7 @@ struct AppWindow {
     XIC ic;
 
     DynamicArray<WindowEvent> events;
+
 };
 
 MouseState g_mouse{};
@@ -121,8 +128,8 @@ u8 keycode_from_x11_keycode(KeyCode x11_keycode, KeySym sym)
 	case 0x3B: return KC_COMMA;
 	case 0x3C: return KC_PERIOD;
 	case 0x3D: return KC_SLASH;
-	case 0x3E: return KC_RSHIFT;
-	case 0x32: return KC_LSHIFT;
+	case 0x3E: return KC_SHIFT;
+	case 0x32: return KC_SHIFT;
 	case 0x76: return KC_INSERT;
 	case 0x77: return KC_DELETE;
 	case 0x25: return KC_CTRL;
@@ -163,9 +170,35 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 	WindowEvent event{};
 
 	switch (xevent.type) {
+    case ConfigureNotify: {
+        if (wnd->client_resolution.x != xevent.xconfigure.width ||
+            wnd->client_resolution.y != xevent.xconfigure.height)
+        {
+            LOG_INFO("window size change");
+            event.type = WE_RESIZE;
+            event.resize = {
+                .width = (i16)xevent.xconfigure.width,
+                .height = (i16)xevent.xconfigure.height,
+            };
+
+            wnd->client_resolution = {
+                (f32)xevent.xconfigure.width,
+                (f32)xevent.xconfigure.height
+            };
+        }
+    } break;
+	case ClientMessage:
+        if (xevent.xclient.message_type == x11.WM_PROTOCOLS &&
+            xevent.xclient.format == 32 &&
+            (u64)xevent.xclient.data.l[0] == x11.WM_DELETE_WINDOW)
+        {
+            event.type = WE_QUIT;
+        }
+	    break;
+
 	case GenericEvent:
 		if (g_mouse.captured &&
-		    xevent.xcookie.extension == x11_input.xi_opcode &&
+		    xevent.xcookie.extension == x11.xi_opcode &&
 		    XGetEventData(xevent.xany.display, &xevent.xcookie))
 		{
 			switch (xevent.xcookie.evtype) {
@@ -207,6 +240,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 				} break;
 			}
 		} break;
+
 	case FocusIn:
 		if (g_mouse.captured) {
 			XGrabPointer(
@@ -218,14 +252,17 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 				cursors[MC_HIDDEN],
 				CurrentTime);
 		} break;
+
 	case FocusOut:
 		if (g_mouse.captured) {
 			XUngrabPointer(xevent.xany.display, CurrentTime);
 		} break;
+
 	case EnterNotify:
 		g_mouse.x = xevent.xcrossing.x;
 		g_mouse.y = xevent.xcrossing.y;
 		break;
+
 	case MotionNotify:
 		if (g_mouse.captured) break;
 
@@ -254,6 +291,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 				(event.mouse.modifiers & MF_ALT) != 0);
 		}
 		break;
+
 	case ButtonPress:
 		if (xevent.xbutton.button == 4 || xevent.xbutton.button == 5) {
 			event.type = WE_MOUSE_WHEEL;
@@ -280,6 +318,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 			button_state |= event.mouse.button;
 		}
 		break;
+
 	case ButtonRelease:
 		if (xevent.xbutton.button == 4 || xevent.xbutton.button == 5) {
 			event.type = WE_MOUSE_WHEEL;
@@ -306,11 +345,13 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 			button_state &= ~event.mouse.button;
 		}
 		break;
+
 	case SelectionClear:
 	case SelectionRequest:
     case SelectionNotify:
         handle_clipboard_events(xevent);
         break;
+
 	case KeyPress: {
 			if (LOG_KEY_PRESS) log_key_event(xevent.xkey);
 
@@ -363,6 +404,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 			}
 
 		} break;
+
     case KeyRelease: {
 			if (LOG_KEY_RELEASE) log_key_event(xevent.xkey);
 
@@ -386,6 +428,7 @@ void linux_input_event(DynamicArray<WindowEvent> *stream, AppWindow *wnd, XEvent
 					(event.key.modifiers & MF_ALT) != 0);
 			}
 		} break;
+
     default:
         if (false) LOG_INFO("Unhandled event %d", xevent.type);
         break;
@@ -526,10 +569,10 @@ AppWindow* create_window(WindowCreateDesc desc)
     wnd->im = XOpenIM(wnd->dsp, NULL, NULL, NULL);
     wnd->ic = XCreateIC(wnd->im, XNInputStyle, XIMPreeditNothing | XIMStatusNothing, XNClientWindow, wnd->handle, NULL);
 
-	if (!x11_input.xi_opcode) {
+	if (!x11.xi_opcode) {
 		// see http://who-t.blogspot.com/2009/05/xi2-recipes-part-1.html
 		int event, error;
-		PANIC_IF(!XQueryExtension(wnd->dsp, "XInputExtension", &x11_input.xi_opcode, &event, &error), "missing xi2 extension");
+		PANIC_IF(!XQueryExtension(wnd->dsp, "XInputExtension", &x11.xi_opcode, &event, &error), "missing xi2 extension");
 
 		int major = 2, minor = 0;
 		PANIC_IF(XIQueryVersion(wnd->dsp, &major, &minor) == BadRequest, "failed querying XInput version");
@@ -550,6 +593,14 @@ AppWindow* create_window(WindowCreateDesc desc)
 		// see http://who-t.blogspot.com/2009/07/xi2-recipes-part-4.html
 		XISelectEvents(wnd->dsp, DefaultRootWindow(wnd->dsp), &ximask, 1);
 	}
+
+	if (!x11.WM_PROTOCOLS) {
+        X11_GET_ATOM(wnd->dsp, WM_PROTOCOLS);
+        X11_GET_ATOM(wnd->dsp, WM_DELETE_WINDOW);
+
+        Atom protocols[] = { x11.WM_DELETE_WINDOW };
+        XSetWMProtocols(wnd->dsp, wnd->handle, protocols, ARRAY_COUNT(protocols));
+    }
 
     if (!cursors[MC_NORMAL]) {
         cursors[MC_NORMAL] = XCreateFontCursor(wnd->dsp, XC_left_ptr);
@@ -608,6 +659,15 @@ bool next_event(AppWindow *wnd, WindowEvent *dst)
     }
 
     return true;
+}
+
+void wait_for_next_event(AppWindow *wnd)
+{
+    while (!wnd->events.count) {
+        XEvent event;
+        if (XNextEvent(wnd->dsp, &event))
+            linux_input_event(&wnd->events, wnd, event);
+    }
 }
 
 void present_window(AppWindow *wnd)

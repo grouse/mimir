@@ -172,6 +172,9 @@ void load_opengl_procs(HMODULE gl_dll);
 #define DECL_GL_ARB_PROC(ret, proc, ...) typedef ret proc##ARB_t(__VA_ARGS__); extern proc##ARB_t *proc
 #endif
 
+DECL_GL_PROC(BOOL, wglSwapIntervalEXT, int interval);
+DECL_GL_PROC(int, wglGetSwapIntervalEXT, void);
+
 DECL_GL_ARB_PROC(char*, wglGetExtensionsString, HDC hdc);
 DECL_GL_ARB_PROC(BOOL, wglChoosePixelFormat, HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
 DECL_GL_ARB_PROC(HGLRC, wglCreateContextAttribs, HDC hDC, HGLRC hShareContext, const int *attribList);

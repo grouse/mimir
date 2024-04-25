@@ -2,8 +2,8 @@
 #include "linux_opengl.h"
 #include "linux_glx.h"
 
-#include "core.h"
-#include "maths.h"
+#include "core/core.h"
+#include "core/maths.h"
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>

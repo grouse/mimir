@@ -31,8 +31,6 @@ int WINAPI wWinMain(
     extern HWND win32_window_handle(AppWindow *wnd);
     win32_root_window = win32_window_handle(wnd);
 
-    init_gfx(resolution);
-
     Array<String> args{};
 
     // NOTE(jesper): CommandLineToArgvW sets the first argument string to the executable

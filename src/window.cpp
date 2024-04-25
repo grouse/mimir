@@ -1,6 +1,8 @@
-#include "window.h"
-#include "core/string.h"
 #include "core/array.h"
+#include "core/hash_table.h"
+#include "core/string.h"
+
+#include "window.h"
 
 struct InputMap {
     String name;
@@ -23,115 +25,163 @@ struct {
     InputMapId active_map = -1;
 } input{};
 
-String string_from_enum(WindowEventType type) EXPORT
+String string_from_enum(GamepadButton button) EXPORT
 {
-    switch (type) {
-    case WE_MOUSE_PRESS: return "WE_MOUSE_PRESS";
-    case WE_MOUSE_RELEASE: return "WE_MOUSE_RELEASE";
-    case WE_MOUSE_MOVE: return "WE_MOUSE_MOVE";
-    case WE_MOUSE_WHEEL: return "WE_MOUSE_WHEEL";
-    case WE_KEY_PRESS: return "WE_KEY_PRESS";
-    case WE_KEY_RELEASE: return "WE_KEY_RELEASE";
-    case WE_TEXT: return "WE_TEXT";
-    case WE_RESIZE: return "WE_RESIZE";
-    case WE_QUIT: return "WE_QUIT";
-    case WE_INPUT: return "WE_INPUT";
-    case WE_MAX: return "WE_MAX";
+    switch (button) {
+    case PAD_F_UP:    return "PAD_F_UP";
+    case PAD_F_DOWN:  return "PAD_F_DOWN";
+    case PAD_F_LEFT:  return "PAD_F_LEFT";
+    case PAD_F_RIGHT: return "PAD_F_RIGHT";
+    case PAD_D_UP:    return "PAD_D_UP";
+    case PAD_D_DOWN:  return "PAD_D_DOWN";
+    case PAD_D_LEFT:  return "PAD_D_LEFT";
+    case PAD_D_RIGHT: return "PAD_D_RIGHT";
+    case PAD_LB:      return "PAD_LB";
+    case PAD_LS:      return "PAD_LS";
+    case PAD_RB:      return "PAD_RB";
+    case PAD_RS:      return "PAD_RS";
     }
 
-    return "UNKNOWN";
+    return "unknown";
 }
 
-String string_from_enum(KeyCode_ kc)
+String string_from_enum(GamepadAxis axis) EXPORT
+{
+    switch (axis) {
+    case PAD_TRIG0: return "PAD_TRIG0";
+    case PAD_TRIG1: return "PAD_TRIG1";
+    case PAD_JOY0: return "PAD_JOY0";
+    case PAD_JOY1: return "PAD_JOY1";
+    }
+
+    return "unknown";
+}
+
+String string_from_enum(WindowEventType type) EXPORT
+{
+    if (type >= WE_INPUT) return "WE_INPUT";
+
+    switch (type) {
+    case WE_INPUT:          return "WE_INPUT";
+    case WE_MOUSE_WHEEL:    return "WE_MOUSE_WHEEL";
+    case WE_MOUSE_PRESS:    return "WE_MOUSE_PRESS";
+    case WE_MOUSE_RELEASE:  return "WE_MOUSE_RELEASE";
+    case WE_MOUSE_MOVE:     return "WE_MOUSE_MOVE";
+    case WE_KEY_PRESS:      return "WE_KEY_PRESS";
+    case WE_KEY_RELEASE:    return "WE_KEY_RELEASE";
+    case WE_PAD_CONNECT:    return "WE_PAD_CONNECT";
+    case WE_PAD_DISCONNECT: return "WE_PAD_DISCONNECT";
+    case WE_PAD_PRESS:      return "WE_PAD_PRESS";
+    case WE_PAD_RELEASE:    return "WE_PAD_RELEASE";
+    case WE_PAD_AXIS:       return "WE_PAD_AXIS";
+    case WE_PAD_AXIS2:      return "WE_PAD_AXIS2";
+    case WE_TEXT:           return "WE_TEXT";
+    case WE_RESIZE:         return "WE_RESIZE";
+    case WE_QUIT:           return "WE_QUIT";
+    case WE_INVALID:        return "invalid";
+    }
+
+    return "unknown";
+}
+
+String string_from_enum(KeyCode_ kc) EXPORT
 {
     switch (kc) {
-    case KC_LSUPER: return "KC_LSUPER";
-    case KC_RSUPER: return "KC_RSUPER";
-    case KC_APP: return "KC_APP";
-    case KC_SCLK: return "KC_SCLK";
-    case KC_BREAK: return "KC_BREAK";
-    case KC_UNKNOWN: return "KC_UNKNOWN";
+    case KC_LSUPER:    return "KC_LSUPER";
+    case KC_RSUPER:    return "KC_RSUPER";
+    case KC_APP:       return "KC_APP";
+    case KC_SCLK:      return "KC_SCLK";
+    case KC_BREAK:     return "KC_BREAK";
+    case KC_UNKNOWN:   return "KC_UNKNOWN";
     case KC_BACKSPACE: return "KC_BACKSPACE";
-    case KC_ENTER: return "KC_ENTER";
-    case KC_TAB: return "KC_TAB";
-    case KC_INSERT: return "KC_INSERT";
-    case KC_DELETE: return "KC_DELETE";
-    case KC_HOME: return "KC_HOME";
-    case KC_END: return "KC_END";
-    case KC_PAGE_UP: return "KC_PAGE_UP";
+    case KC_ENTER:     return "KC_ENTER";
+    case KC_TAB:       return "KC_TAB";
+    case KC_INSERT:    return "KC_INSERT";
+    case KC_DELETE:    return "KC_DELETE";
+    case KC_HOME:      return "KC_HOME";
+    case KC_END:       return "KC_END";
+    case KC_PAGE_UP:   return "KC_PAGE_UP";
     case KC_PAGE_DOWN: return "KC_PAGE_DOWN";
-    case KC_SPACE: return "KC_SPACE";
-    case KC_SHIFT: return "KC_SHIFT";
-    case KC_CTRL: return "KC_CTRL";
-    case KC_ALT: return "KC_ALT";
-    case KC_LBRACKET: return "KC_LBRACKET";
-    case KC_RBRACKET: return "KC_RBRACKET";
+    case KC_SPACE:     return "KC_SPACE";
+    case KC_SHIFT:     return "KC_SHIFT";
+    case KC_CTRL:      return "KC_CTRL";
+    case KC_ALT:       return "KC_ALT";
+    case KC_LBRACKET:  return "KC_LBRACKET";
+    case KC_RBRACKET:  return "KC_RBRACKET";
     case KC_BACKSLASH: return "KC_BACKSLASH";
-    case KC_COLON: return "KC_COLON";
-    case KC_TICK: return "KC_TICK";
-    case KC_COMMA: return "KC_COMMA";
-    case KC_PERIOD: return "KC_PERIOD";
-    case KC_SLASH: return "KC_SLASH";
-    case KC_1: return "KC_1";
-    case KC_2: return "KC_2";
-    case KC_3: return "KC_3";
-    case KC_4: return "KC_4";
-    case KC_5: return "KC_5";
-    case KC_6: return "KC_6";
-    case KC_7: return "KC_7";
-    case KC_8: return "KC_8";
-    case KC_9: return "KC_9";
-    case KC_0: return "KC_0";
-    case KC_GRAVE: return "KC_GRAVE";
-    case KC_MINUS: return "KC_MINUS";
-    case KC_PLUS: return "KC_PLUS";
-    case KC_ESC: return "KC_ESC";
-    case KC_F1: return "KC_F1";
-    case KC_F2: return "KC_F2";
-    case KC_F3: return "KC_F3";
-    case KC_F4: return "KC_F4";
-    case KC_F5: return "KC_F5";
-    case KC_F6: return "KC_F6";
-    case KC_F7: return "KC_F7";
-    case KC_F8: return "KC_F8";
-    case KC_F9: return "KC_F9";
-    case KC_F10: return "KC_F10";
-    case KC_F11: return "KC_F11";
-    case KC_F12: return "KC_F12";
-    case KC_A: return "KC_A";
-    case KC_B: return "KC_B";
-    case KC_C: return "KC_C";
-    case KC_D: return "KC_D";
-    case KC_E: return "KC_E";
-    case KC_F: return "KC_F";
-    case KC_G: return "KC_G";
-    case KC_H: return "KC_H";
-    case KC_I: return "KC_I";
-    case KC_J: return "KC_J";
-    case KC_K: return "KC_K";
-    case KC_L: return "KC_L";
-    case KC_M: return "KC_M";
-    case KC_N: return "KC_N";
-    case KC_O: return "KC_O";
-    case KC_P: return "KC_P";
-    case KC_Q: return "KC_Q";
-    case KC_R: return "KC_R";
-    case KC_S: return "KC_S";
-    case KC_T: return "KC_T";
-    case KC_U: return "KC_U";
-    case KC_V: return "KC_V";
-    case KC_W: return "KC_W";
-    case KC_X: return "KC_X";
-    case KC_Y: return "KC_Y";
-    case KC_Z: return "KC_Z";
-    case KC_LEFT: return "KC_LEFT";
-    case KC_UP: return "KC_UP";
-    case KC_DOWN: return "KC_DOWN";
-    case KC_RIGHT: return "KC_RIGHT";
+    case KC_COLON:     return "KC_COLON";
+    case KC_TICK:      return "KC_TICK";
+    case KC_COMMA:     return "KC_COMMA";
+    case KC_PERIOD:    return "KC_PERIOD";
+    case KC_SLASH:     return "KC_SLASH";
+    case KC_1:         return "KC_1";
+    case KC_2:         return "KC_2";
+    case KC_3:         return "KC_3";
+    case KC_4:         return "KC_4";
+    case KC_5:         return "KC_5";
+    case KC_6:         return "KC_6";
+    case KC_7:         return "KC_7";
+    case KC_8:         return "KC_8";
+    case KC_9:         return "KC_9";
+    case KC_0:         return "KC_0";
+    case KC_GRAVE:     return "KC_GRAVE";
+    case KC_MINUS:     return "KC_MINUS";
+    case KC_PLUS:      return "KC_PLUS";
+    case KC_ESC:       return "KC_ESC";
+    case KC_F1:        return "KC_F1";
+    case KC_F2:        return "KC_F2";
+    case KC_F3:        return "KC_F3";
+    case KC_F4:        return "KC_F4";
+    case KC_F5:        return "KC_F5";
+    case KC_F6:        return "KC_F6";
+    case KC_F7:        return "KC_F7";
+    case KC_F8:        return "KC_F8";
+    case KC_F9:        return "KC_F9";
+    case KC_F10:       return "KC_F10";
+    case KC_F11:       return "KC_F11";
+    case KC_F12:       return "KC_F12";
+    case KC_A:         return "KC_A";
+    case KC_B:         return "KC_B";
+    case KC_C:         return "KC_C";
+    case KC_D:         return "KC_D";
+    case KC_E:         return "KC_E";
+    case KC_F:         return "KC_F";
+    case KC_G:         return "KC_G";
+    case KC_H:         return "KC_H";
+    case KC_I:         return "KC_I";
+    case KC_J:         return "KC_J";
+    case KC_K:         return "KC_K";
+    case KC_L:         return "KC_L";
+    case KC_M:         return "KC_M";
+    case KC_N:         return "KC_N";
+    case KC_O:         return "KC_O";
+    case KC_P:         return "KC_P";
+    case KC_Q:         return "KC_Q";
+    case KC_R:         return "KC_R";
+    case KC_S:         return "KC_S";
+    case KC_T:         return "KC_T";
+    case KC_U:         return "KC_U";
+    case KC_V:         return "KC_V";
+    case KC_W:         return "KC_W";
+    case KC_X:         return "KC_X";
+    case KC_Y:         return "KC_Y";
+    case KC_Z:         return "KC_Z";
+    case KC_LEFT:      return "KC_LEFT";
+    case KC_UP:        return "KC_UP";
+    case KC_DOWN:      return "KC_DOWN";
+    case KC_RIGHT:     return "KC_RIGHT";
     }
 
     return "KC_UNKNOWN";
 }
+
+#if defined(_WIN32)
+#include "win32_window.cpp"
+#elif defined(__linux__)
+#include "linux_window.cpp"
+#else
+#error "unsupported platform"
+#endif
 
 void init_input_map_(InputMapId *dst, String name, std::initializer_list<InputDesc> descriptors) EXPORT
 {
@@ -164,7 +214,6 @@ void reset_input_map(InputMapId map_id) INTERNAL
 
 void input_begin_frame() EXPORT
 {
-    if (false) LOG_INFO("beginning input frame");
     if (auto *it = map_find(&input.mouse, EDGE_DOWN); it) *it = 0;
     if (auto *it = map_find(&input.mouse, EDGE_UP); it) *it = 0;
 
@@ -173,13 +222,16 @@ void input_begin_frame() EXPORT
 
     SWAP(input.layers, input.queued_layers);
     input.queued_layers.count = 0;
+
+#ifdef _WIN32
+    win32_input_begin_frame();
+#endif
 }
 
 void set_input_map(InputMapId id) EXPORT
 {
     LOG_INFO("switching input map: [%d] %.*s", id, STRFMT(input.maps[id].name));
     reset_input_map(input.active_map);
-    reset_input_map(id);
     input.active_map = id;
     input.layers.count = 0;
 }
@@ -187,7 +239,6 @@ void set_input_map(InputMapId id) EXPORT
 void push_input_layer(InputMapId layer) EXPORT
 {
     PANIC_IF(layer < 0, "Invalid input layer id: %d", layer);
-    if (false) LOG_INFO("pushing input layer: [%d] %.*s", layer, STRFMT(input.maps[layer].name));
     array_add(&input.queued_layers, layer);
 }
 
@@ -210,7 +261,7 @@ bool translate_input_event(
         InputType type,
         f32 axis)
     {
-        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type, .axis = axis } });
+        array_insert(queue, 0, { id, .input = { map, type, .axis = axis } });
     };
 
     constexpr auto insert_axis2d_event = [](
@@ -220,7 +271,7 @@ bool translate_input_event(
         InputType type,
         f32 axis[2])
     {
-        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type, .axis2d = { axis[0], axis[1] } } });
+        array_insert(queue, 0, { id, .input = { map, type, .axis2d = { axis[0], axis[1] } } });
     };
 
     constexpr auto insert_input_event = [](
@@ -229,7 +280,7 @@ bool translate_input_event(
         InputId id,
         InputType type)
     {
-        array_insert(queue, 0, { WE_INPUT, .input = { map, id, type } });
+        array_insert(queue, 0, { id, .input = { map, type } });
     };
 
     switch (event.type) {
@@ -244,17 +295,73 @@ bool translate_input_event(
     default: break;
     }
 
-    if (event.type != WE_INPUT && map_id != -1) {
+    if (event.type < WE_INPUT && map_id != -1) {
         InputMap *map = &input.maps[map_id];
 
         switch (event.type) {
         case WE_TEXT:
             for (InputDesc it : map->by_type[TEXT][0]) {
-                array_insert(queue, 0, { WE_INPUT, .input = { map_id, it.id, it.type, .text = event.text } });
+                array_insert(queue, 0, { it.id, .input = { map_id, it.type, .text = event.text } });
                 handled = handled || !(it.flags & FALLTHROUGH);
 
                 auto *text = map_find_emplace(&map->text, it.id);
                 array_add(text, event.text);
+            }
+            break;
+        case WE_PAD_AXIS2:
+            for (InputDesc it : map->by_device[GAMEPAD][AXIS_2D]) {
+                if (event.axis2.id == it.axis.id) {
+                    f32 *axis = map_find_emplace(&map->axes, it.id);
+                    axis[0] = event.axis2.value[0];
+                    axis[1] = event.axis2.value[1];
+
+                    insert_axis2d_event(queue, map_id, it.id, it.type, event.axis2.value);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            } break;
+        case WE_PAD_AXIS:
+            for (InputDesc it : map->by_device[GAMEPAD][AXIS]) {
+                if (event.axis.id == it.axis.id) {
+                    f32 *axis = map_find_emplace(&map->axes, it.id);
+                    *axis = event.axis.value;
+
+                    insert_axis_event(queue, map_id, it.id, it.type, event.axis.value);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+            break;
+        case WE_PAD_PRESS:
+            for (InputDesc it : map->by_device[GAMEPAD][EDGE_DOWN]) {
+                if (event.pad.button == it.pad.button) {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+
+            for (InputDesc it : map->by_device[GAMEPAD][HOLD]) {
+                if (event.pad.button == it.pad.button) {
+                    (*map_find_emplace(&map->held, it.id, false)) = true;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+            break;
+        case WE_PAD_RELEASE:
+            for (InputDesc it : map->by_device[GAMEPAD][EDGE_UP]) {
+                if (event.pad.button == it.pad.button) {
+                    (*map_find_emplace(&map->edges, it.id, 0))++;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
+            }
+
+            for (InputDesc it : map->by_device[GAMEPAD][HOLD]) {
+                if (event.pad.button == it.pad.button) {
+                    (*map_find_emplace(&map->held, it.id, false)) = false;
+                    insert_input_event(queue, map_id, it.id, it.type);
+                    handled = handled || !(it.flags & FALLTHROUGH);
+                }
             }
             break;
         case WE_MOUSE_WHEEL:
@@ -294,12 +401,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->edges, it.id, 0))++;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "edge down [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
 
@@ -312,12 +413,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->held, it.id, false)) = true;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "hold begin [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
             break;
@@ -331,12 +426,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->edges, it.id, 0))++;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "edge up [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
 
@@ -349,12 +438,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->held, it.id, false)) = false;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "hold end [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
             break;
@@ -371,10 +454,11 @@ bool translate_input_event(
                     handled = handled || !(it.flags & FALLTHROUGH);
 
                     LOG_INFO(
-                        "edge down [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
+                        "[%.*s] edge down: [%d] %.*s, final: %d",
+                        STRFMT(map->name),
+                        it.id,
+                        STRFMT(string_from_enum((KeyCode_)event.key.keycode)),
+                        handled);
                 }
             }
 
@@ -386,12 +470,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->held, it.id, false)) = true;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "hold begin [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
 
@@ -418,12 +496,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->edges, it.id, 0))++;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "edge up [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
 
@@ -435,12 +507,6 @@ bool translate_input_event(
                     (*map_find_emplace(&map->held, it.id, false)) = false;
                     insert_input_event(queue, map_id, it.id, it.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
-
-                    LOG_INFO(
-                        "hold end [%s]: map: [%d] %.*s, input id: %d, handled: 0x%x",
-                        string_from_enum((KeyCode_)event.key.keycode).data,
-                        map_id, STRFMT(map->name),
-                        it.id, handled);
                 }
             }
 
@@ -462,7 +528,6 @@ bool translate_input_event(
 
     }
 
-    if (false && handled) LOG_INFO("translated input event: %.*s", STRFMT(string_from_enum((WindowEventType)event.type)));
     return handled;
 }
 
@@ -513,7 +578,7 @@ bool get_input_text(InputId id, TextEvent *dst, InputMapId map_id) EXPORT
     return true;
 }
 
-bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id) EXPORT
+bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id /*= INPUT_MAP_ANY*/) EXPORT
 {
     if (map_id == INPUT_MAP_ANY) {
         for (auto it : reverse(input.layers)) if (get_input_axis(id, dst, it)) return true;
@@ -529,7 +594,7 @@ bool get_input_axis(InputId id, f32 dst[1], InputMapId map_id) EXPORT
     return true;
 }
 
-bool get_input_axis2d(InputId id, f32 dst[2], InputMapId map_id) EXPORT
+bool get_input_axis2d(InputId id, f32 dst[2], InputMapId map_id /*= INPUT_MAP_ANY*/) EXPORT
 {
     if (map_id == INPUT_MAP_ANY) {
         for (auto it : reverse(input.layers)) if (get_input_axis2d(id, dst, it)) return true;
@@ -546,7 +611,7 @@ bool get_input_axis2d(InputId id, f32 dst[2], InputMapId map_id) EXPORT
     return true;
 }
 
-bool get_input_edge(InputId id, InputMapId map_id) EXPORT
+bool get_input_edge(InputId id, InputMapId map_id /*= INPUT_MAP_ANY*/) EXPORT
 {
     if (map_id == INPUT_MAP_ANY) {
         for (auto it : reverse(input.layers)) if (get_input_edge(id, it)) return true;

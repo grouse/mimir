@@ -1,9 +1,7 @@
 #include "gfx_opengl.h"
+#include "gen/gfx_opengl.h"
 
 #include "assets.h"
-
-#include "gen/string.h"
-#include "gen/gfx_opengl.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ASSERT(x) ASSERT(x)
@@ -283,58 +281,13 @@ void init_gfx(Vector2 resolution) EXPORT
     }
 
     {
-        const char *vert = SHADER_HEADER
-            "layout(location = 0) in vec2 v_pos;\n"
-            "layout(location = 1) in vec2 v_uv;\n"
-            "uniform vec2 resolution;\n"
-            "out vec2 vs_uv;\n"
-            "void main()\n"
-            "{\n"
-            "    gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
-            "    gl_Position.y = -gl_Position.y;\n"
-            "    vs_uv = v_uv;\n"
-            "}\0";
-
-        const char *frag = SHADER_HEADER
-            "in vec2 vs_uv;\n"
-            "out vec4 out_color;\n"
-            "uniform sampler2D sampler;\n"
-            "void main()\n"
-            "{\n"
-            "	out_color = texture(sampler, vs_uv);\n"
-            "}\0";
-
-        gfx.shaders.gui_prim_texture.program = gfx_create_shader(vert, frag);
-        gfx.shaders.gui_prim_texture.resolution = glGetUniformLocation(gfx.shaders.gui_prim_texture.program->object, "resolution");
+        gfx.shaders.gui_prim_texture.program = gfx_create_shader_program(
+            "shaders/gui_prim_texture.vert.glsl",
+            "shaders/gui_prim_texture.frag.glsl");
     }
 
     {
-        const char *vert = SHADER_HEADER
-            "layout(location = 0) in vec2 v_pos;\n"
-            "layout(location = 1) in vec2 v_uv;\n"
-            "uniform vec2 resolution;\n"
-            "uniform vec3 color;\n"
-            "out vec2 vs_uv;\n"
-            "out vec3 vs_color;\n"
-            "void main()\n"
-            "{\n"
-            "    gl_Position = vec4(v_pos.xy / resolution * 2.0 - 1.0, 0.0, 1.0);\n"
-            "    gl_Position.y = -gl_Position.y;\n"
-            "    vs_uv = v_uv;\n"
-            "    vs_color = color;\n"
-            "}\0";
-
-        const char *frag = SHADER_HEADER
-            "in vec2 vs_uv;\n"
-            "in vec3 vs_color;\n"
-            "out vec4 out_color;\n"
-            "uniform sampler2D atlas_sampler;\n"
-            "void main()\n"
-            "{\n"
-            "	out_color = vec4(vs_color.rgb, texture(atlas_sampler, vs_uv).r);\n"
-            "}\0";
-
-        gfx.shaders.text.program = gfx_create_shader(vert, frag);
+        gfx.shaders.text.program = gfx_create_shader_program("shaders/text.vert.glsl", "shaders/text.frag.glsl");
         gfx.shaders.text.resolution = glGetUniformLocation(gfx.shaders.text.program->object, "resolution");
         gfx.shaders.text.color = glGetUniformLocation(gfx.shaders.text.program->object, "color");
     }
@@ -384,13 +337,13 @@ void init_gfx(Vector2 resolution) EXPORT
             "	out_color = color;\n"
             "}\0";
 
-        gfx.shaders.mono_text.program = gfx_create_shader(vert, frag);
-        gfx.shaders.mono_text.resolution = glGetUniformLocation(gfx.shaders.mono_text.program->object, "resolution");
-        gfx.shaders.mono_text.cell_size = glGetUniformLocation(gfx.shaders.mono_text.program->object, "cell_size");
-        gfx.shaders.mono_text.pos = glGetUniformLocation(gfx.shaders.mono_text.program->object, "pos");
-        gfx.shaders.mono_text.offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "voffset");
-        gfx.shaders.mono_text.line_offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "line_offset");
-        gfx.shaders.mono_text.columns = glGetUniformLocation(gfx.shaders.mono_text.program->object, "columns");
+            gfx.shaders.mono_text.program = gfx_create_shader(vert, frag);
+            gfx.shaders.mono_text.resolution = glGetUniformLocation(gfx.shaders.mono_text.program->object, "resolution");
+            gfx.shaders.mono_text.cell_size = glGetUniformLocation(gfx.shaders.mono_text.program->object, "cell_size");
+            gfx.shaders.mono_text.pos = glGetUniformLocation(gfx.shaders.mono_text.program->object, "pos");
+            gfx.shaders.mono_text.offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "voffset");
+            gfx.shaders.mono_text.line_offset = glGetUniformLocation(gfx.shaders.mono_text.program->object, "line_offset");
+            gfx.shaders.mono_text.columns = glGetUniformLocation(gfx.shaders.mono_text.program->object, "columns");
     }
 
     f32 square_vertices[] = {
@@ -839,17 +792,10 @@ GLuint gfx_create_texture(void *pixel_data, i32 width, i32 height) EXPORT
     return handle;
 }
 
-Vector3 cs_from_ss(Vector3 ss_v) EXPORT
-{
-    f32 ratio = gfx.resolution.y/gfx.resolution.x;
-    Matrix3 projection = orthographic3(0.0f, gfx.resolution.x, 0.0f, gfx.resolution.y, ratio);
-    return projection*ss_v;
-}
-
 // ----------------------------------------
 // GFX_ASSETS
 // ----------------------------------------
-void* gfx_load_texture_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size) EXPORT
+void* gfx_load_texture_asset(AssetHandle /*handle*/, void *existing, String /*identifier*/, u8 *data, i32 size)
 {
     i32 width, height, num_channels;
     u8 *pixel_data = stbi_load_from_memory(data, size, &width, &height, &num_channels, 4);
@@ -881,7 +827,7 @@ void* gfx_load_shader_asset(
     AssetHandle /*handle*/,
     void *existing,
     String identifier,
-    u8 *data, i32 size) EXPORT
+    u8 *data, i32 size)
 {
     ShaderAsset *shader = (ShaderAsset*)existing;
 

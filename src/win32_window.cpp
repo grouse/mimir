@@ -4,11 +4,11 @@
 #include "core/maths.h"
 #include "core/array.h"
 
-#include "core/win32_user32.h"
 #include "core/win32_lite.h"
+#include "core/win32_user32.h"
 #include "core/win32_core.h"
 #include "core/win32_gdi32.h"
-
+#include "core/win32_xinput.h"
 
 struct {
     bool text_input_enabled;
@@ -16,17 +16,23 @@ struct {
     u8 mouse_button_state;
 } win32_input{};
 
-#include "window.cpp"
-
 struct AppWindow {
     HWND hwnd;
     HDC hdc;
     HGLRC glrc;
 
     Vector2 resolution;
+
+    bool query_xinput;
+    DynamicArray<WindowEvent> event_queue;
+
+    struct {
+        bool connected[4];
+        XINPUT_STATE state[4];
+    } xinput;
 };
 
-HashTable<u64, DynamicArray<WindowEvent>> event_queues;
+HashTable<u64, AppWindow*> windows;
 
 HWND win32_root_window;
 
@@ -168,9 +174,165 @@ void release_mouse(AppWindow */*wnd*/)
     g_mouse.captured = false;
 }
 
+bool translate_xinput_button(
+    WindowEvent *event,
+    u16 old, u16 current, u16 bit, u8 button)
+{
+    event->pad.button = button;
+
+    if (old & bit) {
+        if (!(current & bit)) {
+            event->type = WE_PAD_RELEASE;
+            return true;
+        }
+    } else if (current & bit) {
+        event->type = WE_PAD_PRESS;
+        return true;
+    }
+
+    return false;
+}
+
 bool next_event(AppWindow *wnd, WindowEvent *dst)
 {
-    DynamicArray<WindowEvent> *queue = map_find(&event_queues, (u64)wnd->hwnd);
+    DynamicArray<WindowEvent> *queue = &wnd->event_queue;
+
+    if (wnd->query_xinput) {
+        wnd->query_xinput = false;
+
+        for (i32 i = 0; i < 4; i++) {
+            XINPUT_STATE state{};
+            DWORD result = XInputGetState(i, &state);
+
+            if (result == 0) {
+                auto old = wnd->xinput.state[i];
+                if (old.dwPacketNumber != state.dwPacketNumber) {
+                    WindowEvent event{};
+
+                    if (translate_xinput_button(
+                            &event,
+                            old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_DPAD_UP, PAD_D_UP))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_DPAD_DOWN, PAD_D_DOWN))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_DPAD_LEFT, PAD_D_LEFT))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_DPAD_RIGHT, PAD_D_RIGHT))
+                    {
+                        array_add(queue, event);
+                    }
+
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_A, PAD_F_DOWN))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_B, PAD_F_RIGHT))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_X, PAD_F_LEFT))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_Y, PAD_F_UP))
+                    {
+                        array_add(queue, event);
+                    }
+
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_LEFT_SHOULDER, PAD_LB))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_LEFT_THUMB, PAD_LS))
+                    {
+                        array_add(queue, event);
+                    }
+
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_RIGHT_SHOULDER, PAD_RB))
+                    {
+                        array_add(queue, event);
+                    }
+                    if (translate_xinput_button(
+                            &event, old.Gamepad.wButtons, state.Gamepad.wButtons,
+                            XINPUT_GAMEPAD_RIGHT_THUMB, PAD_RS))
+                    {
+                        array_add(queue, event);
+                    }
+
+                    if (old.Gamepad.bLeftTrigger != state.Gamepad.bLeftTrigger) {
+                        event.type = WE_PAD_AXIS;
+                        event.axis.id = PAD_TRIG0;
+                        event.axis.value = state.Gamepad.bLeftTrigger / 255.0f;
+                        array_add(queue, event);
+                    }
+
+                    if (old.Gamepad.bRightTrigger != state.Gamepad.bRightTrigger) {
+                        event.type = WE_PAD_AXIS;
+                        event.axis.id = PAD_TRIG1;
+                        event.axis.value = state.Gamepad.bRightTrigger / 255.0f;
+                        array_add(queue, event);
+                    }
+
+                    if (old.Gamepad.sThumbLX != state.Gamepad.sThumbLX ||
+                        old.Gamepad.sThumbLY != state.Gamepad.sThumbLY)
+                    {
+                        event.type = WE_PAD_AXIS2;
+                        event.axis2.id = PAD_JOY0;
+                        event.axis2.value[0] = state.Gamepad.sThumbLX / 32767.0f;
+                        event.axis2.value[1] = state.Gamepad.sThumbLY / 32767.0f;
+                        array_add(queue, event);
+                    }
+
+                    if (old.Gamepad.sThumbRX != state.Gamepad.sThumbRX ||
+                        old.Gamepad.sThumbRY != state.Gamepad.sThumbRY)
+                    {
+                        event.type = WE_PAD_AXIS2;
+                        event.axis2.id = PAD_JOY1;
+                        event.axis2.value[0] = state.Gamepad.sThumbRX / 32767.0f;
+                        event.axis2.value[1] = state.Gamepad.sThumbRY / 32767.0f;
+                        array_add(queue, event);
+                    }
+
+                    wnd->xinput.state[i] = state;
+                };
+
+                if (!wnd->xinput.connected[i]) {
+                    wnd->xinput.connected[i] = true;
+                    array_add(queue, WindowEvent{ WE_PAD_CONNECT });
+                }
+            } else if (wnd->xinput.connected[i]) {
+                wnd->xinput.connected[i] = false;
+                array_add(queue, WindowEvent{ WE_PAD_DISCONNECT });
+            }
+        }
+    }
 
     MSG msg;
     while (!queue->count && PeekMessageA(&msg, wnd->hwnd, 0, 0, PM_REMOVE)) {
@@ -193,10 +355,8 @@ bool next_event(AppWindow *wnd, WindowEvent *dst)
 
 void wait_for_next_event(AppWindow *wnd)
 {
-    DynamicArray<WindowEvent> *queue = map_find(&event_queues, (u64)wnd->hwnd);
-
     MSG msg;
-    while (!queue->count && GetMessageA(&msg, wnd->hwnd, 0, 0)) {
+    while (!wnd->event_queue.count && GetMessageA(&msg, wnd->hwnd, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
@@ -231,7 +391,8 @@ AppWindow* create_window(WindowCreateDesc desc)
 
     if (!(desc.flags & WINDOW_OPENGL)) PANIC("unsupported render backend");
 
-    AppWindow *wnd = ALLOC_T(mem_dynamic, AppWindow);
+    AppWindow *wnd = ALLOC_T(mem_dynamic, AppWindow) {};
+    defer { map_set(&windows, (u64)wnd->hwnd, wnd); };
 
     WNDCLASSA wc{
         .style = CS_OWNDC,
@@ -240,7 +401,12 @@ AppWindow* create_window(WindowCreateDesc desc)
             static bool mouse_in_client = false;
             static u8 modifier_state = 0;
 
-            DynamicArray<WindowEvent> *queue = map_find_emplace(&event_queues, (u64)hwnd);
+            AppWindow **it = map_find(&windows, (u64)hwnd);
+            if (!it) return DefWindowProcA(hwnd, message, wparam, lparam);
+            PANIC_IF(!it, "window was not properly registered upon creation");
+            AppWindow *wnd = *it;
+
+            DynamicArray<WindowEvent> *queue = &wnd->event_queue;
 
             DWORD result = 0;
             WindowEvent event{};
@@ -493,7 +659,10 @@ AppWindow* create_window(WindowCreateDesc desc)
             case WM_MOUSEWHEEL: {
                 i16 delta = (wparam >> 16) & 0xFFFF;
                 event.type = WE_MOUSE_WHEEL;
-                event.mouse_wheel.delta = delta / 120;
+                event.mouse_wheel = {
+                    .modifiers = modifier_state,
+                    .delta = i16(delta / 120),
+                };
             } break;
             case WM_MOUSELEAVE: {
                 mouse_in_client = false;
@@ -814,4 +983,9 @@ void present_window(AppWindow *wnd)
 HWND win32_window_handle(AppWindow *wnd)
 {
     return wnd->hwnd;
+}
+
+void win32_input_begin_frame()
+{
+    for (auto it : windows) it->query_xinput = true;
 }

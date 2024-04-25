@@ -133,13 +133,15 @@ typedef u32 GuiId;
 typedef GuiAction (*GuiBodyProc)(GuiId id);
 
 struct LayoutRect {
-    Rect rect;
-    Vector2 r[2] = { rect.tl, rect.br };
+    Rect rem;
+    Rect bounds = rem;
     u32 flags;
 
-    constexpr operator Rect() const { return rect; }
-    constexpr Vector2 size() const { return rect.size(); }
-    constexpr Vector2 bsize() const { return r[1]-r[0]; }
+    LayoutRect() = default;
+    LayoutRect(Rect rect, u32 flags = 0) : rem(rect), bounds(rect), flags(flags) {}
+
+    constexpr operator Rect&() { return rem; }
+    constexpr Vector2 size() { return rem.size(); }
 };
 
 struct SplitDesc {
@@ -193,6 +195,9 @@ struct GuiWindowDesc {
 struct GuiMenu {
     Vector2 pos;
     Vector2 size;
+    Vector2 max_size;
+    u32 has_overflow_x : 1;
+    u32 has_overflow_y : 1;
     i32 parent_wnd;
     bool active;
 };
@@ -323,7 +328,7 @@ struct GuiContext {
         struct {
             Vector2 padding = { 2.0f, 8.0f };
             f32 border = 1;
-            f32 margin = 3;
+            f32 margin = 2;
         } edit;
 
         struct {
@@ -361,16 +366,8 @@ struct GuiContext {
 
 extern GuiContext gui;
 
+#include "gen/gui.h"
 
-extern LayoutRect split_col(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_row(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_rect(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_left(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_right(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_top(LayoutRect *layout, SplitDesc desc);
-extern LayoutRect split_bottom(LayoutRect *layout, SplitDesc desc);
-
-extern LayoutRect* gui_current_layout();
 inline LayoutRect split_col(SplitDesc desc)    { return split_col(gui_current_layout(), desc); }
 inline LayoutRect split_row(SplitDesc desc)    { return split_row(gui_current_layout(), desc); }
 inline LayoutRect split_rect(SplitDesc desc)   { return split_rect(gui_current_layout(), desc); }
@@ -378,10 +375,6 @@ inline LayoutRect split_left(SplitDesc desc)   { return split_left(gui_current_l
 inline LayoutRect split_right(SplitDesc desc)  { return split_right(gui_current_layout(), desc); }
 inline LayoutRect split_top(SplitDesc desc)    { return split_top(gui_current_layout(), desc); }
 inline LayoutRect split_bottom(SplitDesc desc) { return split_bottom(gui_current_layout(), desc); }
-
-
-extern i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index, Rect rect);
-extern i32 gui_dropdown_id(GuiId id, Array<String> labels, i32 current_index);
 
 template<typename T>
 i32 gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T *value)
@@ -407,16 +400,16 @@ i32 gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T *value)
 }
 
 template<typename T>
-T gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value)
+T* gui_dropdown_id(GuiId id, Array<String> labels, Array<T> values, T value)
 {
     i32 current_index = array_find_index(values, value);
     i32 index = gui_dropdown_id(id, labels, current_index);
 
-    return index >= 0 ? values[index] : T{};
+    return index >= 0 ? &values[index] : nullptr;
 }
 
 template<typename T>
-T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value)
+T* gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value)
 {
     Array<String> labels_arr{ .data = labels, .count = count };
     Array<T> values_arr{ .data = values, .count = count };
@@ -424,11 +417,11 @@ T gui_dropdown_id(GuiId id, String *labels, T *values, i32 count, T value)
     i32 current_index = array_find_index(values_arr, value);
     i32 index = gui_dropdown_id(id, labels_arr, current_index);
 
-    return index >= 0 ? values_arr[index] : T{};
+    return index >= 0 ? &values_arr[index] : nullptr;
 }
 
 template<typename T>
-T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value)
+T* gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializer_list<T> values, T value)
 {
     Array<String> labels_arr{ .data = (String*)labels.begin(), .count = (i32)labels.size() };
     Array<T> values_arr{ .data = (T*)values.begin(), .count = (i32)values.size() };
@@ -436,7 +429,15 @@ T gui_dropdown_id(GuiId id, std::initializer_list<String> labels, std::initializ
     i32 current_index = array_find_index(values_arr, value);
     i32 index = gui_dropdown_id(id, labels_arr, current_index);
 
-    return index >= 0 ? values_arr[index] : T{};
+    return index >= 0 ? &values_arr[index] : nullptr;
+}
+
+template<typename T>
+GuiAction gui_editbox_id(GuiId id, T *value, f32 width) EXPORT
+{
+    f32 height = gui.fonts.base.line_height + gui.style.edit.padding.y;
+    Rect rect = split_col({ width, height, .margin = gui.style.margin });
+    return gui_editbox_id(id, value, rect);
 }
 
 #endif // GUI_H

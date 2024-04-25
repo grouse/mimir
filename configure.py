@@ -112,6 +112,7 @@ tree_sitter_modules.append(tree_sitter_lua)
 
 ## tree-sitter-comment
 tree_sitter_comment = build.library("tree-sitter-comment", "$root/external/tree-sitter-comment-master")
+include_path(tree_sitter_comment, "src")
 dep(tree_sitter_comment, tree_sitter)
 cc(tree_sitter_comment, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_comment)
@@ -125,6 +126,7 @@ define(mimir, "APP_INPUT_ID_START=0x100")
 define(mimir, "GUI_INPUT_ID_START=0x200")
 define(mimir, "EDITOR_INPUT_ID_START=0x300")
 define(mimir, "ASSETS_DIR=\"$root/assets\"")
+define(mimir, ["STBI_NO_LINEAR", "STBI_NO_HDR"])
 
 if host_os == "win32": define(mimir, "_CRT_SECURE_NO_WARNINGS");
 
@@ -133,9 +135,12 @@ include_path(mimir, "$builddir")
 include_path(mimir, "$root")
 include_path(mimir, "$root/external")
 
+cxx(mimir, "mimir.cpp")
 cxx(mimir, "assets.cpp")
 cxx(mimir, "font.cpp")
+cxx(mimir, "window.cpp")
 
+meta(mimir, "mimir.cpp")
 meta(mimir, "gui.cpp")
 meta(mimir, "window.cpp")
 meta(mimir, "font.cpp")
@@ -164,9 +169,9 @@ if args.render == "opengl":
         lib(mimir, "GLX")
 
 if target_os == "win32":
-    cxx(mimir, "win32_mimir.cpp")
+    cxx(mimir, "win32_main.cpp")
     cxx(mimir, "win32_opengl.cpp")
-    cxx(mimir, "win32_window.cpp")
+    cxx(mimir, "win32_process.cpp")
 
     lib(mimir, "user32")
     lib(mimir, "shell32")
@@ -175,8 +180,9 @@ if target_os == "win32":
     lib(mimir, "Xinput")
 
 if target_os == "linux":
+    cxx(mimir, "linux_main.cpp")
     cxx(mimir, "linux_opengl.cpp")
-    cxx(mimir, "linux_window.cpp")
+    cxx(mimir, "linux_process.cpp")
 
     lib(mimir, "X11")
     lib(mimir, "Xi")
