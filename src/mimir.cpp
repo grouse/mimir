@@ -485,20 +485,20 @@ void ts_parse_buffer(Buffer *buffer)
             ts_parser_set_language(parser, app.languages[kv.key]);
             ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
 
-            SyntaxTree *existing = nullptr;
+            SyntaxTree *subtree = nullptr;
             for (auto &st : buffer->subtrees) {
                 if (st.language == kv.key) {
-                    existing = &st;
+                    subtree = &st;
                     break;
                 }
             }
 
-            if (existing) {
-                existing->tree = ts_parser_parse_string(parser,  existing->tree, buffer->flat.data, buffer->flat.size);
-            } else {
-                TSTree *subtree = ts_parser_parse_string(parser,  nullptr, buffer->flat.data, buffer->flat.size);
-                array_add(&buffer->subtrees, { (Language)kv.key, subtree });
+            if (!subtree) {
+                i32 i = array_add(&buffer->subtrees, { (Language)kv.key });
+                subtree = &buffer->subtrees[i];
             }
+
+            subtree->tree = ts_parser_parse_string(parser,  subtree->tree, buffer->flat.data, buffer->flat.size);
         }
     }
 }
