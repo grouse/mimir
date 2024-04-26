@@ -1,14 +1,17 @@
-#include "win32_opengl.h"
 #include "window.h"
+
+#include "win32_opengl.h"
+
 #include "core/hash_table.h"
 #include "core/maths.h"
 #include "core/array.h"
-
 #include "core/win32_lite.h"
 #include "core/win32_user32.h"
 #include "core/win32_core.h"
 #include "core/win32_gdi32.h"
 #include "core/win32_xinput.h"
+
+#include "gen/internal/window.h"
 
 struct {
     bool text_input_enabled;
