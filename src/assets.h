@@ -83,7 +83,7 @@ void save_dirty_assets();
 Array<AssetHandle> get_unsaved_assets(Allocator mem);
 
 String resolve_asset_path(String path, Allocator mem);
-String normalise_asset_path(String path, Allocator mem = tl_scratch_arena());
+String normalise_asset_path(String path, Allocator mem);
 
 Array<String> list_asset_files(Allocator mem);
 Array<String> list_asset_files(String ext, Allocator mem);
