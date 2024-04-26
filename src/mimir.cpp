@@ -3344,7 +3344,7 @@ next_node:;
             Rect rect = view.text_rect;
             i32 y = view.caret.wrapped_line - view.line_offset;
             f32 w = app.mono.space_width;
-            f32 h = app.mono.line_height - 2.0f;
+            f32 h = app.mono.line_height+1;
 
             Vector2 p0{
                 rect.tl.x + view.caret.wrapped_column*app.mono.space_width,
@@ -3367,11 +3367,11 @@ next_node:;
             Rect rect = view.text_rect;
             i32 y = view.mark.wrapped_line - view.line_offset;
             f32 w = app.mono.space_width/2;
-            f32 h = app.mono.line_height - 2.0f;
+            f32 h = app.mono.line_height - 1.0f;
 
             Vector2 p0{
                 rect.tl.x + view.mark.wrapped_column*app.mono.space_width,
-                rect.tl.y + y*app.mono.line_height - view.voffset,
+                rect.tl.y + y*app.mono.line_height - view.voffset + 1,
             };
             Vector2 p1{ p0.x, p0.y + h };
 
