@@ -43,9 +43,9 @@ enum BufferHistoryType {
     BUFFER_INSERT,
     BUFFER_REMOVE,
 
-    BUFFER_CURSOR_POS,
-    BUFFER_HISTORY_GROUP_START,
-    BUFFER_HISTORY_GROUP_END
+    BUFFER_CURSOR,
+    BUFFER_GROUP_START,
+    BUFFER_GROUP_END
 };
 
 enum Language {
@@ -620,30 +620,30 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
     Buffer *buffer = get_buffer(buffer_id);
     ASSERT(buffer);
 
-    if (entry.type == BUFFER_HISTORY_GROUP_END) {
+    if (entry.type == BUFFER_GROUP_END) {
         if (buffer->history.count > 2 &&
-            buffer->history[buffer->history.count-1].type == BUFFER_CURSOR_POS &&
-            buffer->history[buffer->history.count-2].type == BUFFER_CURSOR_POS &&
-            buffer->history[buffer->history.count-3].type == BUFFER_HISTORY_GROUP_START)
+            buffer->history[buffer->history.count-1].type == BUFFER_CURSOR &&
+            buffer->history[buffer->history.count-2].type == BUFFER_CURSOR &&
+            buffer->history[buffer->history.count-3].type == BUFFER_GROUP_START)
         {
             buffer->history.count -= 3;
-            buffer->history_index = MIN(buffer->history_index, buffer->history.count);
+            buffer->history_index = MIN(buffer->history_index, buffer->history.count-1);
             return;
         } else if (buffer->history.count > 0 &&
-                   buffer->history[buffer->history.count-1].type == BUFFER_HISTORY_GROUP_START)
+                   buffer->history[buffer->history.count-1].type == BUFFER_GROUP_START)
         {
             buffer->history.count -= 1;
-            buffer->history_index = MIN(buffer->history_index, buffer->history.count);
+            buffer->history_index = MIN(buffer->history_index, buffer->history.count-1);
             return;
         }
 
         // TODO(jesper): ideally this collapsing should be happening at the insertion of the nodes instead of a post-cleanup
         for (i32 i = buffer->history.count-1; i >= 0; i--) {
-            if (buffer->history[i].type != BUFFER_HISTORY_GROUP_END) break;
+            if (buffer->history[i].type != BUFFER_GROUP_END) break;
             array_remove(&buffer->history, i--);
 
             for (auto it : reverse(slice(buffer->history, 0, i))) {
-                if (it->type == BUFFER_HISTORY_GROUP_START) {
+                if (it->type == BUFFER_GROUP_START) {
                     array_remove(&buffer->history, it.index); i = it.index;
                     break;
                 }
@@ -653,8 +653,8 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
 
         i32 prev_cursor = -1, last_cursor = -1;
         for (auto it : reverse(buffer->history)) {
-            if (it->type == BUFFER_HISTORY_GROUP_START) break;
-            if (it->type == BUFFER_CURSOR_POS) {
+            if (it->type == BUFFER_GROUP_START) break;
+            if (it->type == BUFFER_CURSOR) {
                 if (last_cursor == -1) {
                     last_cursor = it.index;
                 } else if (prev_cursor != -1) {
@@ -668,7 +668,7 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
 
         i32 prev_insert = -1;
         for (auto it : reverse(buffer->history)) {
-            if (it->type == BUFFER_HISTORY_GROUP_START) break;
+            if (it->type == BUFFER_GROUP_START) break;
             if (it->type == BUFFER_REMOVE) break;
             if (it->type == BUFFER_INSERT) {
                 if (prev_insert != -1) {
@@ -685,14 +685,14 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
             }
         }
 
-        buffer->history_index = MIN(buffer->history_index, buffer->history.count);
+        buffer->history_index = MIN(buffer->history_index, buffer->history.count-1);
     }
 
     // TODO(jesper): history allocator. We're leaking the memory of the history strings
     // that we're overwriting after this. We should probably have some kind of per buffer
     // circular buffer allocator for these with some intrusive linked list type situation
-    if (buffer->history_index < buffer->history.count) {
-        buffer->history.count = buffer->history_index;
+    if (buffer->history_index+1 < buffer->history.count) {
+        buffer->history.count = buffer->history_index+1;
     }
 
     switch (entry.type) {
@@ -700,15 +700,15 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
     case BUFFER_INSERT:
         entry.text = duplicate_string(entry.text, mem_dynamic);
         break;
-    case BUFFER_HISTORY_GROUP_START:
-    case BUFFER_HISTORY_GROUP_END:
-    case BUFFER_CURSOR_POS:
+    case BUFFER_GROUP_START:
+    case BUFFER_GROUP_END:
+    case BUFFER_CURSOR:
         break;
     }
 
 
     array_add(&buffer->history, entry);
-    buffer->history_index = buffer->history.count;
+    buffer->history_index = buffer->history.count-1;
 }
 
 bool is_word_boundary(i32 c)
@@ -1947,7 +1947,7 @@ void buffer_undo(BufferId buffer_id)
 
     i32 group_level = 0;
     do {
-        BufferHistory h = buffer->history[--buffer->history_index];
+        BufferHistory h = buffer->history[buffer->history_index--];
         switch (h.type) {
         case BUFFER_INSERT:
             buffer_remove(buffer_id, h.offset, h.offset+h.text.length, false);
@@ -1955,7 +1955,7 @@ void buffer_undo(BufferId buffer_id)
         case BUFFER_REMOVE:
             buffer_insert(buffer_id, h.offset, h.text, false);
             break;
-        case BUFFER_CURSOR_POS:
+        case BUFFER_CURSOR:
             // TODO(jesper): this is broken if views change between history
             // entries
             if (app.views[h.view_id].buffer != buffer_id) continue;
@@ -1964,14 +1964,14 @@ void buffer_undo(BufferId buffer_id)
             app.views[h.view_id].mark.byte_offset = h.mark;
             app.views[h.view_id].caret_dirty = true;
             break;
-        case BUFFER_HISTORY_GROUP_START:
+        case BUFFER_GROUP_START:
             group_level++;
             break;
-        case BUFFER_HISTORY_GROUP_END:
+        case BUFFER_GROUP_END:
             group_level--;
             break;
         }
-    } while (group_level < 0);
+    } while (group_level < 0 && buffer->history_index > 0);
 
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
     for (View &view : app.views) {
@@ -1984,7 +1984,7 @@ void buffer_redo(BufferId buffer_id)
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
 
-    if (buffer->history_index == buffer->history.count) return;
+    if (buffer->history_index+1 == buffer->history.count) return;
 
     i32 group_level = 0;
     do {
@@ -1996,7 +1996,7 @@ void buffer_redo(BufferId buffer_id)
         case BUFFER_REMOVE:
             buffer_remove(buffer_id, h.offset, h.offset+h.text.length, false);
             break;
-        case BUFFER_CURSOR_POS:
+        case BUFFER_CURSOR:
             // TODO(jesper): this is broken if views change between history
             // entries
             if (app.views[h.view_id].buffer != buffer_id) continue;
@@ -2005,14 +2005,14 @@ void buffer_redo(BufferId buffer_id)
             app.views[h.view_id].mark.byte_offset = h.mark;
             app.views[h.view_id].caret_dirty = true;
             break;
-        case BUFFER_HISTORY_GROUP_START:
+        case BUFFER_GROUP_START:
             group_level++;
             break;
-        case BUFFER_HISTORY_GROUP_END:
+        case BUFFER_GROUP_END:
             group_level--;
             break;
         }
-    } while (group_level > 0);
+    } while (group_level > 0 && buffer->history_index+1 < buffer->history.count);
 
     // TODO(jesper): maybe we should just store the view coordinates in the buffer history?
     for (View &view : app.views) {
@@ -2177,61 +2177,61 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
 
     switch (buffer->type) {
     case BUFFER_FLAT: {
-            i64 offset = byte_offset;
-            i64 end = buffer_end(buffer_id);
+        i64 offset = byte_offset;
+        i64 end = buffer_end(buffer_id);
 
-            char *p = &buffer->flat.data[0];
+        char *p = &buffer->flat.data[0];
 
-            char start_c = p[offset--];
-            bool start_is_whitespace = is_whitespace(start_c);
-            bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
-            bool start_is_normal = !start_is_boundary && !start_is_whitespace;
+        char start_c = p[offset--];
+        bool start_is_whitespace = is_whitespace(start_c);
+        bool start_is_boundary = !start_is_whitespace && is_word_boundary(start_c);
+        bool start_is_normal = !start_is_boundary && !start_is_whitespace;
 
-            bool was_whitespace = start_is_whitespace;
-            bool has_whitespace = false;
-            bool was_ln = start_c == '\n';
+        bool was_whitespace = start_is_whitespace;
+        bool has_whitespace = false;
+        bool was_ln = start_c == '\n';
 
-            for (; offset >= 0; offset--) {
-                char c = p[offset];
-                bool whitespace = is_whitespace(c);
-                bool boundary = !whitespace && is_word_boundary(c);
+        for (; offset >= 0; offset--) {
+            char c = p[offset];
+            bool whitespace = is_whitespace(c);
+            bool boundary = !whitespace && is_word_boundary(c);
 
-                if (c == '\n') {
-                    was_ln = true;
-                    boundary = true;
-                } else {
-                    if (was_ln && c == '\r') boundary = true;
-                    was_ln = false;
-                }
-
-                has_whitespace = has_whitespace || whitespace;
-                if (whitespace && !was_whitespace) {
-                    if (offset+1 != byte_offset) {
-                        return CLAMP(0, offset+1, end);
-                    }
-                }
-
-                if (start_is_boundary && !whitespace && boundary && (offset+1 != byte_offset)) {
-                    if (was_whitespace) {
-                        return CLAMP(0, offset, end);
-                    } else {
-                        return CLAMP(0, offset+1, end);
-                    }
-                }
-
-                if (boundary && offset != byte_offset) {
-                    if ((has_whitespace || start_is_normal) && !was_whitespace && offset+1 != byte_offset) {
-                        return CLAMP(0, offset+1, end);
-                    } else {
-                        return CLAMP(0, offset, end);
-                    }
-                }
-
-                was_whitespace = whitespace;
+            if (c == '\n') {
+                was_ln = true;
+                boundary = true;
+            } else {
+                if (was_ln && c == '\r') boundary = true;
+                was_ln = false;
             }
 
-            return 0;
-        } break;
+            has_whitespace = has_whitespace || whitespace;
+            if (whitespace && !was_whitespace) {
+                if (offset+1 != byte_offset) {
+                    return CLAMP(0, offset+1, end);
+                }
+            }
+
+            if (start_is_boundary && !whitespace && boundary && (offset+1 != byte_offset)) {
+                if (was_whitespace) {
+                    return CLAMP(0, offset, end);
+                } else {
+                    return CLAMP(0, offset+1, end);
+                }
+            }
+
+            if (boundary && offset != byte_offset) {
+                if ((has_whitespace || start_is_normal) && !was_whitespace && offset+1 != byte_offset) {
+                    return CLAMP(0, offset+1, end);
+                } else {
+                    return CLAMP(0, offset, end);
+                }
+            }
+
+            was_whitespace = whitespace;
+        }
+        return 0;
+    } break;
+
     }
 
     return byte_offset;
@@ -2299,10 +2299,10 @@ struct BufferHistoryScope {
 
     BufferHistoryScope(BufferId buffer) : buffer(buffer)
     {
-        buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_START });
+        buffer_history(buffer, { .type = BUFFER_GROUP_START });
         for (View &view : app.views) {
             if (view.buffer != buffer) continue;
-            buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+            buffer_history(buffer, { .type = BUFFER_CURSOR, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
         }
     }
 
@@ -2310,9 +2310,9 @@ struct BufferHistoryScope {
     {
         for (View &view : app.views) {
             if (view.buffer != buffer) continue;
-            buffer_history(buffer, { .type = BUFFER_CURSOR_POS, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
+            buffer_history(buffer, { .type = BUFFER_CURSOR, .view_id = view.id, .caret = view.caret.byte_offset, .mark = view.mark.byte_offset });
         }
-        buffer_history(buffer, { .type = BUFFER_HISTORY_GROUP_END });
+        buffer_history(buffer, { .type = BUFFER_GROUP_END });
     }
 };
 
@@ -2423,12 +2423,14 @@ void app_gather_input(AppWindow *wnd) INTERNAL
     for (WindowEvent event; next_event(wnd, &event);) {
         gui_input(event);
 
+
         View *view = app.current_view;
 
         switch (event.type) {
         case WE_QUIT:
             exit(0);
             break;
+
         case WE_RESIZE:
             if (app_change_resolution({ (f32)event.resize.width, (f32)event.resize.height })) {
                 glViewport(0, 0, event.resize.width, event.resize.height);
@@ -2446,16 +2448,20 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                 present_window(wnd);
             }
             break;
+
         case INSERT_MODE:
             app.next_mode = MODE_INSERT;
             app.current_view->mark = app.current_view->caret;
             break;
+
         case EDIT_MODE:
             app.next_mode = MODE_EDIT;
             break;
+
         case SAVE:
             buffer_save(app.current_view->buffer);
             break;
+
         case FUZZY_FIND_FILE:
             app.lister.active = true;
             app.lister.selected_item = 0;
@@ -2478,6 +2484,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                     app.incremental_search.active = true;
                     app.incremental_search.set_mark = event.key.modifiers != MF_SHIFT;
                     break;
+
                 case KC_GRAVE:
                     // TODO(jesper): make a scope matching query for when tree sitter languages are available. This is the
                     // textual fall-back version which doesn't handle comments or strings
@@ -2530,35 +2537,43 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                             if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                         }
                     } break;
+
                 case KC_ESC:
                     FREE(mem_dynamic, app.incremental_search.str.data);
                     app.incremental_search.str = {};
                     break;
+
                 case KC_F5: exec_process_command(); break;
+
                 case KC_Q:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     ASSERT(!view->lines_dirty);
                     view_seek_byte_offset(view, buffer_seek_beginning_of_line(view->buffer, view->lines, view->caret.wrapped_line));
                     break;
+
                 case KC_E:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     ASSERT(!view->lines_dirty);
                     view_seek_byte_offset(view, buffer_seek_end_of_line(view->buffer, view->lines, view->caret.wrapped_line));
                     break;
+
                 case KC_RBRACKET:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     ASSERT(!view->lines_dirty);
                     view_seek_line(view, buffer_seek_next_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
                     break;
+
                 case KC_LBRACKET:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     ASSERT(!view->lines_dirty);
                     view_seek_line(view, buffer_seek_prev_empty_line(view->buffer, view->lines, view->caret.wrapped_line));
                     break;
+
                 case KC_M:
                     if (event.key.modifiers == MF_CTRL) SWAP(view->mark, view->caret);
                     else view->mark = view->caret;
                     break;
+
                 case KC_N:
                     if (app.incremental_search.str.length > 0) {
                         i64 offset = event.key.modifiers == MF_CTRL ?
@@ -2573,22 +2588,27 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                             move_view_to_caret(view);
                         }
                     } break;
+
                 case KC_W:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view_seek_byte_offset(view, buffer_seek_next_word(view->buffer, view->caret.byte_offset));
                     break;
+
                 case KC_B:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view_seek_byte_offset(view, buffer_seek_prev_word(view->buffer, view->caret.byte_offset));
                     break;
+
                 case KC_J:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view_seek_line(view, view->caret.wrapped_line+1);
                     break;
+
                 case KC_K:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view_seek_line(view, view->caret.wrapped_line-1);
                     break;
+
                 case KC_L:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
@@ -2596,6 +2616,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                     view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
                     move_view_to_caret(view);
                     break;
+
                 case KC_H:
                     if (event.key.modifiers != MF_SHIFT) view->mark = view->caret;
                     view->caret.byte_offset = buffer_prev_offset(view->buffer, view->caret.byte_offset);
@@ -2603,6 +2624,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                     view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
                     move_view_to_caret(view);
                     break;
+
                 case KC_TAB:
                     if (auto buffer = get_buffer(view->buffer); buffer) {
                         i32 line = calc_unwrapped_line(view->caret.wrapped_line, view->lines);
@@ -2694,6 +2716,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                         }
                     } break;
                 default: break;
+
                 }
             } else if (app.mode == MODE_INSERT) {
                 switch (event.key.keycode) {
@@ -2703,12 +2726,14 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                     view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
                     move_view_to_caret(view);
                     break;
+
                 case KC_RIGHT:
                     view->caret.byte_offset = buffer_next_offset(view->buffer, view->caret.byte_offset);
                     ASSERT(!view->lines_dirty);
                     view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
                     move_view_to_caret(view);
                     break;
+
                 case KC_ENTER:
                     if (buffer_valid(view->buffer)) {
                         BufferHistoryScope h(view->buffer);
@@ -2717,6 +2742,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                         write_string(view, view->buffer, buffer_newline_str(view->buffer));
                         write_string(view, view->buffer, indent);
                     } break;
+
                 case KC_TAB:
                     if (Buffer *buffer = get_buffer(view->buffer); buffer) {
                         if (buffer->indent_with_tabs) write_string(view, view->buffer, "\t");
@@ -2737,6 +2763,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                         }
 
                     } break;
+
                 case KC_BACKSPACE:
                     if (buffer_valid(view->buffer)) {
                         BufferHistoryScope h(view->buffer);
@@ -2747,6 +2774,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                             move_view_to_caret(view);
                         }
                     } break;
+
                 case KC_DELETE:
                     if (buffer_valid(view->buffer)) {
                         BufferHistoryScope h(view->buffer);
@@ -2779,6 +2807,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                 }
             }
             break;
+
         case WE_MOUSE_MOVE:
             if (gui.hot == view->gui_id &&
                 event.mouse.button == MB_PRIMARY &&
@@ -2787,6 +2816,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                 set_caret_xy(view, event.mouse.x, event.mouse.y);
                 app.animating = true;
             } break;
+
         case WE_MOUSE_PRESS:
             if (gui.hot == view->gui_id &&
                 event.mouse.button == MB_PRIMARY &&
@@ -2796,6 +2826,7 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                 view->mark = view->caret;
                 app.animating = true;
             } break;
+
         case WE_MOUSE_WHEEL:
             app.animating = true;
             break;
@@ -2865,9 +2896,9 @@ void update_and_render() INTERNAL
     // be deferred.
     if (app.mode != app.next_mode) {
         if (app.next_mode == MODE_INSERT) {
-            buffer_history(app.current_view->buffer, { .type = BUFFER_HISTORY_GROUP_START });
+            buffer_history(app.current_view->buffer, { .type = BUFFER_GROUP_START });
         } else if (app.mode == MODE_INSERT) {
-            buffer_history(app.current_view->buffer, { .type = BUFFER_HISTORY_GROUP_END });
+            buffer_history(app.current_view->buffer, { .type = BUFFER_GROUP_END });
             if (app.current_view->mark.byte_offset > app.current_view->caret.byte_offset) app.current_view->mark = app.current_view->caret;
         }
 
@@ -2902,28 +2933,34 @@ void update_and_render() INTERNAL
     }
 
     gui_window_id(debug.buffer_history.wnd) {
-        char str[256];
+        if (auto buffer = get_buffer(app.current_view->buffer); buffer) {
+            i32 indent = 0;
+            for (auto it : iterator(buffer->history)) {
+                SArena scartch = tl_scratch_arena();
 
-		if (auto buffer = get_buffer(app.current_view->buffer); buffer) {
-			for (auto h : buffer->history) {
-				switch (h.type) {
-				case BUFFER_INSERT:
-					gui_textbox(stringf(str, sizeof str, "INSERT (%lld): '%.*s'", h.offset, STRFMT(h.text)));
-					break;
-				case BUFFER_REMOVE:
-					gui_textbox(stringf(str, sizeof str, "REMOVE (%lld): '%.*s'", h.offset, STRFMT(h.text)));
-					break;
-				case BUFFER_CURSOR_POS:
-					gui_textbox(stringf(str, sizeof str, "CURSOR: [%lld, %lld]", h.caret, h.mark));
-					break;
-				case BUFFER_HISTORY_GROUP_START:
-					gui_textbox("GROUP_START");
-					break;
-				case BUFFER_HISTORY_GROUP_END:
-					gui_textbox("GROUP_END");
-					break;
-				}
-			}
+                Rect r = split_row({ gui.fonts.base.line_height*1.2f });
+                if (it.index == buffer->history_index) gui_draw_rect(r, gui.style.accent_bg);
+
+                switch (it->type) {
+                case BUFFER_INSERT:
+                    gui_textbox(stringf(scratch, "%*sINSERT (%lld): '%.*s'", indent*2, "", it->offset, STRFMT(it->text)), r);
+                    break;
+                case BUFFER_REMOVE:
+                    gui_textbox(stringf(scratch, "%*sREMOVE (%lld): '%.*s'", indent*2, "", it->offset, STRFMT(it->text)), r);
+                    break;
+                case BUFFER_CURSOR:
+                    gui_textbox(stringf(scratch, "%*sCURSOR: [%lld, %lld]", indent*2, "", it->caret, it->mark), r);
+                    break;
+                case BUFFER_GROUP_START:
+                    gui_textbox(stringf(scratch, "%*sGROUP_START", indent*2, ""), r);
+                    indent++;
+                    break;
+                case BUFFER_GROUP_END:
+                    indent--;
+                    gui_textbox(stringf(scratch, "%*sGROUP_END", indent*2, ""), r);
+                    break;
+                }
+            }
         }
     }
 
