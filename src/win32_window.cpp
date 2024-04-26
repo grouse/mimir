@@ -990,5 +990,5 @@ HWND win32_window_handle(AppWindow *wnd)
 
 void win32_input_begin_frame()
 {
-    for (auto it : windows) it->query_xinput = true;
+    for (AppWindow *it : windows) it->query_xinput = true;
 }
