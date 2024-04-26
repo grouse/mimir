@@ -8,8 +8,6 @@
 #include "gui.cpp"
 #include "fzy.cpp"
 
-#include "gen/internal/mimir.h"
-
 #include "tree_sitter/api.h"
 extern "C" const TSLanguage* tree_sitter_cpp();
 extern "C" const TSLanguage* tree_sitter_rust();
@@ -257,6 +255,9 @@ struct RangeColor {
     bool operator<(const RangeColor &rhs) { return start < rhs.start; }
 };
 
+#include "gen/internal/mimir.h"
+
+
 String string_from_enum(NewlineMode mode)
 {
     switch (mode) {
@@ -464,7 +465,7 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
     return lang_range_map;
 }
 
-void ts_parse_buffer(Buffer *buffer)
+void ts_parse_buffer(Buffer *buffer, TSInputEdit edit = {}) INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
@@ -478,27 +479,44 @@ void ts_parse_buffer(Buffer *buffer)
 
     if (auto inj = app.injections[buffer->language]; inj) {
         HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
-        for (i32 i = 0; i < lang_range_map.capacity; i++) {
-            auto kv = lang_range_map.slots[i];
-            if (!kv.occupied) continue;
 
-            ts_parser_set_language(parser, app.languages[kv.key]);
-            ts_parser_set_included_ranges(parser, kv.value.data, kv.value.count);
-
+        for (auto it : lang_range_map) {
             SyntaxTree *subtree = nullptr;
             for (auto &st : buffer->subtrees) {
-                if (st.language == kv.key) {
+                if (st.language == it.key) {
                     subtree = &st;
                     break;
                 }
             }
 
             if (!subtree) {
-                i32 i = array_add(&buffer->subtrees, { (Language)kv.key });
+                i32 i = array_add(&buffer->subtrees, {
+                    .language = (Language)it.key,
+                });
                 subtree = &buffer->subtrees[i];
             }
 
-            subtree->tree = ts_parser_parse_string(parser,  subtree->tree, buffer->flat.data, buffer->flat.size);
+            DynamicArray<TSRange> invalid_ranges{ .alloc = scratch };
+            array_reserve(&invalid_ranges, it->count);
+
+            if (edit.old_end_byte == edit.new_end_byte) {
+                array_copy(&invalid_ranges, *it);
+            } else {
+                for (auto range : *it) {
+                    if (range.start_byte >= edit.old_end_byte) continue;
+                    if (range.end_byte <= edit.start_byte) continue;
+                    array_add(&invalid_ranges, range);
+                }
+            }
+
+            if (invalid_ranges.count) {
+                LOG_INFO("updating %d (%d) injected %.*s ranges", invalid_ranges.count, it->count, STRFMT(string_from_enum((Language)it.key)));
+                for (auto range : invalid_ranges) LOG_INFO("injected range: [%u, %u]", range.start_byte, range.end_byte);
+
+                ts_parser_set_language(parser, app.languages[it.key]);
+                ts_parser_set_included_ranges(parser, invalid_ranges.data, invalid_ranges.count);
+                subtree->tree = ts_parser_parse_string(parser,  subtree->tree, buffer->flat.data, buffer->flat.size);
+            }
         }
     }
 }
@@ -510,7 +528,7 @@ void ts_update_buffer(Buffer *buffer, TSInputEdit edit)
         for (auto st : buffer->subtrees) ts_tree_edit(st.tree, &edit);
     }
 
-    ts_parse_buffer(buffer);
+    ts_parse_buffer(buffer, edit);
 }
 
 
