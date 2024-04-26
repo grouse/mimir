@@ -73,45 +73,45 @@ if args.debug:
 ### tree-sitter
 tree_sitter_modules = []
 
-tree_sitter = build.library("tree-sitter", "$root/external/tree-sitter-0.20.8")
+tree_sitter = build.library("tree-sitter", "$root/external/tree-sitter-0.20.8", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 include_path(tree_sitter, "lib/include", public = True)
 cc(tree_sitter, "lib/src/lib.c")
 tree_sitter_modules.append(tree_sitter)
 
 ## tree-sitter-cpp
-tree_sitter_cpp = build.library("tree-sitter-cpp", "$root/external/tree-sitter-cpp-master")
+tree_sitter_cpp = build.library("tree-sitter-cpp", "$root/external/tree-sitter-cpp-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 dep(tree_sitter_cpp, tree_sitter)
 cc(tree_sitter_cpp, "src/parser.c")
 cxx(tree_sitter_cpp, "src/scanner.cc")
 tree_sitter_modules.append(tree_sitter_cpp)
 
 ## tree-sitter-rust
-tree_sitter_rust = build.library("tree-sitter-rust", "$root/external/tree-sitter-rust-0.20.1")
+tree_sitter_rust = build.library("tree-sitter-rust", "$root/external/tree-sitter-rust-0.20.1", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 dep(tree_sitter_rust, tree_sitter)
 cc(tree_sitter_rust, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_rust)
 
 ## tree-sitter-bash
-tree_sitter_bash = build.library("tree-sitter-bash", "$root/external/tree-sitter-bash-master")
+tree_sitter_bash = build.library("tree-sitter-bash", "$root/external/tree-sitter-bash-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 dep(tree_sitter_bash, tree_sitter)
 cc(tree_sitter_bash, "src/parser.c")
 cxx(tree_sitter_bash, "src/scanner.cc")
 tree_sitter_modules.append(tree_sitter_bash)
 
 ## tree-sitter-csharp
-tree_sitter_csharp = build.library("tree-sitter-csharp", "$root/external/tree-sitter-c-sharp-0.19.1")
+tree_sitter_csharp = build.library("tree-sitter-csharp", "$root/external/tree-sitter-c-sharp-0.19.1", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 dep(tree_sitter_csharp, tree_sitter)
 cc(tree_sitter_csharp, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_csharp)
 
 ## tree-sitter-lua
-tree_sitter_lua = build.library("tree-sitter-lua", "$root/external/tree-sitter-lua-master")
+tree_sitter_lua = build.library("tree-sitter-lua", "$root/external/tree-sitter-lua-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 dep(tree_sitter_lua, tree_sitter)
 cc(tree_sitter_lua, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_lua)
 
 ## tree-sitter-comment
-tree_sitter_comment = build.library("tree-sitter-comment", "$root/external/tree-sitter-comment-master")
+tree_sitter_comment = build.library("tree-sitter-comment", "$root/external/tree-sitter-comment-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
 include_path(tree_sitter_comment, "src")
 dep(tree_sitter_comment, tree_sitter)
 cc(tree_sitter_comment, ["src/parser.c", "src/scanner.c"])
