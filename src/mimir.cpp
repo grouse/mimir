@@ -414,7 +414,7 @@ TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
     return nullptr;
 }
 
-HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
+HashTable<Language, DynamicArray<TSRange>> ts_get_injection_ranges(
     Buffer *buffer,
     TSQuery *injection_query,
     Allocator mem)
@@ -426,7 +426,7 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
 
     ASSERT(injection_query);
 
-    HashTable<u32, DynamicArray<TSRange>> lang_range_map{ .alloc = mem };
+    HashTable<Language, DynamicArray<TSRange>> lang_range_map{ .alloc = mem };
 
     TSNode root = ts_tree_root_node(buffer->syntax_tree);
     TSQueryCursor *cursor = ts_query_cursor_new();
@@ -434,7 +434,6 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
 
     ts_query_cursor_set_byte_range(cursor, 0, buffer->flat.size);
     ts_query_cursor_exec(cursor, injection_query, root);
-
 
     TSQueryMatch match;
     u32 capture_index;
@@ -446,19 +445,17 @@ HashTable<u32, DynamicArray<TSRange>> ts_get_injection_ranges(
         String capture_name{ (char*)tmp, (i32)capture_name_length };
 
         if (Language *l = map_find(&app.language_map, capture_name); l) {
-            DynamicArray<TSRange> *ranges = map_find_emplace(&lang_range_map, (u32)*l, { .alloc = scratch });
+            DynamicArray<TSRange> *ranges = map_find_emplace(&lang_range_map, *l, { .alloc = mem });
 
             u32 start_byte = ts_node_start_byte(capture->node);
             u32 end_byte = ts_node_end_byte(capture->node);
 
-            array_add(
-                ranges,
-                {
-                    .start_point = ts_node_start_point(capture->node),
-                    .end_point = ts_node_end_point(capture->node),
-                    .start_byte = start_byte,
-                    .end_byte = end_byte,
-                });
+            array_add(ranges, {
+                .start_point = ts_node_start_point(capture->node),
+                .end_point = ts_node_end_point(capture->node),
+                .start_byte = start_byte,
+                .end_byte = end_byte,
+            });
         }
     }
 
@@ -478,7 +475,7 @@ void ts_parse_buffer(Buffer *buffer, TSInputEdit edit = {}) INTERNAL
     buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
 
     if (auto inj = app.injections[buffer->language]; inj) {
-        HashTable<u32, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
+        HashTable<Language, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
 
         for (auto it : lang_range_map) {
             SyntaxTree *subtree = nullptr;
@@ -903,8 +900,6 @@ void view_set_buffer(View *view, BufferId buffer)
 
 int app_main(Array<String> args)
 {
-    SArena scratch = tl_scratch_arena();
-
     Vector2i resolution{ 1280, 720 };
     if (i32 data[2];
         parse_cmd_argument(args.data, args.count, "--resolution", data))
@@ -917,26 +912,30 @@ int app_main(Array<String> args)
 
     fzy_init_table();
 
-    String exe_folder = get_exe_folder(scratch);
+    {
+        SArena scratch = tl_scratch_arena();
 
-    String asset_folders[] = {
-        "./",
-        exe_folder,
-        join_path(exe_folder, "assets", scratch),
-        ASSETS_DIR,
-    };
+        String exe_folder = get_exe_folder(scratch);
 
-    extern ASSET_LOAD_PROC(gfx_load_texture_asset);
-    extern ASSET_LOAD_PROC(gfx_load_shader_asset);
-    extern ASSET_LOAD_PROC(load_string_asset);
+        String asset_folders[] = {
+            "./",
+            exe_folder,
+            join_path(exe_folder, "assets", scratch),
+            ASSETS_DIR,
+        };
 
-    init_assets(
-        { asset_folders, ARRAY_COUNT(asset_folders) },
-        AssetTypesDesc{ .types = {
-            { ".scm",  typeid(String),       &load_string_asset,      nullptr },
-            { ".png",  typeid(TextureAsset), &gfx_load_texture_asset, nullptr },
-            { ".glsl", typeid(ShaderAsset),  &gfx_load_shader_asset,  nullptr },
-        }});
+        extern ASSET_LOAD_PROC(gfx_load_texture_asset);
+        extern ASSET_LOAD_PROC(gfx_load_shader_asset);
+        extern ASSET_LOAD_PROC(load_string_asset);
+
+        init_assets(
+            { asset_folders, ARRAY_COUNT(asset_folders) },
+            AssetTypesDesc{ .types = {
+                { ".scm",  typeid(String),       &load_string_asset,      nullptr },
+                { ".png",  typeid(TextureAsset), &gfx_load_texture_asset, nullptr },
+                { ".glsl", typeid(ShaderAsset),  &gfx_load_shader_asset,  nullptr },
+            }});
+    }
 
     init_gfx(get_client_resolution(app.wnd));
     init_gui();
@@ -986,7 +985,8 @@ int app_main(Array<String> args)
     app.injections[LANGUAGE_CPP] = ts_create_query(app.languages[LANGUAGE_CPP], "queries/cpp/injections.scm");
 
     ts_custom_alloc = vm_freelist_allocator(5*1024*1024*1024ull);
-    ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
+    // TODO(jesper): disabled because I have a leak in ts_custom_malloc
+    // ts_set_allocator(ts_custom_malloc, ts_custom_calloc, ts_custom_realloc, ts_custom_free);
 
     u32 fg = bgr_pack(app.fg);
     map_set(&app.syntax_colors, "unused", fg);
@@ -1043,23 +1043,26 @@ int app_main(Array<String> args)
 		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
     }
 
-    Array<String> files = list_files(get_working_dir(scratch), scratch);
-    for (String s : files) {
+    {
+        SArena scratch = tl_scratch_arena();
+        Array<String> files = list_files(get_working_dir(scratch), scratch);
+        for (String s : files) {
 #ifdef _WIN32
-        if (extension_of(s) == ".bat") {
-            String full = absolute_path(s, mem_dynamic);
-            array_add(&app.process_command_names, filename_of(full));
-            array_add(&app.process_commands, { .exe = full });
-        }
+            if (extension_of(s) == ".bat") {
+                String full = absolute_path(s, mem_dynamic);
+                array_add(&app.process_command_names, filename_of(full));
+                array_add(&app.process_commands, { .exe = full });
+            }
 #endif
 
 #ifdef __linux__
-        if (extension_of(s) == ".sh") {
-            String full = absolute_path(s, mem_dynamic);
-            array_add(&app.process_command_names, filename_of(full));
-            array_add(&app.process_commands, { .exe = full });
-        }
+            if (extension_of(s) == ".sh") {
+                String full = absolute_path(s, mem_dynamic);
+                array_add(&app.process_command_names, filename_of(full));
+                array_add(&app.process_commands, { .exe = full });
+            }
 #endif
+        }
     }
 
     debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
@@ -3390,7 +3393,6 @@ next_node:;
             i64 byte_end = line_end_offset(view.line_offset+rows, view.lines, view.buffer);
 
             if (DEBUG_TREE_SITTER_COLORS) LOG_INFO("-- highlight query start --");
-            colors.count = 0;
 
 #if DEBUG_TREE_SITTER_COLORS
             String l = string_from_enum(buffer->language);
@@ -3414,10 +3416,10 @@ next_node:;
             i32 buffer_size = 0;
             //if (columns*rows*(i32)sizeof glyphs[0] > buffer_size)
             {
-                if (mapped) {
-                    glUnmapNamedBuffer(view.glyph_data_ssbo);
-                    mapped = nullptr;
-                }
+                // if (mapped) {
+                //     glUnmapNamedBuffer(view.glyph_data_ssbo);
+                //     mapped = nullptr;
+                // }
 
                 buffer_size = columns*rows*sizeof glyphs[0];
                 glBindBuffer(GL_SHADER_STORAGE_BUFFER, view.glyph_data_ssbo);
@@ -3425,8 +3427,8 @@ next_node:;
             }
 
             mapped = glMapNamedBufferRange(view.glyph_data_ssbo, 0, buffer_size, GL_MAP_WRITE_BIT);
-            glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
             defer { glUnmapNamedBuffer(view.glyph_data_ssbo); };
+            glyphs = { .data = (decltype(glyphs.data))mapped, .count = columns*rows};
 
             Vector3 fg = linear_from_sRGB(app.fg);
 
@@ -3488,28 +3490,26 @@ next_node:;
             GfxCommand cmd{
                 .type = GFX_COMMAND_MONO_TEXT,
                 .mono_text = {
-                    .vbo = gfx.vbos.frame,
-                    .vbo_offset = gfx.frame_vertices.count,
-                    .glyph_ssbo = view.glyph_data_ssbo,
+                    .vbo         = gfx.vbos.frame,
+                    .vbo_offset  = gfx.frame_vertices.count,
+                    .glyph_ssbo  = view.glyph_data_ssbo,
                     .glyph_atlas = font->texture,
-                    .cell_size = { app.mono.space_width, app.mono.line_height },
-                    .pos = rect.tl,
-                    .offset = view.voffset,
+                    .cell_size   = { app.mono.space_width, app.mono.line_height },
+                    .pos         = rect.tl,
+                    .offset      = view.voffset,
                     .line_offset = view.line_offset,
-                    .columns = columns,
+                    .columns     = columns,
                 }
             };
 
-            array_add(
-                &gfx.frame_vertices,
-                {
-                    rect.br.x, rect.tl.y,
-                    rect.tl.x, rect.tl.y,
-                    rect.tl.x, rect.br.y,
-                    rect.tl.x, rect.br.y,
-                    rect.br.x, rect.br.y,
-                    rect.br.x, rect.tl.y,
-                });
+            array_add(&gfx.frame_vertices, {
+                rect.br.x, rect.tl.y,
+                rect.tl.x, rect.tl.y,
+                rect.tl.x, rect.br.y,
+                rect.tl.x, rect.br.y,
+                rect.br.x, rect.br.y,
+                rect.br.x, rect.tl.y,
+            });
 
             gfx_push_command(cmd, &gfx.frame_cmdbuf);
         }
