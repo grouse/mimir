@@ -539,75 +539,76 @@ void get_syntax_colors(
     TSTree *syntax_tree,
     Language language)
 {
-    if (auto query = app.highlights[language]; query && syntax_tree) {
-        i32 insert_at = 0;
-        i32 parent_index = 0;
+    auto query = app.highlights[language];
+    if (!query || !syntax_tree) return;
 
-        TSNode root = ts_tree_root_node(syntax_tree);
+    i32 insert_at = 0;
+    i32 parent_index = 0;
 
-        TSQueryCursor *cursor = ts_query_cursor_new();
-        defer { ts_query_cursor_delete(cursor); };
+    TSNode root = ts_tree_root_node(syntax_tree);
 
-        ts_query_cursor_set_byte_range(cursor, (u32)byte_start, (u32)byte_end);
-        ts_query_cursor_exec(cursor, query, root);
+    TSQueryCursor *cursor = ts_query_cursor_new();
+    defer { ts_query_cursor_delete(cursor); };
 
-        TSQueryMatch match;
-        u32 capture_index;
+    ts_query_cursor_set_byte_range(cursor, (u32)byte_start, (u32)byte_end);
+    ts_query_cursor_exec(cursor, query, root);
 
-        while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
-            auto *capture = &match.captures[capture_index];
-            u32 start_byte = ts_node_start_byte(capture->node);
-            u32 end_byte = ts_node_end_byte(capture->node);
+    TSQueryMatch match;
+    u32 capture_index;
 
-            i32 old_parent_index = parent_index;
-            while (parent_index < colors->count &&
-                   (start_byte < colors->at(parent_index).start || end_byte > colors->at(parent_index).end))
-            {
-                parent_index++;
-            }
+    while (ts_query_cursor_next_capture(cursor, &match, &capture_index)) {
+        auto *capture = &match.captures[capture_index];
+        u32 start_byte = ts_node_start_byte(capture->node);
+        u32 end_byte = ts_node_end_byte(capture->node);
 
-            if (old_parent_index != parent_index) {
-                insert_at = MIN(colors->count, parent_index+1);
-            }
+        i32 old_parent_index = parent_index;
+        while (parent_index < colors->count &&
+               (start_byte < colors->at(parent_index).start || end_byte > colors->at(parent_index).end))
+        {
+            parent_index++;
+        }
 
-            u32 capture_name_length;
-            const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
-            String capture_name{ (char*)tmp, (i32)capture_name_length };
+        if (old_parent_index != parent_index) {
+            insert_at = MIN(colors->count, parent_index+1);
+        }
+
+        u32 capture_name_length;
+        const char *tmp = ts_query_capture_name_for_id(query, capture->index, &capture_name_length);
+        String capture_name{ (char*)tmp, (i32)capture_name_length };
 
 #if DEBUG_TREE_SITTER_COLORS
-            if (false) {
-                const char *node_type = ts_node_type(capture->node);
-                LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
-                LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
-                LOG_INFO("capture name: %.*s", STRFMT(capture_name));
-            }
+        if (false) {
+            const char *node_type = ts_node_type(capture->node);
+            LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
+            LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
+            LOG_INFO("capture name: %.*s", STRFMT(capture_name));
+        }
 #endif
-            String str = capture_name;
-            u32 *color = nullptr;
-            do {
-                color = map_find(&app.syntax_colors, str);
-                i32 p = last_of(str, '.');
-                if (p > 0) str = slice(str, 0, p);
-                else str.length = 0;
-            } while(color == nullptr && str.length > 0);
+        String str = capture_name;
+        u32 *color = nullptr;
+        do {
+            color = map_find(&app.syntax_colors, str);
+            i32 p = last_of(str, '.');
+            if (p > 0) str = slice(str, 0, p);
+            else str.length = 0;
+        } while(color == nullptr && str.length > 0);
 
-            if (color) {
+        if (color) {
 #if DEBUG_TREE_SITTER_COLORS
-                LOG_INFO("highlight color[%d] '%.*s' in [%d, %d]", insert_at, STRFMT(capture_name), start_byte, end_byte);
+            LOG_INFO("highlight color[%d] '%.*s' in [%d, %d]", insert_at, STRFMT(capture_name), start_byte, end_byte);
 #endif
-                array_insert(colors, insert_at++, { start_byte, end_byte, *color });
+            array_insert(colors, insert_at++, { start_byte, end_byte, *color });
 
-                if (parent_index < colors->count && parent_index != insert_at-1) {
-                    if (colors->at(parent_index).end> start_byte) {
-                        auto parent_end = colors->at(parent_index).end;
-                        colors->at(parent_index).end = start_byte;
+            if (parent_index < colors->count && parent_index != insert_at-1) {
+                if (colors->at(parent_index).end> start_byte) {
+                    auto parent_end = colors->at(parent_index).end;
+                    colors->at(parent_index).end = start_byte;
 
-                        if (parent_end - end_byte > 0) {
-                            array_insert(colors, insert_at++, { end_byte, parent_end, colors->at(parent_index).color });
-                            parent_index = insert_at-1;
-                        }
-
+                    if (parent_end - end_byte > 0) {
+                        array_insert(colors, insert_at++, { end_byte, parent_end, colors->at(parent_index).color });
+                        parent_index = insert_at-1;
                     }
+
                 }
             }
         }
@@ -635,6 +636,56 @@ void buffer_history(BufferId buffer_id, BufferHistory entry)
             buffer->history_index = MIN(buffer->history_index, buffer->history.count);
             return;
         }
+
+        // TODO(jesper): ideally this collapsing should be happening at the insertion of the nodes instead of a post-cleanup
+        for (i32 i = buffer->history.count-1; i >= 0; i--) {
+            if (buffer->history[i].type != BUFFER_HISTORY_GROUP_END) break;
+            array_remove(&buffer->history, i--);
+
+            for (auto it : reverse(slice(buffer->history, 0, i))) {
+                if (it->type == BUFFER_HISTORY_GROUP_START) {
+                    array_remove(&buffer->history, it.index); i = it.index;
+                    break;
+                }
+
+            }
+        }
+
+        i32 prev_cursor = -1, last_cursor = -1;
+        for (auto it : reverse(buffer->history)) {
+            if (it->type == BUFFER_HISTORY_GROUP_START) break;
+            if (it->type == BUFFER_CURSOR_POS) {
+                if (last_cursor == -1) {
+                    last_cursor = it.index;
+                } else if (prev_cursor != -1) {
+                    array_remove(&buffer->history, prev_cursor);
+                    prev_cursor = it.index;
+                } else {
+                    prev_cursor = it.index;
+                }
+            }
+        }
+
+        i32 prev_insert = -1;
+        for (auto it : reverse(buffer->history)) {
+            if (it->type == BUFFER_HISTORY_GROUP_START) break;
+            if (it->type == BUFFER_REMOVE) break;
+            if (it->type == BUFFER_INSERT) {
+                if (prev_insert != -1) {
+                    auto *prev = &buffer->history[prev_insert];
+                    if (it->offset+it->text.length == prev->offset) {
+                        it->text.data = REALLOC_ARR(mem_dynamic, char, it->text.data, it->text.length, it->text.length+prev->text.length);
+                        memcpy(it->text.data+it->text.length, prev->text.data, prev->text.length);
+                        it->text.length += prev->text.length;
+                        array_remove(&buffer->history, prev_insert);
+                    }
+                }
+
+                prev_insert = it.index;
+            }
+        }
+
+        buffer->history_index = MIN(buffer->history_index, buffer->history.count);
     }
 
     // TODO(jesper): history allocator. We're leaking the memory of the history strings
@@ -2840,6 +2891,8 @@ void update_and_render() INTERNAL
         }
 
         gui_menu("debug") {
+            if (gui_button("history")) gui_window_toggle(debug.buffer_history.wnd);
+
         }
 
         if (app.process_commands.count > 0) {
@@ -2861,7 +2914,7 @@ void update_and_render() INTERNAL
 					gui_textbox(stringf(str, sizeof str, "REMOVE (%lld): '%.*s'", h.offset, STRFMT(h.text)));
 					break;
 				case BUFFER_CURSOR_POS:
-					gui_textbox(stringf(str, sizeof str, "CURSOR: %lld", h.offset));
+					gui_textbox(stringf(str, sizeof str, "CURSOR: [%lld, %lld]", h.caret, h.mark));
 					break;
 				case BUFFER_HISTORY_GROUP_START:
 					gui_textbox("GROUP_START");
