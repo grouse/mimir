@@ -3244,39 +3244,43 @@ next_node:;
 
         if (auto buffer = get_buffer(view.buffer); buffer) {
             if (app.incremental_search.active) {
-                // Vector2 size{ 0, 25.0f };
-                // Vector2 pos = gui_layout_widget(&size, GUI_ANCHOR_TOP);;
-                // gui_begin_layout({ .type = GUI_LAYOUT_ROW, .pos = pos, .size = size });
-                // defer { gui_end_layout(); };
-                //
-                // auto action = gui_editbox("");
-                // if (action & GUI_EDITBOX_CHANGE) {
-                //     String needle{ gui.edit.buffer, gui.edit.length };
-                //     string_copy(&app.incremental_search.str, needle, mem_dynamic);
-                //
-                //     view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
-                //     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                //     if (app.incremental_search.set_mark) view.mark = view.caret;
-                //     move_view_to_caret(&view);
-                // }
-                //
-                // if (action & GUI_EDITBOX_FINISH) {
-                //     app.incremental_search.active = false;
-                // }
-                //
-                // if (action & GUI_EDITBOX_CANCEL) {
-                //     FREE(mem_dynamic, app.incremental_search.str.data);
-                //     app.incremental_search.str = {};
-                //
-                //     view.caret.byte_offset = app.incremental_search.start_caret;
-                //     view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
-                //     if (app.incremental_search.set_mark) {
-                //         view.mark.byte_offset = app.incremental_search.start_mark;
-                //         view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
-                //     }
-                //     app.incremental_search.active = false;
-                // }
-            } else if (app.incremental_search.str.length > 0) {
+                GUI_ROW({ 25 }) {
+                    GuiId id = GUI_ID;
+                    gui_focus(id);
+
+                    gui_textbox("search:");
+                    auto action = gui_editbox_id(id, "", split_rect({}));
+
+                    if (action == GUI_CHANGE) {
+                        String needle = gui_editbox_str();
+                        string_copy(&app.incremental_search.str, needle, mem_dynamic);
+
+                        view.caret.byte_offset = buffer_seek_forward(view.buffer, needle, app.incremental_search.start_caret);
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        if (app.incremental_search.set_mark) view.mark = view.caret;
+                        move_view_to_caret(&view);
+                    }
+
+                    if (action == GUI_CANCEL) {
+                        FREE(mem_dynamic, app.incremental_search.str.data);
+                        app.incremental_search.str = {};
+
+                        view.caret.byte_offset = app.incremental_search.start_caret;
+                        view.caret = recalculate_caret(view.caret, view.buffer, view.lines);
+                        if (app.incremental_search.set_mark) {
+                            view.mark.byte_offset = app.incremental_search.start_mark;
+                            view.mark = recalculate_caret(view.mark, view.buffer, view.lines);
+                        }
+
+                        app.incremental_search.active = false;
+                        gui_focus(view.gui_id);
+                    }
+
+                    if (action == GUI_END) {
+                        app.incremental_search.active = false;
+                        gui_focus(view.gui_id);
+                    }
+                }
             }
 
             GUI_LAYOUT(split_bottom({ 15 })) {
