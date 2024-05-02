@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 
 	Array<String> args{};
 	if (argc > 1) {
-		array_create(&args, argc-1);
+		array_create(&args, argc-1, mem_dynamic);
 		for (i32 i = 1; i < argc; i++) {
 			args[i-1] = String{ argv[i], (i32)strlen(argv[i]) };
 		}
