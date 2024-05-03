@@ -941,24 +941,24 @@ int app_main(Array<String> args)
     init_gui();
 
     init_input_map(app.input.edit, {
-        { INSERT_MODE,     EDGE_DOWN, KEYBOARD, .keyboard = { KC_I } },
-        { CANCEL,          EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { INSERT_MODE,     EDGE_DOWN, .key = { KC_I } },
+        { CANCEL,          EDGE_DOWN, .key = { KC_ESC } },
 
-        { UNDO,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_U } },
-        { REDO,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_R } },
+        { UNDO,            EDGE_DOWN, .key = { KC_U } },
+        { REDO,            EDGE_DOWN, .key = { KC_R } },
 
-        { SAVE,            EDGE_DOWN, KEYBOARD, .keyboard = { KC_S, MF_CTRL } },
+        { SAVE,            EDGE_DOWN, .key = { KC_S, MF_CTRL } },
 
-        { FUZZY_FIND_FILE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_O } },
+        { FUZZY_FIND_FILE, EDGE_DOWN, .key = { KC_O } },
 
-        { PASTE,           EDGE_DOWN, KEYBOARD, .keyboard = { KC_P } },
-        { COPY_RANGE,      EDGE_DOWN, KEYBOARD, .keyboard = { KC_Y } },
-        { CUT_RANGE,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_X } },
-        { DELETE_RANGE,    EDGE_DOWN, KEYBOARD, .keyboard = { KC_D } },
+        { PASTE,           EDGE_DOWN, .key = { KC_P } },
+        { COPY_RANGE,      EDGE_DOWN, .key = { KC_Y } },
+        { CUT_RANGE,       EDGE_DOWN, .key = { KC_X } },
+        { DELETE_RANGE,    EDGE_DOWN, .key = { KC_D } },
     });
 
     init_input_map(app.input.insert, {
-        { EDIT_MODE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { EDIT_MODE, EDGE_DOWN, { .key = { KC_ESC } }},
         { TEXT_INPUT, TEXT },
     });
 

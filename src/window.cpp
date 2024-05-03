@@ -187,11 +187,11 @@ void init_input_map_(InputMapId *dst, String name, std::initializer_list<InputDe
 {
     InputMap map{ .name = name };
     for (auto it : descriptors) {
-        array_add(&map.by_device[it.device][0], it);
+        array_add(&map.by_device[it.any.device][0], it);
         array_add(&map.by_type[it.type][0], it);
 
-        if (it.type) array_add(&map.by_device[it.device][it.type], it);
-        if (it.device) array_add(&map.by_type[it.type][it.device], it);
+        if (it.type) array_add(&map.by_device[it.any.device][it.type], it);
+        if (it.any.device) array_add(&map.by_type[it.type][it.any.device], it);
     }
 
     *dst = array_add(&input.maps, map);
@@ -445,9 +445,9 @@ bool translate_input_event(
             if (event.key.prev_state) break;
 
             for (InputDesc it : map->by_device[KEYBOARD][EDGE_DOWN]) {
-                if (event.key.keycode == it.keyboard.keycode &&
-                    (event.key.modifiers == it.keyboard.modifiers ||
-                     it.keyboard.modifiers == MF_ANY))
+                if (event.key.keycode == it.key.key &&
+                    (event.key.modifiers == it.key.modifiers ||
+                     it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
                     insert_input_event(queue, map_id, it.id, it.type);
@@ -463,9 +463,9 @@ bool translate_input_event(
             }
 
             for (InputDesc it : map->by_device[KEYBOARD][HOLD]) {
-                if (event.key.keycode == it.keyboard.keycode &&
-                    (event.key.modifiers == it.keyboard.modifiers ||
-                     it.keyboard.modifiers == MF_ANY))
+                if (event.key.keycode == it.key.key &&
+                    (event.key.modifiers == it.key.modifiers ||
+                     it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = true;
                     insert_input_event(queue, map_id, it.id, it.type);
@@ -475,12 +475,12 @@ bool translate_input_event(
 
             for (i32 i = AXIS; i <= AXIS_2D; i++) {
                 for (InputDesc it : map->by_device[KEYBOARD][i]) {
-                    if(event.key.keycode == it.keyboard.keycode &&
-                       (event.key.modifiers == it.keyboard.modifiers ||
-                        it.keyboard.modifiers == MF_ANY))
+                    if(event.key.keycode == it.key.key &&
+                       (event.key.modifiers == it.key.modifiers ||
+                        it.key.modifiers == MF_ANY))
                     {
                         f32 *axis = map_find_emplace(&map->axes, it.id);
-                        axis[it.keyboard.axis] += it.keyboard.faxis;
+                        axis[it.key.axis] += it.key.faxis;
                         insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
                         handled = handled || !(it.flags & FALLTHROUGH);
                     }
@@ -489,9 +489,9 @@ bool translate_input_event(
             break;
         case WE_KEY_RELEASE:
             for (InputDesc it : map->by_device[KEYBOARD][EDGE_UP]) {
-                if (event.key.keycode == it.keyboard.keycode &&
-                    (event.key.modifiers == it.keyboard.modifiers ||
-                     it.keyboard.modifiers == MF_ANY))
+                if (event.key.keycode == it.key.key &&
+                    (event.key.modifiers == it.key.modifiers ||
+                     it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
                     insert_input_event(queue, map_id, it.id, it.type);
@@ -500,9 +500,9 @@ bool translate_input_event(
             }
 
             for (InputDesc it : map->by_device[KEYBOARD][HOLD]) {
-                if (event.key.keycode == it.keyboard.keycode &&
-                    (event.key.modifiers == it.keyboard.modifiers ||
-                     it.keyboard.modifiers == MF_ANY))
+                if (event.key.keycode == it.key.key &&
+                    (event.key.modifiers == it.key.modifiers ||
+                     it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = false;
                     insert_input_event(queue, map_id, it.id, it.type);
@@ -512,12 +512,12 @@ bool translate_input_event(
 
             for (i32 i = AXIS; i <= AXIS_2D; i++) {
                 for (InputDesc it : map->by_device[KEYBOARD][i]) {
-                    if (event.key.keycode == it.keyboard.keycode &&
-                        (event.key.modifiers == it.keyboard.modifiers ||
-                         it.keyboard.modifiers == MF_ANY))
+                    if (event.key.keycode == it.key.key &&
+                        (event.key.modifiers == it.key.modifiers ||
+                         it.key.modifiers == MF_ANY))
                     {
                         f32 *axis = map_find_emplace(&map->axes, it.id);
-                        axis[it.keyboard.axis] -= it.keyboard.faxis;
+                        axis[it.key.axis] -= it.key.faxis;
                         insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
                         handled = handled || !(it.flags & FALLTHROUGH);
                     }

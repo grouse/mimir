@@ -447,60 +447,60 @@ void init_gui() EXPORT
     }
 
     init_input_map(gui.input.base, {
-        { FOCUS_NEXT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_TAB } },
-        { FOCUS_PREV, EDGE_DOWN, KEYBOARD, .keyboard = { KC_TAB, .modifiers = MF_SHIFT } },
-        { FOCUS_CLEAR, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { FOCUS_NEXT, EDGE_DOWN, .key = { KC_TAB } },
+        { FOCUS_PREV, EDGE_DOWN, .key = { KC_TAB, MF_SHIFT } },
+        { FOCUS_CLEAR, EDGE_DOWN, .key = { KC_ESC } },
     });
 
     init_input_map(gui.input.scrollarea, {
-        { SCROLL, AXIS, MOUSE, .mouse = { MB_WHEEL } }
+        { SCROLL, AXIS, .mouse = { MB_WHEEL } }
     });
 
     init_input_map(gui.input.window, {
-        { WINDOW_CLOSE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_Q, .modifiers = MF_CTRL } },
-        { WINDOW_CLEAR, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { WINDOW_CLOSE, EDGE_DOWN, .key = { KC_Q, MF_CTRL } },
+        { WINDOW_CLEAR, EDGE_DOWN, .key = { KC_ESC } },
     });
 
     init_input_map(gui.input.editbox, {
-        { TEXT_INPUT,   TEXT },
-        { CURSOR_LEFT,  EDGE_DOWN, KEYBOARD, .keyboard = { KC_LEFT } },
-        { CURSOR_RIGHT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_RIGHT } },
-        { SELECT_ALL,   EDGE_DOWN, KEYBOARD, .keyboard = { KC_A, .modifiers = MF_CTRL } },
-        { COPY,         EDGE_DOWN, KEYBOARD, .keyboard = { KC_C, .modifiers = MF_CTRL } },
-        { PASTE,        EDGE_DOWN, KEYBOARD, .keyboard = { KC_V, .modifiers = MF_CTRL } },
-        { DELETE,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_DELETE } },
-        { DELETE_BACK,  EDGE_DOWN, KEYBOARD, .keyboard = { KC_BACKSPACE } },
-        { CONFIRM,      EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
-        { CONFIRM_CONT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_TAB } },
-        { CANCEL,       EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        //{ TEXT_INPUT, TEXT },
+        //{ CURSOR_LEFT,  EDGE_DOWN, .key = { KC_LEFT } },
+        { CURSOR_RIGHT, EDGE_DOWN, .key = { KC_RIGHT } },
+        { SELECT_ALL,   EDGE_DOWN, .key = { KC_A, MF_CTRL } },
+        { COPY,         EDGE_DOWN, .key = { KC_C, MF_CTRL } },
+        { PASTE,        EDGE_DOWN, .key = { KC_V, MF_CTRL } },
+        { DELETE,       EDGE_DOWN, .key = { KC_DELETE } },
+        { DELETE_BACK,  EDGE_DOWN, .key = { KC_BACKSPACE } },
+        { CONFIRM,      EDGE_DOWN, .key = { KC_ENTER } },
+        { CONFIRM_CONT, EDGE_DOWN, .key = { KC_TAB } },
+        { CANCEL,       EDGE_DOWN, .key = { KC_ESC } },
     });
 
     init_input_map(gui.input.lister, {
-        { FORWARD, EDGE_DOWN, KEYBOARD, .keyboard = { KC_DOWN  } },
-        { BACK,    EDGE_DOWN, KEYBOARD, .keyboard = { KC_UP    } },
-        { CONFIRM, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
-        { CANCEL,  EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC   } },
+        { FORWARD, EDGE_DOWN, .key = { KC_DOWN  } },
+        { BACK,    EDGE_DOWN, .key = { KC_UP    } },
+        { CONFIRM, EDGE_DOWN, .key = { KC_ENTER } },
+        { CANCEL,  EDGE_DOWN, .key = { KC_ESC   } },
     });
 
     init_input_map(gui.input.tree, {
-        { FOCUS_NEXT, EDGE_DOWN, KEYBOARD, .keyboard = { KC_DOWN } },
-        { FOCUS_PREV, EDGE_DOWN, KEYBOARD, .keyboard = { KC_UP } },
-        { ACTIVATE,   EDGE_DOWN, KEYBOARD, .keyboard = { KC_RIGHT } },
-        { DEACTIVATE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_LEFT } },
-        { TOGGLE,     EDGE_DOWN, KEYBOARD, .keyboard = { KC_SPACE } },
+        { FOCUS_NEXT, EDGE_DOWN, .key = { KC_DOWN } },
+        { FOCUS_PREV, EDGE_DOWN, .key = { KC_UP } },
+        { ACTIVATE,   EDGE_DOWN, .key = { KC_RIGHT } },
+        { DEACTIVATE, EDGE_DOWN, .key = { KC_LEFT } },
+        { TOGGLE,     EDGE_DOWN, .key = { KC_SPACE } },
     });
 
     init_input_map(gui.input.checkbox, {
-        { TOGGLE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_SPACE } },
+        { TOGGLE, EDGE_DOWN, .key = { KC_SPACE } },
     });
 
     init_input_map(gui.input.button, {
-        { CONFIRM, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ENTER } },
+        { CONFIRM, EDGE_DOWN, .key = { KC_ENTER } },
     });
 
     init_input_map(gui.input.dropdown, {
-        { TOGGLE, EDGE_DOWN, KEYBOARD, .keyboard = { KC_SPACE } },
-        { CANCEL, EDGE_DOWN, KEYBOARD, .keyboard = { KC_ESC } },
+        { TOGGLE, EDGE_DOWN, .key = { KC_SPACE } },
+        { CANCEL, EDGE_DOWN, .key = { KC_ESC } },
     });
 }
 

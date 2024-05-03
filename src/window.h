@@ -8,6 +8,8 @@
 
 #define init_input_map(id, ...) init_input_map_(&id, #id, __VA_ARGS__)
 
+#define MAX_INPUT_CHORD 4
+
 enum WindowEventType : u32 {
     WE_INVALID = 0,
     WE_MOUSE_WHEEL,
@@ -191,6 +193,7 @@ enum InputType {
 };
 
 enum InputDevice {
+    DEVICE_INVALID = 0,
     KEYBOARD = 1,
     MOUSE,
 
@@ -261,28 +264,52 @@ struct MouseEvent {
     i16 dx, dy;
 };
 
+struct InputAny {
+    InputDevice device;
+};
+
+struct InputKey : InputAny {
+    u8 key;
+    u8 modifiers;
+    u8 axis;
+    i8 faxis;
+
+    InputKey() : InputAny(KEYBOARD) {}
+    InputKey(u8 key, u8 modifiers = 0) : InputAny(KEYBOARD), key(key), modifiers(modifiers) {}
+};
+
+struct InputMouse : InputAny {
+    u8 button;
+    u8 modifiers;
+
+    InputMouse() : InputAny(MOUSE) {}
+    InputMouse(u8 button, u8 modifiers = 0) : InputAny(MOUSE), button(button), modifiers(modifiers) {}
+};
+
+struct InputPad : InputAny {
+    u8 button;
+
+    InputPad() : InputAny(GAMEPAD) {}
+    InputPad(u8 button) : InputAny(GAMEPAD), button(button) {}
+};
+
+struct InputAxis : InputAny {
+    u8 id;
+
+    InputAxis() = default;
+    InputAxis(u8 id) : id(id) {}
+};
+
 struct InputDesc {
     InputId id;
     InputType type;
-    InputDevice device;
 
     union {
-        struct {
-            u8 keycode;
-            u8 modifiers;
-            u8 axis;
-            i8 faxis;
-        } keyboard;
-        struct {
-            u8 button;
-            u8 modifiers;
-        } mouse;
-        struct {
-            u8 button;
-        } pad;
-        struct {
-            u8 id;
-        } axis;
+        InputAny   any;
+        InputKey   key;
+        InputMouse mouse;
+        InputPad   pad;
+        InputAxis  axis;
     };
 
     u32 flags;
