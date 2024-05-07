@@ -265,6 +265,7 @@ struct MouseEvent {
 };
 
 struct InputAny {
+    InputType type;
     InputDevice device;
 };
 
@@ -274,23 +275,23 @@ struct InputKey : InputAny {
     u8 axis;
     i8 faxis;
 
-    InputKey() : InputAny(KEYBOARD) {}
-    InputKey(u8 key, u8 modifiers = 0) : InputAny(KEYBOARD), key(key), modifiers(modifiers) {}
+    InputKey(u8 key, u8 modifiers = 0) : InputAny(EDGE_DOWN, KEYBOARD), key(key), modifiers(modifiers) {}
+    InputKey(InputType type, u8 key, u8 modifiers = 0) : InputAny(type, KEYBOARD), key(key), modifiers(modifiers) {}
 };
 
 struct InputMouse : InputAny {
     u8 button;
     u8 modifiers;
 
-    InputMouse() : InputAny(MOUSE) {}
-    InputMouse(u8 button, u8 modifiers = 0) : InputAny(MOUSE), button(button), modifiers(modifiers) {}
+    InputMouse(InputType type) : InputAny(type, MOUSE) {}
+    InputMouse(InputType type, u8 button, u8 modifiers = 0) : InputAny(type, MOUSE), button(button), modifiers(modifiers) {}
 };
 
 struct InputPad : InputAny {
     u8 button;
 
-    InputPad() : InputAny(GAMEPAD) {}
-    InputPad(u8 button) : InputAny(GAMEPAD), button(button) {}
+    InputPad(InputType type) : InputAny(type, GAMEPAD) {}
+    InputPad(InputType type, u8 button) : InputAny(type, GAMEPAD), button(button) {}
 };
 
 struct InputAxis : InputAny {
@@ -300,9 +301,12 @@ struct InputAxis : InputAny {
     InputAxis(u8 id) : id(id) {}
 };
 
+struct InputText : InputAny {
+    InputText() : InputAny(TEXT, DEVICE_INVALID) {}
+};
+
 struct InputDesc {
     InputId id;
-    InputType type;
 
     union {
         InputAny   any;
@@ -310,6 +314,7 @@ struct InputDesc {
         InputMouse mouse;
         InputPad   pad;
         InputAxis  axis;
+        InputText  text;
     };
 
     u32 flags;

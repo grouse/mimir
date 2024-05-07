@@ -186,12 +186,12 @@ String string_from_enum(KeyCode_ kc) EXPORT
 void init_input_map_(InputMapId *dst, String name, std::initializer_list<InputDesc> descriptors) EXPORT
 {
     InputMap map{ .name = name };
-    for (auto it : descriptors) {
+    for (InputDesc it : descriptors) {
         array_add(&map.by_device[it.any.device][0], it);
-        array_add(&map.by_type[it.type][0], it);
+        array_add(&map.by_type[it.any.type][0], it);
 
-        if (it.type) array_add(&map.by_device[it.any.device][it.type], it);
-        if (it.any.device) array_add(&map.by_type[it.type][it.any.device], it);
+        if (it.any.type) array_add(&map.by_device[it.any.device][it.any.type], it);
+        if (it.any.device) array_add(&map.by_type[it.any.type][it.any.device], it);
     }
 
     *dst = array_add(&input.maps, map);
@@ -301,7 +301,7 @@ bool translate_input_event(
         switch (event.type) {
         case WE_TEXT:
             for (InputDesc it : map->by_type[TEXT][0]) {
-                array_insert(queue, 0, { it.id, .input = { map_id, it.type, .text = event.text } });
+                array_insert(queue, 0, { it.id, .input = { map_id, it.any.type, .text = event.text } });
                 handled = handled || !(it.flags & FALLTHROUGH);
 
                 auto *text = map_find_emplace(&map->text, it.id);
@@ -315,7 +315,7 @@ bool translate_input_event(
                     axis[0] = event.axis2.value[0];
                     axis[1] = event.axis2.value[1];
 
-                    insert_axis2d_event(queue, map_id, it.id, it.type, event.axis2.value);
+                    insert_axis2d_event(queue, map_id, it.id, it.any.type, event.axis2.value);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             } break;
@@ -325,7 +325,7 @@ bool translate_input_event(
                     f32 *axis = map_find_emplace(&map->axes, it.id);
                     *axis = event.axis.value;
 
-                    insert_axis_event(queue, map_id, it.id, it.type, event.axis.value);
+                    insert_axis_event(queue, map_id, it.id, it.any.type, event.axis.value);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -334,7 +334,7 @@ bool translate_input_event(
             for (InputDesc it : map->by_device[GAMEPAD][EDGE_DOWN]) {
                 if (event.pad.button == it.pad.button) {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -342,7 +342,7 @@ bool translate_input_event(
             for (InputDesc it : map->by_device[GAMEPAD][HOLD]) {
                 if (event.pad.button == it.pad.button) {
                     (*map_find_emplace(&map->held, it.id, false)) = true;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -351,7 +351,7 @@ bool translate_input_event(
             for (InputDesc it : map->by_device[GAMEPAD][EDGE_UP]) {
                 if (event.pad.button == it.pad.button) {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -359,7 +359,7 @@ bool translate_input_event(
             for (InputDesc it : map->by_device[GAMEPAD][HOLD]) {
                 if (event.pad.button == it.pad.button) {
                     (*map_find_emplace(&map->held, it.id, false)) = false;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -371,7 +371,7 @@ bool translate_input_event(
                 {
                     f32 *axis = map_find_emplace(&map->axes, it.id);
                     axis[0] += event.mouse_wheel.delta;
-                    insert_axis_event(queue, map_id, it.id, it.type, (f32)event.mouse_wheel.delta);
+                    insert_axis_event(queue, map_id, it.id, it.any.type, (f32)event.mouse_wheel.delta);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -386,7 +386,7 @@ bool translate_input_event(
                     f32 *axis = map_find_emplace(&map->axes, it.id);
                     axis[0] += event.mouse.dx;
                     axis[1] += event.mouse.dy;
-                    insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ (f32)event.mouse.dx, (f32)event.mouse.dy });
+                    insert_axis2d_event(queue, map_id, it.id, it.any.type, (f32[2]){ (f32)event.mouse.dx, (f32)event.mouse.dy });
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -399,7 +399,7 @@ bool translate_input_event(
                      it.mouse.button == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -411,7 +411,7 @@ bool translate_input_event(
                      it.mouse.button == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = true;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -424,7 +424,7 @@ bool translate_input_event(
                      it.mouse.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -436,7 +436,7 @@ bool translate_input_event(
                      it.mouse.button == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = false;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -450,7 +450,7 @@ bool translate_input_event(
                      it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
 
                     LOG_INFO(
@@ -468,7 +468,7 @@ bool translate_input_event(
                      it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = true;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -481,7 +481,7 @@ bool translate_input_event(
                     {
                         f32 *axis = map_find_emplace(&map->axes, it.id);
                         axis[it.key.axis] += it.key.faxis;
-                        insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
+                        insert_axis2d_event(queue, map_id, it.id, it.any.type, (f32[2]){ axis[0], axis[1] });
                         handled = handled || !(it.flags & FALLTHROUGH);
                     }
                 }
@@ -494,7 +494,7 @@ bool translate_input_event(
                      it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->edges, it.id, 0))++;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -505,7 +505,7 @@ bool translate_input_event(
                      it.key.modifiers == MF_ANY))
                 {
                     (*map_find_emplace(&map->held, it.id, false)) = false;
-                    insert_input_event(queue, map_id, it.id, it.type);
+                    insert_input_event(queue, map_id, it.id, it.any.type);
                     handled = handled || !(it.flags & FALLTHROUGH);
                 }
             }
@@ -518,7 +518,7 @@ bool translate_input_event(
                     {
                         f32 *axis = map_find_emplace(&map->axes, it.id);
                         axis[it.key.axis] -= it.key.faxis;
-                        insert_axis2d_event(queue, map_id, it.id, it.type, (f32[2]){ axis[0], axis[1] });
+                        insert_axis2d_event(queue, map_id, it.id, it.any.type, (f32[2]){ axis[0], axis[1] });
                         handled = handled || !(it.flags & FALLTHROUGH);
                     }
                 }

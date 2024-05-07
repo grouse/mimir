@@ -447,60 +447,60 @@ void init_gui() EXPORT
     }
 
     init_input_map(gui.input.base, {
-        { FOCUS_NEXT, EDGE_DOWN, .key = { KC_TAB } },
-        { FOCUS_PREV, EDGE_DOWN, .key = { KC_TAB, MF_SHIFT } },
-        { FOCUS_CLEAR, EDGE_DOWN, .key = { KC_ESC } },
+        { FOCUS_NEXT, .key = { EDGE_DOWN, KC_TAB } },
+        { FOCUS_PREV, .key = { EDGE_DOWN, KC_TAB, MF_SHIFT } },
+        { FOCUS_CLEAR, .key = { EDGE_DOWN, KC_ESC } },
     });
 
     init_input_map(gui.input.scrollarea, {
-        { SCROLL, AXIS, .mouse = { MB_WHEEL } }
+        { SCROLL, .mouse = { AXIS, MB_WHEEL } }
     });
 
     init_input_map(gui.input.window, {
-        { WINDOW_CLOSE, EDGE_DOWN, .key = { KC_Q, MF_CTRL } },
-        { WINDOW_CLEAR, EDGE_DOWN, .key = { KC_ESC } },
+        { WINDOW_CLOSE, .key = { EDGE_DOWN, KC_Q, MF_CTRL } },
+        { WINDOW_CLEAR, .key = { EDGE_DOWN, KC_ESC } },
     });
 
     init_input_map(gui.input.editbox, {
-        //{ TEXT_INPUT, TEXT },
-        //{ CURSOR_LEFT,  EDGE_DOWN, .key = { KC_LEFT } },
-        { CURSOR_RIGHT, EDGE_DOWN, .key = { KC_RIGHT } },
-        { SELECT_ALL,   EDGE_DOWN, .key = { KC_A, MF_CTRL } },
-        { COPY,         EDGE_DOWN, .key = { KC_C, MF_CTRL } },
-        { PASTE,        EDGE_DOWN, .key = { KC_V, MF_CTRL } },
-        { DELETE,       EDGE_DOWN, .key = { KC_DELETE } },
-        { DELETE_BACK,  EDGE_DOWN, .key = { KC_BACKSPACE } },
-        { CONFIRM,      EDGE_DOWN, .key = { KC_ENTER } },
-        { CONFIRM_CONT, EDGE_DOWN, .key = { KC_TAB } },
-        { CANCEL,       EDGE_DOWN, .key = { KC_ESC } },
+        { TEXT_INPUT,   .text = {}},
+        { CURSOR_LEFT,  .key = { EDGE_DOWN, KC_LEFT } },
+        { CURSOR_RIGHT, .key = { EDGE_DOWN, KC_RIGHT } },
+        { SELECT_ALL,   .key = { EDGE_DOWN, KC_A, MF_CTRL } },
+        { COPY,         .key = { EDGE_DOWN, KC_C, MF_CTRL } },
+        { PASTE,        .key = { EDGE_DOWN, KC_V, MF_CTRL } },
+        { DELETE,       .key = { EDGE_DOWN, KC_DELETE } },
+        { DELETE_BACK,  .key = { EDGE_DOWN, KC_BACKSPACE } },
+        { CONFIRM,      .key = { EDGE_DOWN, KC_ENTER } },
+        { CONFIRM_CONT, .key = { EDGE_DOWN, KC_TAB } },
+        { CANCEL,       .key = { EDGE_DOWN, KC_ESC } },
     });
 
     init_input_map(gui.input.lister, {
-        { FORWARD, EDGE_DOWN, .key = { KC_DOWN  } },
-        { BACK,    EDGE_DOWN, .key = { KC_UP    } },
-        { CONFIRM, EDGE_DOWN, .key = { KC_ENTER } },
-        { CANCEL,  EDGE_DOWN, .key = { KC_ESC   } },
+        { FORWARD, .key = { EDGE_DOWN, KC_DOWN  } },
+        { BACK,    .key = { EDGE_DOWN, KC_UP    } },
+        { CONFIRM, .key = { EDGE_DOWN, KC_ENTER } },
+        { CANCEL,  .key = { EDGE_DOWN, KC_ESC   } },
     });
 
     init_input_map(gui.input.tree, {
-        { FOCUS_NEXT, EDGE_DOWN, .key = { KC_DOWN } },
-        { FOCUS_PREV, EDGE_DOWN, .key = { KC_UP } },
-        { ACTIVATE,   EDGE_DOWN, .key = { KC_RIGHT } },
-        { DEACTIVATE, EDGE_DOWN, .key = { KC_LEFT } },
-        { TOGGLE,     EDGE_DOWN, .key = { KC_SPACE } },
+        { FOCUS_NEXT, .key = { EDGE_DOWN, KC_DOWN } },
+        { FOCUS_PREV, .key = { EDGE_DOWN, KC_UP } },
+        { ACTIVATE,   .key = { EDGE_DOWN, KC_RIGHT } },
+        { DEACTIVATE, .key = { EDGE_DOWN, KC_LEFT } },
+        { TOGGLE,     .key = { EDGE_DOWN, KC_SPACE } },
     });
 
     init_input_map(gui.input.checkbox, {
-        { TOGGLE, EDGE_DOWN, .key = { KC_SPACE } },
+        { TOGGLE, .key = { EDGE_DOWN, KC_SPACE } },
     });
 
     init_input_map(gui.input.button, {
-        { CONFIRM, EDGE_DOWN, .key = { KC_ENTER } },
+        { CONFIRM, .key = { EDGE_DOWN, KC_ENTER } },
     });
 
     init_input_map(gui.input.dropdown, {
-        { TOGGLE, EDGE_DOWN, .key = { KC_SPACE } },
-        { CANCEL, EDGE_DOWN, .key = { KC_ESC } },
+        { TOGGLE, .key = { EDGE_DOWN, KC_SPACE } },
+        { CANCEL, .key = { EDGE_DOWN, KC_ESC } },
     });
 }
 

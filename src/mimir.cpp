@@ -941,25 +941,26 @@ int app_main(Array<String> args)
     init_gui();
 
     init_input_map(app.input.edit, {
-        { INSERT_MODE,     EDGE_DOWN, .key = { KC_I } },
-        { CANCEL,          EDGE_DOWN, .key = { KC_ESC } },
+        { INSERT_MODE, .key = { KC_I } },
 
-        { UNDO,            EDGE_DOWN, .key = { KC_U } },
-        { REDO,            EDGE_DOWN, .key = { KC_R } },
+        { CANCEL, .key = { KC_ESC } },
+        { UNDO,   .key = { KC_U } },
+        { REDO,   .key = { KC_R } },
+        { SAVE,   .key = { KC_S, MF_CTRL } },
 
-        { SAVE,            EDGE_DOWN, .key = { KC_S, MF_CTRL } },
+        //{ GOTO_DEF, { .key = { KC_G }, .key = { KC_D } }}
 
-        { FUZZY_FIND_FILE, EDGE_DOWN, .key = { KC_O } },
+        { FUZZY_FIND_FILE, .key = { KC_O } },
 
-        { PASTE,           EDGE_DOWN, .key = { KC_P } },
-        { COPY_RANGE,      EDGE_DOWN, .key = { KC_Y } },
-        { CUT_RANGE,       EDGE_DOWN, .key = { KC_X } },
-        { DELETE_RANGE,    EDGE_DOWN, .key = { KC_D } },
+        { PASTE,        .key = { KC_P } },
+        { COPY_RANGE,   .key = { KC_Y } },
+        { CUT_RANGE,    .key = { KC_X } },
+        { DELETE_RANGE, .key = { KC_D } },
     });
 
     init_input_map(app.input.insert, {
-        { EDIT_MODE, EDGE_DOWN, { .key = { KC_ESC } }},
-        { TEXT_INPUT, TEXT },
+        { EDIT_MODE,  .key = { KC_ESC }},
+        { TEXT_INPUT, .text = {}}
     });
 
     app.mode = app.next_mode = MODE_EDIT;
