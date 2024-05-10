@@ -182,12 +182,15 @@ enum MouseButton : u8 {
 };
 
 enum InputType {
+    IT_INVALID = 0,
+
     AXIS = 1,
     AXIS_2D,
     EDGE_DOWN,
     EDGE_UP,
     HOLD,
     TEXT,
+    CHORD,
 
     IT_MAX,
 };
@@ -198,6 +201,9 @@ enum InputDevice {
     MOUSE,
 
     GAMEPAD,
+
+    VTEXT,
+    VAXIS,
 
     ID_MAX,
 };
@@ -232,6 +238,22 @@ enum {
     BACK
 };
 
+inline const char* sz_from_enum(InputType type)
+{
+    switch (type) {
+    case AXIS:      return "AXIS";
+    case AXIS_2D:   return "AXIS_2D";
+    case EDGE_DOWN: return "EDGE_DOWN";
+    case EDGE_UP:   return "EDGE_UP";
+    case HOLD:      return "HOLD";
+    case TEXT:      return "TEXT";
+    case CHORD:     return "CHORD";
+    case IT_MAX:    return "IT_MAX";
+    case IT_INVALID: return "IT_INVALID";
+    }
+    return "INVALID";
+}
+
 typedef u32 InputId;
 typedef i32 InputMapId;
 
@@ -264,57 +286,77 @@ struct MouseEvent {
     i16 dx, dy;
 };
 
-struct InputAny {
-    InputType type;
+struct IAny {
     InputDevice device;
+    InputType   type;
 };
 
-struct InputKey : InputAny {
-    u8 key;
+struct IKey {
+    InputDevice device = KEYBOARD;
+    InputType   type = EDGE_DOWN;
+
+    u8 code;
     u8 modifiers;
     u8 axis;
     i8 faxis;
-
-    InputKey(u8 key, u8 modifiers = 0) : InputAny(EDGE_DOWN, KEYBOARD), key(key), modifiers(modifiers) {}
-    InputKey(InputType type, u8 key, u8 modifiers = 0) : InputAny(type, KEYBOARD), key(key), modifiers(modifiers) {}
 };
 
-struct InputMouse : InputAny {
+struct IMouse {
+    InputDevice device = MOUSE;
+    InputType   type = AXIS_2D;
+
     u8 button;
     u8 modifiers;
-
-    InputMouse(InputType type) : InputAny(type, MOUSE) {}
-    InputMouse(InputType type, u8 button, u8 modifiers = 0) : InputAny(type, MOUSE), button(button), modifiers(modifiers) {}
 };
 
-struct InputPad : InputAny {
+struct IPad {
+    InputDevice device = GAMEPAD;
+    InputType   type;
     u8 button;
-
-    InputPad(InputType type) : InputAny(type, GAMEPAD) {}
-    InputPad(InputType type, u8 button) : InputAny(type, GAMEPAD), button(button) {}
 };
 
-struct InputAxis : InputAny {
+struct IAxis {
+    InputDevice device = VAXIS;
+    InputType   type = AXIS;
     u8 id;
-
-    InputAxis() = default;
-    InputAxis(u8 id) : id(id) {}
 };
 
-struct InputText : InputAny {
-    InputText() : InputAny(TEXT, DEVICE_INVALID) {}
+struct IText {
+    InputDevice device = VTEXT;
+    InputType   type = TEXT;
 };
+
+union IUnion {
+    IAny any;
+    IKey key;
+    IMouse mouse;
+    IPad pad;
+    IAxis axis;
+    IText text;
+};
+
+struct IChord {
+    InputDevice device = DEVICE_INVALID;
+    InputType   type = CHORD;
+    IUnion *seq;
+    i32 length, at;
+};
+
+#define IKEY(...)   { .key = { .type = EDGE_DOWN, __VA_ARGS__ } }
+#define IMOUSE(...) { .mouse = { .type = AXIS_2D, __VA_ARGS__ } }
+#define ICHORD(...) { .chord = { .seq = (IUnion[]) { __VA_ARGS__, DEVICE_INVALID }} }
 
 struct InputDesc {
     InputId id;
 
     union {
-        InputAny   any;
-        InputKey   key;
-        InputMouse mouse;
-        InputPad   pad;
-        InputAxis  axis;
-        InputText  text;
+        IAny   any;
+        IKey   key;
+        IMouse mouse;
+        IPad   pad;
+        IAxis  axis;
+        IText  text;
+        IChord chord;
     };
 
     u32 flags;

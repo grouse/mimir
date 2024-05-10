@@ -447,60 +447,60 @@ void init_gui() EXPORT
     }
 
     init_input_map(gui.input.base, {
-        { FOCUS_NEXT, InputKey{ EDGE_DOWN, KC_TAB } },
-        { FOCUS_PREV, InputKey{ EDGE_DOWN, KC_TAB, MF_SHIFT } },
-        { FOCUS_CLEAR, InputKey{ EDGE_DOWN, KC_ESC } },
+        { FOCUS_NEXT,  IKEY(KC_TAB) },
+        { FOCUS_PREV,  IKEY(KC_TAB, MF_SHIFT) },
+        { FOCUS_CLEAR, IKEY(KC_ESC) },
     });
 
     init_input_map(gui.input.scrollarea, {
-        { SCROLL, InputMouse{ AXIS, MB_WHEEL } }
+        { SCROLL, IMOUSE(.type = AXIS, MB_WHEEL) },
     });
 
     init_input_map(gui.input.window, {
-        { WINDOW_CLOSE, InputKey{ EDGE_DOWN, KC_Q, MF_CTRL } },
-        { WINDOW_CLEAR, InputKey{ EDGE_DOWN, KC_ESC } },
+        { WINDOW_CLOSE, IKEY(KC_Q, MF_CTRL) },
+        { WINDOW_CLEAR, IKEY(KC_ESC) },
     });
 
     init_input_map(gui.input.editbox, {
-        { TEXT_INPUT,   InputText{} },
-        { CURSOR_LEFT,  InputKey{ EDGE_DOWN, KC_LEFT } },
-        { CURSOR_RIGHT, InputKey{ EDGE_DOWN, KC_RIGHT } },
-        { SELECT_ALL,   InputKey{ EDGE_DOWN, KC_A, MF_CTRL } },
-        { COPY,         InputKey{ EDGE_DOWN, KC_C, MF_CTRL } },
-        { PASTE,        InputKey{ EDGE_DOWN, KC_V, MF_CTRL } },
-        { DELETE,       InputKey{ EDGE_DOWN, KC_DELETE } },
-        { DELETE_BACK,  InputKey{ EDGE_DOWN, KC_BACKSPACE } },
-        { CONFIRM,      InputKey{ EDGE_DOWN, KC_ENTER } },
-        { CONFIRM_CONT, InputKey{ EDGE_DOWN, KC_TAB } },
-        { CANCEL,       InputKey{ EDGE_DOWN, KC_ESC } },
+        { TEXT_INPUT,   .text = {}},
+        { CURSOR_LEFT,  IKEY(KC_LEFT) },
+        { CURSOR_RIGHT, IKEY(KC_RIGHT) },
+        { SELECT_ALL,   IKEY(KC_A, MF_CTRL) },
+        { COPY,         IKEY(KC_C, MF_CTRL) },
+        { PASTE,        IKEY(KC_V, MF_CTRL) },
+        { DELETE,       IKEY(KC_DELETE) },
+        { DELETE_BACK,  IKEY(KC_BACKSPACE) },
+        { CONFIRM,      IKEY(KC_ENTER) },
+        { CONFIRM_CONT, IKEY(KC_TAB) },
+        { CANCEL,       IKEY(KC_ESC) },
     });
 
     init_input_map(gui.input.lister, {
-        { FORWARD, InputKey{ EDGE_DOWN, KC_DOWN  } },
-        { BACK,    InputKey{ EDGE_DOWN, KC_UP    } },
-        { CONFIRM, InputKey{ EDGE_DOWN, KC_ENTER } },
-        { CANCEL,  InputKey{ EDGE_DOWN, KC_ESC   } },
+        { FORWARD, IKEY(KC_DOWN ) },
+        { BACK,    IKEY(KC_UP   ) },
+        { CONFIRM, IKEY(KC_ENTER) },
+        { CANCEL,  IKEY(KC_ESC  ) },
     });
 
     init_input_map(gui.input.tree, {
-        { FOCUS_NEXT, InputKey{ EDGE_DOWN, KC_DOWN } },
-        { FOCUS_PREV, InputKey{ EDGE_DOWN, KC_UP } },
-        { ACTIVATE,   InputKey{ EDGE_DOWN, KC_RIGHT } },
-        { DEACTIVATE, InputKey{ EDGE_DOWN, KC_LEFT } },
-        { TOGGLE,     InputKey{ EDGE_DOWN, KC_SPACE } },
+        { FOCUS_NEXT, IKEY(KC_DOWN) },
+        { FOCUS_PREV, IKEY(KC_UP) },
+        { ACTIVATE,   IKEY(KC_RIGHT) },
+        { DEACTIVATE, IKEY(KC_LEFT) },
+        { TOGGLE,     IKEY(KC_SPACE) },
     });
 
     init_input_map(gui.input.checkbox, {
-        { TOGGLE, InputKey{ EDGE_DOWN, KC_SPACE } },
+        { TOGGLE, IKEY(KC_SPACE) },
     });
 
     init_input_map(gui.input.button, {
-        { CONFIRM, InputKey{ EDGE_DOWN, KC_ENTER } },
+        { CONFIRM, IKEY(KC_ENTER) },
     });
 
     init_input_map(gui.input.dropdown, {
-        { TOGGLE, InputKey{ EDGE_DOWN, KC_SPACE } },
-        { CANCEL, InputKey{ EDGE_DOWN, KC_ESC } },
+        { TOGGLE, IKEY(KC_SPACE) },
+        { CANCEL, IKEY(KC_ESC) },
     });
 }
 
