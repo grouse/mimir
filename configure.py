@@ -51,7 +51,7 @@ if host_os == "linux":
 
 
 ### default flags
-build.flags["c"].extend([ "-Wall", "-Wextra" ])
+build.flags["c"].extend([ "-Wall" ])
 build.flags["cxx"].extend([
     "-std=c++20",
 
@@ -64,6 +64,7 @@ build.flags["cxx"].extend([
     "-Wno-missing-field-initializers",
     "-Wno-non-c-typedef-for-linkage",
     "-Wno-unused-function",
+    "-Wno-initializer-overrides",
 ])
 
 if args.debug:
