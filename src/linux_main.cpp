@@ -10,7 +10,7 @@
 extern int app_main(Array<String> args);
 extern Allocator mem_frame;
 
-String exe_path;
+extern String exe_path;
 
 int main(int argc, char **argv)
 {
