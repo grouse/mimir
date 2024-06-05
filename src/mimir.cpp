@@ -1069,14 +1069,14 @@ int app_main(Array<String> args)
     debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
 
 
-    u64 last_time, current_time = wall_timestamp();
+    // u64 last_time, current_time = wall_timestamp();
     while (true) {
         RESET_ALLOC(mem_frame);
 
         gfx_begin_frame();
 
-        last_time = current_time;
-        current_time = wall_timestamp();
+        // last_time = current_time;
+        // current_time = wall_timestamp();
         //f32 dt = wall_duration_s(last_time, current_time);
 
         app_gather_input(app.wnd);

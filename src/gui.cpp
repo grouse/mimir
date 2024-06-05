@@ -1909,7 +1909,7 @@ GuiAction gui_2d_gizmo_translate_axis_id(
             action = GUI_BEGIN;
         } else if (gui.mouse.dx != 0 || gui.mouse.dy != 0) {
             action = GUI_CHANGE;
-            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Matrix3 ws_from_ss = mat3_inverse(ss_from_ws);
             Vector2 d = (ws_from_ss*Vector3{ .xy = (gui_mouse()- gui.drag_start_mouse) }).xy;
             *position = gui.drag_start_data[0] + dot(axis, d) * axis;
         }
@@ -1981,7 +1981,7 @@ GuiAction gui_2d_gizmo_size_axis_id(
         else if (gui.mouse.dx || gui.mouse.dy) {
             action = GUI_CHANGE;
 
-            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Matrix3 ws_from_ss = mat3_inverse(ss_from_ws);
             Vector2 delta = (ws_from_ss*Vector3{ .xy = axis*dot(mouse, axis) - axis*dot(gui.drag_start_mouse, axis) }).xy;
             delta.y = -delta.y;
             if (multiple) delta = round_to(delta, multiple);
@@ -2039,7 +2039,7 @@ GuiAction gui_2d_gizmo_translate_plane_id(
         if (!was_dragging) action = GUI_BEGIN;
         else if (gui.mouse.dx != 0 || gui.mouse.dy != 0) {
             action = GUI_CHANGE;
-            Matrix3 ws_from_ss = inverse(ss_from_ws);
+            Matrix3 ws_from_ss = mat3_inverse(ss_from_ws);
             Vector2 d = (ws_from_ss*Vector3{ .xy = mouse - gui.drag_start_mouse }).xy;
             *position = gui.drag_start_data[0] + d;
         }
@@ -2179,7 +2179,7 @@ GuiAction gui_2d_gizmo_size_square_id(
     }
 
     if (action == GUI_CHANGE) {
-        Matrix3 ws_from_ss = inverse(ss_from_ws);
+        Matrix3 ws_from_ss = mat3_inverse(ss_from_ws);
         Vector2 delta = (ws_from_ss*Vector3{ .xy = mouse - gui.drag_start_mouse }).xy;
         if (multiple) delta = round_to(delta, multiple);
 
