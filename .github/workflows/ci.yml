@@ -19,7 +19,7 @@ jobs:
     - name: install core dependencies
       run: |
         sudo apt update
-        sudo apt install ninja-build
+        sudo apt install ninja-build libxi-dev
         
     - name: install llvm/clang
       uses: KyleMayes/install-llvm-action@v2.0.3
