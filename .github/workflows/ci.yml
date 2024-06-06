@@ -19,7 +19,7 @@ jobs:
     - name: install dependencies
       run: |
         sudo apt update
-        sudo apt install ninja
+        sudo apt install ninja-build
     - name: configure
       run: ./configure.py --debug
     - name: compile
