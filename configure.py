@@ -13,7 +13,6 @@ parser.add_argument("-d", "--debug", action="store_true", help="compile with deb
 parser.add_argument("-r", "--render", choices=["opengl"], default="opengl", help="choose render backend")
 args = parser.parse_args();
 
-build_dir = os.path.join(sourcedir, args.out)
 host_os   = sys.platform
 target_os = host_os
 
@@ -131,10 +130,7 @@ define(mimir, ["STBI_NO_LINEAR", "STBI_NO_HDR"])
 
 if host_os == "win32": define(mimir, "_CRT_SECURE_NO_WARNINGS");
 
-include_path(mimir, "$root/src")
-include_path(mimir, "$builddir")
-include_path(mimir, "$root")
-include_path(mimir, "$root/external")
+include_path(mimir, ["$root/src", "$root", "$root/external", "$builddir"], public = True)
 
 cxx(mimir, "mimir.cpp")
 cxx(mimir, "assets.cpp")
