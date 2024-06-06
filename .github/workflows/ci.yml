@@ -19,7 +19,7 @@ jobs:
     - name: install dependencies
       run: |
         sudo apt update
-        sudo apt install ninja-build
+        sudo apt install ninja-build libclang-16-dev
     - name: configure
       run: ./configure.py --debug
     - name: compile
