@@ -28,6 +28,7 @@ jobs:
       run: |
         clang --version
         choco upgrade llvm
+         # $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' }) -join ';'
         clang --version
         
     - name: install core dependencies
