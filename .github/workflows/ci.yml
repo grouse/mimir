@@ -22,6 +22,13 @@ jobs:
 
     - name: install ninja-build
       uses: ashutoshvarma/setup-ninja@master
+
+    - name: fix broken clang
+      if: runner.os == 'Windows'
+      run: |
+        clang --version
+        choco upgrade llvm
+        clang --version
         
     - name: install core dependencies
       if: runner.os == 'Linux'
