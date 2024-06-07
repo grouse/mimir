@@ -15,14 +15,17 @@ jobs:
     runs-on: ${{matrix.os}}
     
     steps:
+    - name: runner info
+      run: echo "running on $RUNNER_OS"
     - name: checkout repo
       uses: actions/checkout@v4
       with:
         submodules: true
         
     - name: install core dependencies
-      if: runner.os == "ubuntu"
+      if: runner.os != 'Windows'
       run: |
+        echo "runner os: $RUNNER_OS"
         sudo apt update
         sudo apt install ninja-build libxi-dev libglx-dev
         
