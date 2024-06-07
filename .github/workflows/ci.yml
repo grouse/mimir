@@ -30,6 +30,12 @@ jobs:
         choco upgrade llvm
          # $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' }) -join ';'
         clang --version
+
+    - name: install llvm/clang
+      if: runner.os == 'Linux'
+      uses: KyleMayes/install-llvm-action@v2.0.3
+      with:
+        version: "16"
         
     - name: install core dependencies
       if: runner.os == 'Linux'
@@ -37,11 +43,6 @@ jobs:
         echo "runner os: $RUNNER_OS"
         sudo apt update
         sudo apt install libxi-dev libglx-dev
-        
-    - name: install llvm/clang
-      uses: KyleMayes/install-llvm-action@v2.0.3
-      with:
-        version: "16"
         
     - uses: actions/setup-python@v5
       with: 
