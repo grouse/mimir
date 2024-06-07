@@ -15,19 +15,20 @@ jobs:
     runs-on: ${{matrix.os}}
     
     steps:
-    - name: runner info
-      run: echo "running on $RUNNER_OS"
     - name: checkout repo
       uses: actions/checkout@v4
       with:
         submodules: true
+
+    - name: install ninja-build
+      uses: ashutoshvarma/setup-ninja@master
         
     - name: install core dependencies
-      if: runner.os != 'Windows'
+      if: runner.os == 'Linux'
       run: |
         echo "runner os: $RUNNER_OS"
         sudo apt update
-        sudo apt install ninja-build libxi-dev libglx-dev
+        sudo apt install libxi-dev libglx-dev
         
     - name: install llvm/clang
       uses: KyleMayes/install-llvm-action@v2.0.3
