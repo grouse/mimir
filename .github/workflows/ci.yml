@@ -8,15 +8,20 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os: [ "ubuntu-latest", "windows-latest" ]
 
-    runs-on: ubuntu-latest
-
+    runs-on: ${{matrix.os}}
+    
     steps:
     - name: checkout repo
       uses: actions/checkout@v4
       with:
         submodules: true
+        
     - name: install core dependencies
+      if: runner.os == "ubuntu"
       run: |
         sudo apt update
         sudo apt install ninja-build libxi-dev libglx-dev
@@ -28,5 +33,6 @@ jobs:
       
     - name: configure
       run: ./configure.py --debug
+      
     - name: compile
       run: ninja -C build
