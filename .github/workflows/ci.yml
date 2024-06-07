@@ -34,9 +34,13 @@ jobs:
       uses: KyleMayes/install-llvm-action@v2.0.3
       with:
         version: "16"
-      
+        
+    - uses: actions/setup-python@v5
+      with: 
+        python-version: '3.10' 
+        
     - name: configure
-      run: ./configure.py --debug
+      run: python ./configure.py --debug
       
     - name: compile
       run: ninja -C build
