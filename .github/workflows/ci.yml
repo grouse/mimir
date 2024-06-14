@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ "ubuntu-latest", "windows-latest" ]
+        os: [ "windows-latest", "ubuntu-latest" ]
 
     runs-on: ${{matrix.os}}
     
@@ -19,6 +19,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: true
+        lfs: true
 
     - name: install ninja-build
       uses: ashutoshvarma/setup-ninja@master
@@ -30,12 +31,6 @@ jobs:
         choco upgrade llvm
          # $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne 'C:\Program Files\LLVM\bin' }) -join ';'
         clang --version
-
-    - name: install llvm/clang
-      if: runner.os == 'Linux'
-      uses: KyleMayes/install-llvm-action@v2.0.3
-      with:
-        version: "16"
         
     - name: install core dependencies
       if: runner.os == 'Linux'
@@ -43,10 +38,6 @@ jobs:
         echo "runner os: $RUNNER_OS"
         sudo apt update
         sudo apt install libxi-dev libglx-dev
-        
-    - uses: actions/setup-python@v5
-      with: 
-        python-version: '3.10' 
         
     - name: configure
       run: python ./configure.py --debug
