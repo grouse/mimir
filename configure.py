@@ -135,11 +135,9 @@ include_path(mimir, ["$root/src", "$root", "$root/external", "$builddir"], publi
 cxx(mimir, "mimir.cpp")
 cxx(mimir, "assets.cpp")
 cxx(mimir, "font.cpp")
-cxx(mimir, "window.cpp")
 
 meta(mimir, "mimir.cpp")
 meta(mimir, "gui.cpp")
-meta(mimir, "window.cpp")
 meta(mimir, "font.cpp")
 meta(mimir, "assets.cpp")
 
@@ -150,9 +148,11 @@ cxx(mimir, "core/thread.cpp")
 cxx(mimir, "core/file.cpp")
 cxx(mimir, "core/maths.cpp")
 cxx(mimir, "core/process.cpp")
+cxx(mimir, "core/window.cpp")
 
 meta(mimir, "core/maths.cpp")
 meta(mimir, "core/string.cpp")
+meta(mimir, "core/window.cpp")
 
 if args.render == "opengl":
     define(mimir, "GFX_OPENGL")

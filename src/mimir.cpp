@@ -3,6 +3,7 @@
 #include "core/maths.h"
 #include "core/process.h"
 #include "core/memory.h"
+#include "gen/core/maths.h"
 #include "window.h"
 
 #include "gui.cpp"
@@ -3507,7 +3508,7 @@ next_node:;
                 }
             };
 
-            array_add(&gfx.frame_vertices, {
+            array_append(&gfx.frame_vertices, {
                 rect.br.x, rect.tl.y,
                 rect.tl.x, rect.tl.y,
                 rect.tl.x, rect.br.y,
@@ -3528,7 +3529,7 @@ next_node:;
 
     app.animating = text_input_enabled();
 
-    Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
+    Matrix3 view = mat3_orthographic(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
 
     gfx_flush_transfers();
     gfx_submit_commands(gfx.frame_cmdbuf, view);

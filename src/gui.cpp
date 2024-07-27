@@ -863,7 +863,7 @@ void gui_end_frame() EXPORT
 
 void gui_render() EXPORT
 {
-    Matrix3 view = orthographic3(0, gfx.resolution.x, gfx.resolution.y, 0);
+    Matrix3 view = mat3_orthographic(0, gfx.resolution.x, gfx.resolution.y, 0);
 
     gfx_submit_commands(gui.windows[GUI_BACKGROUND].command_buffer, view);
     for (auto &wnd : slice(gui.windows, 2)) gfx_submit_commands(wnd.command_buffer, view);
