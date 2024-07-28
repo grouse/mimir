@@ -1,8 +1,8 @@
 #define WIN32_OPENGL_IMPL
-#include "win32_opengl.h"
 #include "MurmurHash/MurmurHash3.cpp"
 
 #include "core/win32_core.h"
+#include "core/win32_opengl.h"
 
 #include "core/array.h"
 #include "core/memory.h"

@@ -6,9 +6,9 @@
 
 #if defined(_WIN32)
 #include "core/win32_lite.h"
-#include "win32_opengl.h"
+#include "core/win32_opengl.h"
 #elif defined(__linux__)
-#include "linux_opengl.h"
+#include "core/linux_opengl.h"
 #endif
 
 struct GfxProgram {
