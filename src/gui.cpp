@@ -3,7 +3,7 @@
 #include "gen/internal/gui.h"
 #include "gen/font.h"
 #include "gen/gfx_opengl.h"
-#include "gen/window.h"
+#include "gen/core/window.h"
 
 #include "core/core.h"
 #include "core/file.h"
