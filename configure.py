@@ -128,7 +128,7 @@ define(mimir, "EDITOR_INPUT_ID_START=0x300")
 define(mimir, "ASSETS_DIR=\"$root/assets\"")
 define(mimir, ["STBI_NO_LINEAR", "STBI_NO_HDR"])
 
-if host_os == "win32": define(mimir, "_CRT_SECURE_NO_WARNINGS");
+if host_os == "win32": define(mimir, "_CRT_SECURE_NO_WARNINGS", public=True);
 
 include_path(mimir, ["$root/src", "$root", "$root/external", "$builddir"], public = True)
 
@@ -168,7 +168,7 @@ if args.render == "opengl":
 
 if target_os == "win32":
     cxx(mimir, "win32_main.cpp")
-    cxx(mimir, "win32_opengl.cpp")
+    cxx(mimir, "core/win32_opengl.cpp")
 
     lib(mimir, "user32")
     lib(mimir, "shell32")
@@ -178,9 +178,14 @@ if target_os == "win32":
 
 if target_os == "linux":
     cxx(mimir, "linux_main.cpp")
-    cxx(mimir, "linux_opengl.cpp")
+    cxx(mimir, "core/linux_opengl.cpp")
 
     lib(mimir, "X11")
     lib(mimir, "Xi")
+
+test = build.test(mimir, "$root/src/core")
+include_path(test, "$root/src")
+cxx(test, "tests.cpp")
+meta(test, "tests.cpp", flags = [ "--tests" ])
 
 build.generate()
