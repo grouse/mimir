@@ -3,8 +3,7 @@
 #include "core/maths.h"
 #include "core/process.h"
 #include "core/memory.h"
-#include "gen/core/maths.h"
-#include "window.h"
+#include "core/window.h"
 
 #include "gui.cpp"
 #include "fzy.cpp"
@@ -256,7 +255,7 @@ struct RangeColor {
     bool operator<(const RangeColor &rhs) { return start < rhs.start; }
 };
 
-#include "gen/internal/mimir.h"
+#include "generated/internal/mimir.h"
 
 
 String string_from_enum(NewlineMode mode)

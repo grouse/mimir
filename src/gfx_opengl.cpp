@@ -1,5 +1,5 @@
 #include "gfx_opengl.h"
-#include "gen/gfx_opengl.h"
+#include "generated/gfx_opengl.h"
 
 #include "assets.h"
 

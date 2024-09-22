@@ -1,0 +1,5 @@
+#ifndef ASSETS_INTERNAL_H
+#define ASSETS_INTERNAL_H
+
+
+#endif // ASSETS_INTERNAL_H

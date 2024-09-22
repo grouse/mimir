@@ -4,7 +4,7 @@
 #include "core/maths.h"
 #include "core/array.h"
 #include "core/string.h"
-#include "window.h"
+#include "core/window.h"
 #include "assets.h"
 #include "font.h"
 #include "core/core.h"
@@ -366,7 +366,7 @@ struct GuiContext {
 
 extern GuiContext gui;
 
-#include "gen/gui.h"
+#include "generated/gui.h"
 
 inline LayoutRect split_col(SplitDesc desc)    { return split_col(gui_current_layout(), desc); }
 inline LayoutRect split_row(SplitDesc desc)    { return split_row(gui_current_layout(), desc); }

@@ -1,0 +1,5 @@
+#ifndef MATHS_INTERNAL_H
+#define MATHS_INTERNAL_H
+
+
+#endif // MATHS_INTERNAL_H

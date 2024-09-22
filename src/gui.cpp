@@ -1,16 +1,15 @@
 #include "gui.h"
-#include "gen/gui.h"
-#include "gen/internal/gui.h"
-#include "gen/font.h"
-#include "gen/gfx_opengl.h"
-#include "gen/core/window.h"
+#include "generated/gui.h"
+#include "generated/internal/gui.h"
+#include "font.h"
+#include "gfx_opengl.h"
+#include "assets.h"
 
 #include "core/core.h"
 #include "core/file.h"
-#include "assets.h"
 #include "core/array.h"
 #include "core/memory.h"
-#include "window.h"
+#include "core/window.h"
 #include "core/maths.h"
 
 #define GUI_DEBUG_HOT 0

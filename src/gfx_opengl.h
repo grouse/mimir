@@ -153,7 +153,7 @@ struct Camera3 {
     f32 uni_scale = 1.0f;
 };
 
-#include "gen/gfx_opengl.h"
+#include "generated/gfx_opengl.h"
 
 
 void gfx_push_command(GfxCommand cmd, GfxCommandBuffer *cmdbuf = &gfx.frame_cmdbuf);

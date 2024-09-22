@@ -60,4 +60,6 @@ FontAtlas create_font(String path, f32 pixel_height, bool mono_space = false);
 f32 glyph_advance(FontAtlas *font, u32 codepoint);
 GlyphRect get_glyph_rect(FontAtlas *font, u32 codepoint, Vector2 *pen);
 
+#include "generated/font.h"
+
 #endif // FONT_H

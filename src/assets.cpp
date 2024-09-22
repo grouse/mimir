@@ -1,12 +1,13 @@
 #include "assets.h"
 #include "core/file.h"
 #include "gfx_opengl.h"
-#include "core/hash_table.h"
+#include "core/string.h"
 
-#include "stb/stb_image.h"
+#include "core/hash_table.h"
 #include "core/core.h"
 
-#include "gen/core/string.h"
+#include <stb/stb_image.h>
+
 
 i32 next_asset_type_id = 0;
 
