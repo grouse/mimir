@@ -1,0 +1,13 @@
+# TODO
+- [ ] lsp integration
+- [ ] command palette 
+- [ ] build/task/command runner
+- [ ] vscode tasks.json support
+- [ ] vscode worksapce support
+- [ ] visual studio .sln support
+- [ ] project search
+- [ ] buffer search-replace
+- [ ] project search-replace
+- [ ] navigation/jump history
+- [ ] serialise edit history
+- [ ] serialise navigation/jump history
