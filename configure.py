@@ -70,57 +70,92 @@ if args.debug:
     build.flags["c"].append("-g")
     build.flags["link"].append("-g")
 
+ext_optimised_flags = { "c" : [ "-O2", "-Wno-everything" ] }
+
 ### tree-sitter
 tree_sitter_modules = []
 
-tree_sitter = build.library("tree-sitter", "$root/external/tree-sitter-0.20.8", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+
+tree_sitter = build.library("tree-sitter", "$root/external/tree-sitter-0.20.8", flags = ext_optimised_flags)
 include_path(tree_sitter, "lib/include", public = True)
 cc(tree_sitter, "lib/src/lib.c")
 tree_sitter_modules.append(tree_sitter)
 
 ## tree-sitter-cpp
-tree_sitter_cpp = build.library("tree-sitter-cpp", "$root/external/tree-sitter-cpp-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_cpp = build.library("tree-sitter-cpp", "$root/external/tree-sitter-cpp-master", ext_optimised_flags)
 dep(tree_sitter_cpp, tree_sitter)
 cc(tree_sitter_cpp, "src/parser.c")
 cxx(tree_sitter_cpp, "src/scanner.cc")
 tree_sitter_modules.append(tree_sitter_cpp)
 
 ## tree-sitter-rust
-tree_sitter_rust = build.library("tree-sitter-rust", "$root/external/tree-sitter-rust-0.20.1", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_rust = build.library("tree-sitter-rust", "$root/external/tree-sitter-rust-0.20.1", ext_optimised_flags)
 dep(tree_sitter_rust, tree_sitter)
 cc(tree_sitter_rust, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_rust)
 
 ## tree-sitter-bash
-tree_sitter_bash = build.library("tree-sitter-bash", "$root/external/tree-sitter-bash-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_bash = build.library("tree-sitter-bash", "$root/external/tree-sitter-bash-master", ext_optimised_flags)
 dep(tree_sitter_bash, tree_sitter)
 cc(tree_sitter_bash, "src/parser.c")
 cxx(tree_sitter_bash, "src/scanner.cc")
 tree_sitter_modules.append(tree_sitter_bash)
 
 ## tree-sitter-csharp
-tree_sitter_csharp = build.library("tree-sitter-csharp", "$root/external/tree-sitter-c-sharp-0.19.1", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_csharp = build.library("tree-sitter-csharp", "$root/external/tree-sitter-c-sharp-0.19.1", ext_optimised_flags)
 dep(tree_sitter_csharp, tree_sitter)
 cc(tree_sitter_csharp, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_csharp)
 
 ## tree-sitter-lua
-tree_sitter_lua = build.library("tree-sitter-lua", "$root/external/tree-sitter-lua-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_lua = build.library("tree-sitter-lua", "$root/external/tree-sitter-lua-master", ext_optimised_flags)
 dep(tree_sitter_lua, tree_sitter)
 cc(tree_sitter_lua, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_lua)
 
 ## tree-sitter-comment
-tree_sitter_comment = build.library("tree-sitter-comment", "$root/external/tree-sitter-comment-master", flags = { "c" : [ "-O2", "-Wno-everything" ] })
+tree_sitter_comment = build.library("tree-sitter-comment", "$root/external/tree-sitter-comment-master", ext_optimised_flags)
 include_path(tree_sitter_comment, "src")
 dep(tree_sitter_comment, tree_sitter)
 cc(tree_sitter_comment, ["src/parser.c", "src/scanner.c"])
 tree_sitter_modules.append(tree_sitter_comment)
 
+### mjson
+mjson = build.library("mjson", "$root/external/mjson", ext_optimised_flags)
+include_path(mjson, "src", public=True)
+cc(mjson, [ "src/mjson.c" ])
+
+### core
+core = build.library("core", "$root/src/core")
+include_path(core, ["$root", "$root/external"])
+if host_os == "win32": define(core, "_CRT_SECURE_NO_WARNINGS");
+
+meta(core, "lexer.cpp")
+meta(core, "ini.cpp")
+meta(core, "maths.cpp")
+meta(core, "string.cpp")
+meta(core, "window.cpp")
+meta(core, "thread.cpp")
+meta(core, "process.cpp")
+meta(core, "core.cpp")
+meta(core, "file.cpp")
+
+cxx(core, "core.cpp")
+cxx(core, "memory.cpp")
+cxx(core, "string.cpp")
+cxx(core, "thread.cpp")
+cxx(core, "file.cpp")
+cxx(core, "ini.cpp")
+cxx(core, "lexer.cpp")
+cxx(core, "window.cpp")
+cxx(core, "maths.cpp")
+cxx(core, "process.cpp")
+
 
 ### mimir
 mimir = build.executable("mimir", "$root/src")
 dep(mimir, tree_sitter_modules)
+dep(mimir, [ core, mjson ])
 
 define(mimir, "APP_INPUT_ID_START=0x100")
 define(mimir, "GUI_INPUT_ID_START=0x200")
@@ -141,30 +176,22 @@ meta(mimir, "gui.cpp")
 meta(mimir, "font.cpp")
 meta(mimir, "assets.cpp")
 
-cxx(mimir, "core/core.cpp")
-cxx(mimir, "core/memory.cpp")
-cxx(mimir, "core/string.cpp")
-cxx(mimir, "core/thread.cpp")
-cxx(mimir, "core/file.cpp")
-cxx(mimir, "core/maths.cpp")
-cxx(mimir, "core/process.cpp")
-cxx(mimir, "core/window.cpp")
-
-meta(mimir, "core/maths.cpp")
-meta(mimir, "core/string.cpp")
-meta(mimir, "core/window.cpp")
-
 if args.render == "opengl":
-    define(mimir, "GFX_OPENGL")
+    gl_defines = define(mimir, "GFX_OPENGL")
 
     meta(mimir, "gfx_opengl.cpp")
     cxx(mimir, "gfx_opengl.cpp")
 
+    gl_libs = []
     if target_os == "win32":
-        lib(mimir, "opengl32")
+        gl_libs.extend(lib(mimir, "opengl32"))
 
     if target_os == "linux":
-        lib(mimir, "GLX")
+        gl_libs.extend(lib(mimir, "GLX"))
+
+    define(core, gl_defines)
+    lib(core, gl_libs)
+
 
 if target_os == "win32":
     cxx(mimir, "win32_main.cpp")
@@ -188,4 +215,5 @@ include_path(test, "$root/src")
 cxx(test, "tests.cpp")
 meta(test, "tests.cpp", flags = [ "--tests" ])
 
+build.default = mimir;
 build.generate()
