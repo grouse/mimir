@@ -4,3 +4,9 @@
 [submodule "src/core"]
 	path = src/core
 	url = https://github.com/grouse/grs
+[submodule "external/mjson"]
+	path = external/mjson
+	url = https://github.com/cesanta/mjson
+[submodule "external/subprocess"]
+	path = external/subprocess
+	url = https://github.com/sheredom/subprocess.h
