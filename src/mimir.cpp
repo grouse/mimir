@@ -842,6 +842,15 @@ BufferId create_buffer(String file)
         ts_parse_buffer(&b);
     }
 
+    switch (b.language) {
+    case LANGUAGE_CPP:
+        lsp_did_open(app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
+        break;
+    default:
+        LOG_INFO("unsupported lsp for file type: %d", b.language);
+        break;
+    }
+
     String newline_str = string_from_enum(b.newline_mode);
     LOG_INFO("created buffer: %.*s, newline mode: %.*s", STRFMT(file), STRFMT(newline_str));
 
@@ -924,14 +933,37 @@ struct LspInitializeResult {
     } server_info;
 };
 
+struct LspTextDocumentItem {
+    String uri;
+    String languageId;
+    i32 version;
+    String text;
+};
+
+struct LspDidOpen {
+    LspTextDocumentItem textDocument;
+};
+
+void jsonrpc_send(subprocess_s process, const char *data, i32 length)
+{
+    FILE *p_stdin = subprocess_stdin(&process);
+
+    i32 rem = length;
+    while (rem > 0) {
+        i32 count = fwrite(data+(length-rem), 1, rem, p_stdin);
+        if (count == 0) break;
+        rem -= count;
+    }
+
+    fflush(p_stdin);
+}
+
 i32 jsonrpc_request(subprocess_s process, String method, String params = "")
 {
     static i32 next_id = 1;
     i32 id = next_id++;
 
     SArena scratch = tl_scratch_arena();
-
-    FILE *p_stdin = subprocess_stdin(&process);
 
     String content = stringf(
         scratch,
@@ -942,12 +974,7 @@ i32 jsonrpc_request(subprocess_s process, String method, String params = "")
     LOG_INFO("--> %.*s", STRFMT(content));
 
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
-    if (int result = fputs(sz_string(message, scratch), p_stdin); result != 0) {
-        LOG_ERROR("error sending");
-        return -1;
-    }
-    fflush(p_stdin);
-
+    jsonrpc_send(process, message.data, message.length);
     return id;
 }
 
@@ -955,16 +982,25 @@ void jsonrpc_notify(subprocess_s process, String method)
 {
     SArena scratch = tl_scratch_arena();
 
-    FILE *p_stdin = subprocess_stdin(&process);
-
     String content = stringf(scratch, "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\" }", STRFMT(method));
     LOG_INFO("--> %.*s", STRFMT(content));
 
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
-    if (int result = fputs(sz_string(message, scratch), p_stdin); result != 0) {
-        LOG_ERROR("error sending");
-    }
-    fflush(p_stdin);
+    jsonrpc_send(process, message.data, message.length);
+}
+
+void jsonrpc_notify(subprocess_s process, String method, String params)
+{
+    SArena scratch = tl_scratch_arena();
+
+    String content = stringf(
+        scratch,
+        "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\", \"params\": { %.*s }}",
+        STRFMT(method), STRFMT(params));
+    LOG_INFO("--> %.*s", STRFMT(content));
+
+    String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
+    jsonrpc_send(process, message.data, message.length);
 }
 
 String jsonrpc_response(subprocess_s process, i32 request, Allocator mem)
@@ -987,17 +1023,48 @@ String jsonrpc_response(subprocess_s process, i32 request, Allocator mem)
 
 void json_append(StringBuilder *sb, String key, i32 value)
 {
-    append_stringf(sb, "\"%.*s\": %d,", STRFMT(key), value);
+    append_stringf(sb, "\"%.*s\": %d", STRFMT(key), value);
 }
 
 void json_append(StringBuilder *sb, String key, f32 value)
 {
-    append_stringf(sb, "\"%.*s\": %f,", STRFMT(key), value);
+    append_stringf(sb, "\"%.*s\": %f", STRFMT(key), value);
 }
 
 void json_append(StringBuilder *sb, String key, String value)
 {
-    append_stringf(sb, "\"%.*s\": \"%.*s\",", STRFMT(key), STRFMT(value));
+    append_stringf(sb, "\"%.*s\": \"", STRFMT(key));
+
+    i32 last_write = 0;
+    for (i32 i = 0; i < value.length; i++) {
+        if (value[i] == '"') {
+            append_string(sb, slice(value, last_write, i));
+            append_string(sb, "\\\"");
+            last_write = i+1;
+        } else if (value[i] == '\n') {
+            append_string(sb, slice(value, last_write, i));
+            append_string(sb, "\\n");
+            last_write = i+1;
+        } else if (value[i] == '\r') {
+            append_string(sb, slice(value, last_write, i));
+            append_string(sb, "\\r");
+            last_write = i+1;
+        } else if (value[i] == '\t') {
+            append_string(sb, slice(value, last_write, i));
+            append_string(sb, "\\t");
+            last_write = i+1;
+        } else if (value[i] == '\\') {
+            append_string(sb, slice(value, last_write, i));
+            append_string(sb, "\\\\");
+            last_write = i+1;
+        }
+    }
+
+    if (String rem = slice(value, last_write, value.length); rem.length > 0) {
+        append_string(sb, rem);
+    }
+
+    append_string(sb, "\"");
 }
 
 void json_append(StringBuilder *sb, String key, const char** values)
@@ -1026,6 +1093,19 @@ void json_append(StringBuilder *sb, String key, LspClientCapabilities value)
     append_string(sb, "}");
 }
 
+void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
+{
+    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    json_append(sb, "uri", value.uri);
+    append_string(sb, ",");
+    json_append(sb, "languageId", value.languageId);
+    append_string(sb, ",");
+    json_append(sb, "version", value.version);
+    append_string(sb, ",");
+    json_append(sb, "text", value.text);
+    append_string(sb, "}");
+}
+
 LspInitializeResult lsp_initialize(
     subprocess_s process,
     String root,
@@ -1038,7 +1118,9 @@ LspInitializeResult lsp_initialize(
 
     StringBuilder params{ .alloc = scratch };
     json_append(&params, "processId", process_id);
+    append_string(&params, ",");
     json_append(&params, "rootUri", uri_from_path(root, scratch));
+    append_string(&params, ",");
     json_append(&params, "capabilities", capabilities);
 
     i32 request = jsonrpc_request(process, "initialize", create_string(&params, scratch));
@@ -1086,6 +1168,24 @@ LspInitializeResult lsp_initialize(
 void lsp_initialized(subprocess_s process)
 {
     jsonrpc_notify(process, "initialized");
+}
+
+void lsp_did_open(subprocess_s process, String path, String language_id, String content) INTERNAL
+{
+    SArena scratch = tl_scratch_arena();
+
+    LspTextDocumentItem document{
+        .uri = uri_from_path(path, scratch),
+        .languageId = language_id,
+        .version = 0,
+        .text = content,
+    };
+
+    StringBuilder params{ .alloc = scratch };
+    json_append(&params, "textDocument", document);
+    String sparams = create_string(&params, scratch);
+
+    jsonrpc_notify(process, "textDocument/didOpen", sparams);
 }
 
 int app_main(Array<String> args)
@@ -1226,38 +1326,6 @@ int app_main(Array<String> args)
     }
     app.current_view->id = 0;
 
-    if (args.count > 0) {
-	    bool is_dir = is_directory(args[0]);
-	    String dir = is_dir ? args[0] : directory_of(args[0]);
-		set_working_dir(dir);
-
-		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
-    }
-
-    {
-        SArena scratch = tl_scratch_arena();
-        Array<String> files = list_files(get_working_dir(scratch), scratch);
-        for (String s : files) {
-#ifdef _WIN32
-            if (extension_of(s) == ".bat") {
-                String full = absolute_path(s, mem_dynamic);
-                array_add(&app.process_command_names, filename_of(full));
-                array_add(&app.process_commands, { .exe = full });
-            }
-#endif
-
-#ifdef __linux__
-            if (extension_of(s) == ".sh") {
-                String full = absolute_path(s, mem_dynamic);
-                array_add(&app.process_command_names, filename_of(full));
-                array_add(&app.process_commands, { .exe = full });
-            }
-#endif
-        }
-    }
-
-    debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
-
     jsonrpc_init(nullptr, nullptr);
 
     const char *cmdline[] = { "clangd.exe", "--log=verbose", NULL };
@@ -1303,6 +1371,7 @@ int app_main(Array<String> args)
 
                             i32 lbracket = find_first(msg, '[');
                             i32 rbracket = find_first(msg, ']');
+                            if (lbracket == 0) type = 'I';
 
                             String timestamp{};
                             if (lbracket != -1 && rbracket != -1)
@@ -1311,15 +1380,12 @@ int app_main(Array<String> args)
                             msg = slice(msg, rbracket != -1 ? rbracket+1 : 0);
 
                             switch (type) {
-                            case 'I':
-                            case 'V':
-                                LOG_INFO("[clangd]:%.*s", STRFMT(msg));
-                                break;
                             case 'E':
                                 LOG_ERROR("[clangd]:%.*s", STRFMT(msg));
                                 break;
+                            case 'I':
+                            case 'V':
                             default:
-                                LOG_ERROR("unknown clangd message type: '%c'", type);
                                 LOG_INFO("[clangd]:%.*s", STRFMT(msg));
                                 break;
                             }
@@ -1329,25 +1395,56 @@ int app_main(Array<String> args)
                     if (bytes-start > 0) append_string(&line, String{ buffer+start, bytes-start });
                 }
             }
+
+            return 0;
         });
 
         LspClientCapabilities caps{};
         static const char *encodings[] = { "utf-8", nullptr };
         caps.general.positionEncodings = encodings;
 
-        LspInitializeResult init_result = lsp_initialize(app.lsp.clangd, "D:/projects/mimir", scratch, caps);
+        lsp_initialize(app.lsp.clangd, "D:/projects/mimir", scratch, caps);
         lsp_initialized(app.lsp.clangd);
     }
 
-    // u64 last_time, current_time = wall_timestamp();
+
+
+    if (args.count > 0) {
+	    bool is_dir = is_directory(args[0]);
+	    String dir = is_dir ? args[0] : directory_of(args[0]);
+		set_working_dir(dir);
+
+		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
+    }
+
+    {
+        SArena scratch = tl_scratch_arena();
+        Array<String> files = list_files(get_working_dir(scratch), scratch);
+        for (String s : files) {
+#ifdef _WIN32
+            if (extension_of(s) == ".bat") {
+                String full = absolute_path(s, mem_dynamic);
+                array_add(&app.process_command_names, filename_of(full));
+                array_add(&app.process_commands, { .exe = full });
+            }
+#endif
+
+#ifdef __linux__
+            if (extension_of(s) == ".sh") {
+                String full = absolute_path(s, mem_dynamic);
+                array_add(&app.process_command_names, filename_of(full));
+                array_add(&app.process_commands, { .exe = full });
+            }
+#endif
+        }
+    }
+
+    debug.buffer_history.wnd = gui_create_window({ "history", .position = { 0, 40 }, .size = { 300, 200 } });
+
     while (true) {
         RESET_ALLOC(mem_frame);
 
         gfx_begin_frame();
-
-        // last_time = current_time;
-        // current_time = wall_timestamp();
-        //f32 dt = wall_duration_s(last_time, current_time);
 
         app_gather_input(app.wnd);
         update_and_render();
