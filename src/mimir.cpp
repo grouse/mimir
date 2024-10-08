@@ -20,6 +20,9 @@ extern "C" const TSLanguage* tree_sitter_comment();
 #include "external/subprocess/subprocess.h"
 #include "external/mjson/src/mjson.h"
 
+#include <mutex>
+#include <condition_variable>
+
 #define DEBUG_LINE_WRAP_RECALC 0
 #define DEBUG_TREE_SITTER_SYNTAX_TREE 0
 #define DEBUG_TREE_SITTER_COLORS 0
@@ -198,6 +201,45 @@ struct View {
     };
 };
 
+struct JsonRpcResponse {
+    i32 id;
+    String message;
+};
+
+struct LspConnection {
+    subprocess_s process;
+
+    std::mutex              response_m;
+    std::condition_variable response_cv;
+    DynamicArray<JsonRpcResponse> responses;
+};
+
+struct LspClientCapabilities {
+    struct General {
+        const char** positionEncodings;
+    } general;
+};
+
+struct LspServerCapabilities {
+    String positionEncoding;
+};
+
+struct LspInitializeResult {
+    LspServerCapabilities capabilities;
+    struct {
+        String name;
+        String version;
+    } server_info;
+};
+
+struct LspTextDocumentItem {
+    String uri;
+    String languageId;
+    i32 version;
+    String text;
+};
+
+
 struct Application {
     AppWindow *wnd;
     FontAtlas mono;
@@ -232,7 +274,7 @@ struct Application {
     } input;
 
     struct {
-        subprocess_s clangd;
+        LspConnection clangd;
     } lsp;
 
     EditMode mode, next_mode;
@@ -844,7 +886,7 @@ BufferId create_buffer(String file)
 
     switch (b.language) {
     case LANGUAGE_CPP:
-        lsp_did_open(app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
+        lsp_did_open(&app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
         break;
     default:
         LOG_INFO("unsupported lsp for file type: %d", b.language);
@@ -915,35 +957,6 @@ void view_set_buffer(View *view, BufferId buffer)
     view->lines_dirty = true;
 }
 
-struct LspClientCapabilities {
-    struct General {
-        const char** positionEncodings;
-    } general;
-};
-
-struct LspServerCapabilities {
-    String positionEncoding;
-};
-
-struct LspInitializeResult {
-    LspServerCapabilities capabilities;
-    struct {
-        String name;
-        String version;
-    } server_info;
-};
-
-struct LspTextDocumentItem {
-    String uri;
-    String languageId;
-    i32 version;
-    String text;
-};
-
-struct LspDidOpen {
-    LspTextDocumentItem textDocument;
-};
-
 void jsonrpc_send(subprocess_s process, const char *data, i32 length)
 {
     FILE *p_stdin = subprocess_stdin(&process);
@@ -958,6 +971,62 @@ void jsonrpc_send(subprocess_s process, const char *data, i32 length)
     fflush(p_stdin);
 }
 
+int jsonrpc_response(const char *buf, int len, void *fn_data)
+{
+    LspConnection *lsp = &app.lsp.clangd;
+    if (!lsp) return 0;
+
+    i32 id = -1;
+    if (double val; mjson_get_number(buf, len, "$.id", &val)) {
+        id = (i32)val;
+    } else {
+        LOG_ERROR("[jsonrpc] invalid id in response: %.*s", len, buf);
+        return 0;
+    }
+
+    LOG_INFO("[jsonrpc] received response(%d), storing...", id);
+    String response = string(buf, len, mem_dynamic);
+    {
+        std::lock_guard lk(lsp->response_m);
+        array_add(&lsp->responses, { id, response });
+    }
+    LOG_INFO("[jsonrpc] received response(%d), notifying...", id);
+    lsp->response_cv.notify_all();
+    return 1;
+}
+
+int jsonrpc_sender(const char *buf, int len, void *fn_data)
+{
+    LOG_INFO("[jsonrpc] --> %.*s", len, buf);
+    return len;
+}
+
+
+
+String jsonrpc_content(Allocator mem, i32 id, String method, String params = "")
+{
+    if (params.length) {
+        return stringf(
+            mem,
+            "{ \"jsonrpc\": \"2.0\", \"id\": %d, \"method\": \"%.*s\", \"params\": { %.*s } }",
+            id, STRFMT(method), STRFMT(params));
+    }
+
+    return stringf(mem, "{ \"jsonrpc\": \"2.0\", \"id\": %d, \"method\": \"%.*s\" }", id, STRFMT(method));
+}
+
+String jsonrpc_content(Allocator mem, String method, String params = "")
+{
+    if (params.length) {
+        return stringf(
+            mem,
+            "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\", \"params\": { %.*s } }",
+            STRFMT(method), STRFMT(params));
+    }
+
+    return stringf(mem, "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\" }", STRFMT(method));
+}
+
 i32 jsonrpc_request(subprocess_s process, String method, String params = "")
 {
     static i32 next_id = 1;
@@ -965,15 +1034,12 @@ i32 jsonrpc_request(subprocess_s process, String method, String params = "")
 
     SArena scratch = tl_scratch_arena();
 
-    String content = stringf(
-        scratch,
-        "{ \"jsonrpc\": \"2.0\", \"id\": %d, \"method\": \"%.*s\", \"params\": { %.*s } }",
-        id,
-        STRFMT(method),
-        STRFMT(params));
-    LOG_INFO("--> %.*s", STRFMT(content));
-
+    String content = jsonrpc_content(scratch, id, method, params);
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
+
+    if (params.length) LOG_INFO("[jsonrpc] --> %.*s(%d): %.*s", STRFMT(method), id, STRFMT(params));
+    else LOG_INFO("[jsonrpc] --> %.*s(%d)", STRFMT(method), id);
+
     jsonrpc_send(process, message.data, message.length);
     return id;
 }
@@ -982,10 +1048,10 @@ void jsonrpc_notify(subprocess_s process, String method)
 {
     SArena scratch = tl_scratch_arena();
 
-    String content = stringf(scratch, "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\" }", STRFMT(method));
-    LOG_INFO("--> %.*s", STRFMT(content));
-
+    String content = jsonrpc_content(scratch, method);
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
+
+    LOG_INFO("[jsonrpc] --> %.*s", STRFMT(method));
     jsonrpc_send(process, message.data, message.length);
 }
 
@@ -993,32 +1059,50 @@ void jsonrpc_notify(subprocess_s process, String method, String params)
 {
     SArena scratch = tl_scratch_arena();
 
-    String content = stringf(
-        scratch,
-        "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\", \"params\": { %.*s }}",
-        STRFMT(method), STRFMT(params));
-    LOG_INFO("--> %.*s", STRFMT(content));
-
+    String content = jsonrpc_content(scratch, method, params);
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
+
+    LOG_INFO("[jsonrpc] --> %.*s(%.*s)", STRFMT(method), STRFMT(params));
+    jsonrpc_send(process, message.data, message.length);
+}
+
+void jsonrpc_cancel_request(subprocess_s process, i32 request)
+{
+    SArena scratch = tl_scratch_arena();
+
+    String content = jsonrpc_content(scratch, request, "cancelRequest");
+    String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
+
+    LOG_INFO("[jsonrpc] --> cancelRequest(%d)", request);
     jsonrpc_send(process, message.data, message.length);
 }
 
 String jsonrpc_response(subprocess_s process, i32 request, Allocator mem)
 {
-    FILE *p_stdout = subprocess_stdout(&process);
+    LspConnection *lsp = &app.lsp.clangd;
 
-    String response;
-    if (int result = fscanf(p_stdout, "Content-Length: %d\r\n", &response.length);
-        result == 0 || result == EOF)
-    {
-        LOG_ERROR("invalid data on stdout");
-        return {};
+    LOG_INFO("[jsonrpc] waiting for response(%d)...", request);
+
+    std::unique_lock lk(lsp->response_m);
+    app.lsp.clangd.response_cv.wait(lk, [lsp, request]{
+        for (auto &it : lsp->responses)
+            if (it.id == request) return true;
+        return false;
+    });
+
+    for (auto it : iterator(lsp->responses)) {
+        if (it->id == request) {
+            LOG_INFO("[jsonrpc] received response(%d)!", request);
+
+            String ret = duplicate_string(it->message, mem);
+            FREE(mem_dynamic, it->message.data);
+            array_remove_unsorted(&lsp->responses, it.index);
+            return ret;
+        }
     }
-    response.data = ALLOC_ARR(mem, char, response.length);
-    fgets(response.data, response.length, p_stdout);
 
-    LOG_INFO("<-- %.*s", STRFMT(response));
-    return response;
+    LOG_ERROR("[jsonrpc] signal received, but could not find response(%d)", request);
+    return {};
 }
 
 void json_append(StringBuilder *sb, String key, i32 value)
@@ -1107,7 +1191,7 @@ void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
 }
 
 LspInitializeResult lsp_initialize(
-    subprocess_s process,
+    LspConnection *lsp,
     String root,
     Allocator mem,
     LspClientCapabilities capabilities = {})
@@ -1123,8 +1207,8 @@ LspInitializeResult lsp_initialize(
     append_string(&params, ",");
     json_append(&params, "capabilities", capabilities);
 
-    i32 request = jsonrpc_request(process, "initialize", create_string(&params, scratch));
-    String response = jsonrpc_response(process, request, scratch);
+    i32 request = jsonrpc_request(lsp->process, "initialize", create_string(&params, scratch));
+    String response = jsonrpc_response(lsp->process, request, scratch);
     if (!response.length) {
         LOG_ERROR("invalid response for initialize");
         return {};
@@ -1165,12 +1249,12 @@ LspInitializeResult lsp_initialize(
     return result;
 }
 
-void lsp_initialized(subprocess_s process)
+void lsp_initialized(LspConnection *lsp)
 {
-    jsonrpc_notify(process, "initialized");
+    jsonrpc_notify(lsp->process, "initialized");
 }
 
-void lsp_did_open(subprocess_s process, String path, String language_id, String content) INTERNAL
+void lsp_did_open(LspConnection *lsp, String path, String language_id, String content) INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
@@ -1185,7 +1269,7 @@ void lsp_did_open(subprocess_s process, String path, String language_id, String 
     json_append(&params, "textDocument", document);
     String sparams = create_string(&params, scratch);
 
-    jsonrpc_notify(process, "textDocument/didOpen", sparams);
+    jsonrpc_notify(lsp->process, "textDocument/didOpen", sparams);
 }
 
 int app_main(Array<String> args)
@@ -1326,7 +1410,10 @@ int app_main(Array<String> args)
     }
     app.current_view->id = 0;
 
-    jsonrpc_init(nullptr, nullptr);
+    jsonrpc_init(jsonrpc_response, &app.lsp.clangd);
+    jsonrpc_export("textDocument/publishDiagnostics", [](struct jsonrpc_request *req) {
+        LOG_INFO("publishDiagnostics");
+    });
 
     const char *cmdline[] = { "clangd.exe", "--log=verbose", NULL };
     int flags =
@@ -1335,16 +1422,42 @@ int app_main(Array<String> args)
         subprocess_option_no_window |
         0;
 
-    if (subprocess_create(cmdline, flags, &app.lsp.clangd) == 0) {
+    if (subprocess_create(cmdline, flags, &app.lsp.clangd.process) == 0) {
         SArena scratch = tl_scratch_arena();
+
+        create_thread([](void*) -> int {
+            SArena mem = tl_scratch_arena();
+            FILE *p_stdout = subprocess_stdout(&app.lsp.clangd.process);
+
+            while (true) {
+                String response;
+                if (int result = fscanf(p_stdout, "Content-Length: %d\r\n", &response.length);
+                    result == 0 || result == EOF)
+                {
+                    char buffer[64];
+                    fgets(buffer, sizeof buffer, p_stdout);
+                    LOG_ERROR("invalid data on stdout: %s", buffer);
+                    return 1;
+                }
+
+                response.length += 1;
+                response.data = ALLOC_ARR(mem_dynamic, char, response.length);
+                fgets(response.data, response.length, p_stdout);
+
+                jsonrpc_process(response.data, response.length, jsonrpc_sender, nullptr, nullptr);
+            }
+
+            return 0;
+        });
+
 
         create_thread([](void*) -> int {
             SArena mem = tl_scratch_arena();
             StringBuilder line{ .alloc = mem };
 
-            char buffer[5];
+            char buffer[128];
             while (true) {
-                if (int bytes = subprocess_read_stderr(&app.lsp.clangd, buffer, sizeof buffer)) {
+                if (int bytes = subprocess_read_stderr(&app.lsp.clangd.process, buffer, sizeof buffer)) {
                     i32 start = 0;
                     while (start < bytes) {
                         i32 offset = start, newline = -1;
@@ -1403,18 +1516,18 @@ int app_main(Array<String> args)
         static const char *encodings[] = { "utf-8", nullptr };
         caps.general.positionEncodings = encodings;
 
-        lsp_initialize(app.lsp.clangd, "D:/projects/mimir", scratch, caps);
-        lsp_initialized(app.lsp.clangd);
+        lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
+        lsp_initialized(&app.lsp.clangd);
     }
 
 
 
     if (args.count > 0) {
-	    bool is_dir = is_directory(args[0]);
-	    String dir = is_dir ? args[0] : directory_of(args[0]);
-		set_working_dir(dir);
+        bool is_dir = is_directory(args[0]);
+        String dir = is_dir ? args[0] : directory_of(args[0]);
+        set_working_dir(dir);
 
-		if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
+        if (!is_dir) view_set_buffer(app.current_view, create_buffer(args[0]));
     }
 
     {
