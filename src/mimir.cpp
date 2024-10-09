@@ -206,7 +206,8 @@ struct JsonRpcResponse {
     String message;
 };
 
-struct LspConnection {
+struct JsonRpcConnection {
+    jsonrpc_ctx  ctx;
     subprocess_s process;
 
     std::mutex              response_m;
@@ -274,7 +275,7 @@ struct Application {
     } input;
 
     struct {
-        LspConnection clangd;
+        JsonRpcConnection clangd;
     } lsp;
 
     EditMode mode, next_mode;
@@ -957,9 +958,9 @@ void view_set_buffer(View *view, BufferId buffer)
     view->lines_dirty = true;
 }
 
-void jsonrpc_send(subprocess_s process, const char *data, i32 length)
+void jsonrpc_send(JsonRpcConnection *rpc, const char *data, i32 length)
 {
-    FILE *p_stdin = subprocess_stdin(&process);
+    FILE *p_stdin = subprocess_stdin(&rpc->process);
 
     i32 rem = length;
     while (rem > 0) {
@@ -971,10 +972,10 @@ void jsonrpc_send(subprocess_s process, const char *data, i32 length)
     fflush(p_stdin);
 }
 
-int jsonrpc_response(const char *buf, int len, void *fn_data)
+int jsonrpc_recv(const char *buf, int len, void *fn_data)
 {
-    LspConnection *lsp = &app.lsp.clangd;
-    if (!lsp) return 0;
+    JsonRpcConnection *rpc = (JsonRpcConnection*)fn_data;
+    if (!rpc) return 0;
 
     i32 id = -1;
     if (double val; mjson_get_number(buf, len, "$.id", &val)) {
@@ -987,15 +988,15 @@ int jsonrpc_response(const char *buf, int len, void *fn_data)
     LOG_INFO("[jsonrpc] received response(%d), storing...", id);
     String response = string(buf, len, mem_dynamic);
     {
-        std::lock_guard lk(lsp->response_m);
-        array_add(&lsp->responses, { id, response });
+        std::lock_guard lk(rpc->response_m);
+        array_add(&rpc->responses, { id, response });
     }
     LOG_INFO("[jsonrpc] received response(%d), notifying...", id);
-    lsp->response_cv.notify_all();
+    rpc->response_cv.notify_all();
     return 1;
 }
 
-int jsonrpc_sender(const char *buf, int len, void *fn_data)
+int jsonrpc_send(const char *buf, int len, void *fn_data)
 {
     LOG_INFO("[jsonrpc] --> %.*s", len, buf);
     return len;
@@ -1027,7 +1028,7 @@ String jsonrpc_content(Allocator mem, String method, String params = "")
     return stringf(mem, "{ \"jsonrpc\": \"2.0\", \"method\": \"%.*s\" }", STRFMT(method));
 }
 
-i32 jsonrpc_request(subprocess_s process, String method, String params = "")
+i32 jsonrpc_request(JsonRpcConnection *rpc, String method, String params = "")
 {
     static i32 next_id = 1;
     i32 id = next_id++;
@@ -1040,11 +1041,11 @@ i32 jsonrpc_request(subprocess_s process, String method, String params = "")
     if (params.length) LOG_INFO("[jsonrpc] --> %.*s(%d): %.*s", STRFMT(method), id, STRFMT(params));
     else LOG_INFO("[jsonrpc] --> %.*s(%d)", STRFMT(method), id);
 
-    jsonrpc_send(process, message.data, message.length);
+    jsonrpc_send(rpc, message.data, message.length);
     return id;
 }
 
-void jsonrpc_notify(subprocess_s process, String method)
+void jsonrpc_notify(JsonRpcConnection *rpc, String method)
 {
     SArena scratch = tl_scratch_arena();
 
@@ -1052,10 +1053,10 @@ void jsonrpc_notify(subprocess_s process, String method)
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
 
     LOG_INFO("[jsonrpc] --> %.*s", STRFMT(method));
-    jsonrpc_send(process, message.data, message.length);
+    jsonrpc_send(rpc, message.data, message.length);
 }
 
-void jsonrpc_notify(subprocess_s process, String method, String params)
+void jsonrpc_notify(JsonRpcConnection *rpc, String method, String params)
 {
     SArena scratch = tl_scratch_arena();
 
@@ -1063,10 +1064,10 @@ void jsonrpc_notify(subprocess_s process, String method, String params)
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
 
     LOG_INFO("[jsonrpc] --> %.*s(%.*s)", STRFMT(method), STRFMT(params));
-    jsonrpc_send(process, message.data, message.length);
+    jsonrpc_send(rpc, message.data, message.length);
 }
 
-void jsonrpc_cancel_request(subprocess_s process, i32 request)
+void jsonrpc_cancel_request(JsonRpcConnection *rpc, i32 request)
 {
     SArena scratch = tl_scratch_arena();
 
@@ -1074,29 +1075,27 @@ void jsonrpc_cancel_request(subprocess_s process, i32 request)
     String message = stringf(scratch, "Content-Length: %d\r\n\r\n%.*s", content.length, STRFMT(content));
 
     LOG_INFO("[jsonrpc] --> cancelRequest(%d)", request);
-    jsonrpc_send(process, message.data, message.length);
+    jsonrpc_send(rpc, message.data, message.length);
 }
 
-String jsonrpc_response(subprocess_s process, i32 request, Allocator mem)
+String jsonrpc_response(JsonRpcConnection *rpc, i32 request, Allocator mem)
 {
-    LspConnection *lsp = &app.lsp.clangd;
-
     LOG_INFO("[jsonrpc] waiting for response(%d)...", request);
 
-    std::unique_lock lk(lsp->response_m);
-    app.lsp.clangd.response_cv.wait(lk, [lsp, request]{
-        for (auto &it : lsp->responses)
+    std::unique_lock lk(rpc->response_m);
+    app.lsp.clangd.response_cv.wait(lk, [rpc, request]{
+        for (auto &it : rpc->responses)
             if (it.id == request) return true;
         return false;
     });
 
-    for (auto it : iterator(lsp->responses)) {
+    for (auto it : iterator(rpc->responses)) {
         if (it->id == request) {
             LOG_INFO("[jsonrpc] received response(%d)!", request);
 
             String ret = duplicate_string(it->message, mem);
             FREE(mem_dynamic, it->message.data);
-            array_remove_unsorted(&lsp->responses, it.index);
+            array_remove_unsorted(&rpc->responses, it.index);
             return ret;
         }
     }
@@ -1104,6 +1103,51 @@ String jsonrpc_response(subprocess_s process, i32 request, Allocator mem)
     LOG_ERROR("[jsonrpc] signal received, but could not find response(%d)", request);
     return {};
 }
+
+bool json_parse(LspInitializeResult *result, String json, Allocator mem)
+{
+    String capabilities;
+    if (!mjson_find(json.data, json.length, "$.capabilities", (const char**)&capabilities.data, &capabilities.length)) {
+        LOG_ERROR("missing required field: capabilities");
+        return false;
+    }
+
+    int type;
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            capabilities.data, capabilities.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ capabilities.data+key_offset, key_length };
+        String value{ capabilities.data+value_offset, value_length };
+
+        if (type == MJSON_TOK_STRING && key == "positionEncoding") {
+            result->capabilities.positionEncoding = duplicate_string(value, mem);
+        } else {
+            LOG_INFO("unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
+        }
+    }
+
+    return true;
+}
+
+template<typename T>
+bool jsonrpc_response(JsonRpcConnection *rpc, i32 request, T *result, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+    String response = jsonrpc_response(rpc, request, scratch);
+    if (!response.length) return false;
+
+    String s_result;
+    if (!mjson_find(response.data, response.length, "$.result", (const char**)&s_result.data, &s_result.length)) {
+        return false;
+    }
+
+    return json_parse(result, s_result, mem);
+}
+
 
 void json_append(StringBuilder *sb, String key, i32 value)
 {
@@ -1191,7 +1235,7 @@ void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
 }
 
 LspInitializeResult lsp_initialize(
-    LspConnection *lsp,
+    JsonRpcConnection *rpc,
     String root,
     Allocator mem,
     LspClientCapabilities capabilities = {})
@@ -1207,54 +1251,27 @@ LspInitializeResult lsp_initialize(
     append_string(&params, ",");
     json_append(&params, "capabilities", capabilities);
 
-    i32 request = jsonrpc_request(lsp->process, "initialize", create_string(&params, scratch));
-    String response = jsonrpc_response(lsp->process, request, scratch);
-    if (!response.length) {
-        LOG_ERROR("invalid response for initialize");
-        return {};
-    }
-
-    String s_result;
-    if (!mjson_find(response.data, response.length, "$.result", (const char**)&s_result.data, &s_result.length)) {
-        LOG_ERROR("no result found in initialize response");
-        return {};
-    }
-
-    String server_caps;
-    if (!mjson_find(s_result.data, s_result.length, "$.capabilities", (const char**)&server_caps.data, &server_caps.length)) {
-        LOG_ERROR("no result found in initialize response");
-        return {};
-    }
-
     LspInitializeResult result{};
-
-    int type;
-    int key_offset, key_length, value_offset, value_length;
-    for (int i = 0; (i = mjson_next(
-            server_caps.data, server_caps.length, i,
-            &key_offset, &key_length,
-            &value_offset, &value_length,
-            &type)) != 0;)
-    {
-        String key{ server_caps.data+key_offset, key_length };
-        String value{ server_caps.data+value_offset, value_length };
-
-        if (type == MJSON_TOK_STRING && key == "positionEncoding") {
-            result.capabilities.positionEncoding = duplicate_string(value, mem);
-        } else {
-            LOG_INFO("unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
-        }
+    i32 request = jsonrpc_request(rpc, "initialize", create_string(&params, scratch));
+    if (!jsonrpc_response(rpc, request, &result, scratch)) {
+        LOG_ERROR("error reading LspInitializeResult");
+        return {};
     }
 
     return result;
 }
 
-void lsp_initialized(LspConnection *lsp)
+void lsp_initialized(JsonRpcConnection *rpc)
 {
-    jsonrpc_notify(lsp->process, "initialized");
+    jsonrpc_notify(rpc, "initialized");
 }
 
-void lsp_did_open(LspConnection *lsp, String path, String language_id, String content) INTERNAL
+void lsp_publishDiagnostics(struct jsonrpc_request *req)
+{
+    LOG_INFO("publishDiagnostics");
+}
+
+void lsp_did_open(JsonRpcConnection *rpc, String path, String language_id, String content) INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
@@ -1269,7 +1286,7 @@ void lsp_did_open(LspConnection *lsp, String path, String language_id, String co
     json_append(&params, "textDocument", document);
     String sparams = create_string(&params, scratch);
 
-    jsonrpc_notify(lsp->process, "textDocument/didOpen", sparams);
+    jsonrpc_notify(rpc, "textDocument/didOpen", sparams);
 }
 
 int app_main(Array<String> args)
@@ -1410,11 +1427,6 @@ int app_main(Array<String> args)
     }
     app.current_view->id = 0;
 
-    jsonrpc_init(jsonrpc_response, &app.lsp.clangd);
-    jsonrpc_export("textDocument/publishDiagnostics", [](struct jsonrpc_request *req) {
-        LOG_INFO("publishDiagnostics");
-    });
-
     const char *cmdline[] = { "clangd.exe", "--log=verbose", NULL };
     int flags =
         subprocess_option_enable_async |
@@ -1423,6 +1435,12 @@ int app_main(Array<String> args)
         0;
 
     if (subprocess_create(cmdline, flags, &app.lsp.clangd.process) == 0) {
+        jsonrpc_ctx_init(&app.lsp.clangd.ctx, jsonrpc_recv, &app.lsp.clangd);
+        jsonrpc_ctx_export(
+            &app.lsp.clangd.ctx,
+            "textDocument/publishDiagnostics",
+            &lsp_publishDiagnostics);
+
         SArena scratch = tl_scratch_arena();
 
         create_thread([](void*) -> int {
@@ -1444,7 +1462,7 @@ int app_main(Array<String> args)
                 response.data = ALLOC_ARR(mem_dynamic, char, response.length);
                 fgets(response.data, response.length, p_stdout);
 
-                jsonrpc_process(response.data, response.length, jsonrpc_sender, nullptr, nullptr);
+                jsonrpc_ctx_process(&app.lsp.clangd.ctx, response.data, response.length, jsonrpc_send, nullptr, nullptr);
             }
 
             return 0;
