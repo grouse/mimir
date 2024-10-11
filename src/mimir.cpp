@@ -221,9 +221,26 @@ struct LspClientCapabilities {
     } general;
 };
 
+enum LspTextDocumentSyncKind {
+    LSP_SYNC_NONE        = 0,
+    LSP_SYNC_FULL        = 1,
+    LSP_SYNC_INCREMENTAL = 2
+};
+
+struct LspTextDocumentSyncOptions {
+    bool openClose;
+    LspTextDocumentSyncKind change;
+};
+
 struct LspServerCapabilities {
     String positionEncoding;
+    LspTextDocumentSyncOptions textDocumentSync;
 };
+
+struct LspConnection : JsonRpcConnection {
+    LspServerCapabilities server_capabilities;
+};
+
 
 struct LspInitializeResult {
     LspServerCapabilities capabilities;
@@ -275,7 +292,7 @@ struct Application {
     } input;
 
     struct {
-        JsonRpcConnection clangd;
+        LspConnection clangd;
     } lsp;
 
     EditMode mode, next_mode;
@@ -887,7 +904,8 @@ BufferId create_buffer(String file)
 
     switch (b.language) {
     case LANGUAGE_CPP:
-        lsp_did_open(&app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
+        if (app.lsp.clangd.server_capabilities.textDocumentSync.openClose)
+            lsp_did_open(&app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
         break;
     default:
         LOG_INFO("unsupported lsp for file type: %d", b.language);
@@ -1104,27 +1122,64 @@ String jsonrpc_response(JsonRpcConnection *rpc, i32 request, Allocator mem)
     return {};
 }
 
-bool json_parse(LspInitializeResult *result, String json, Allocator mem)
+bool json_parse(bool *result, String key, String json, Allocator mem)
 {
-    String capabilities;
-    if (!mjson_find(json.data, json.length, "$.capabilities", (const char**)&capabilities.data, &capabilities.length)) {
-        LOG_ERROR("missing required field: capabilities");
+    SArena scratch = tl_scratch_arena(mem);
+
+    int value;
+    if (!mjson_get_bool(json.data, json.length, sz_string(key, scratch), &value)) {
+        LOG_ERROR("invalid bool at path: %.*s", STRFMT(key));
+        return false;
+    }
+
+    *result = !!value;
+    return true;
+}
+
+bool json_parse(i32 *result, String key, String json, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    double value;
+    if (!mjson_get_number(json.data, json.length, sz_string(key, scratch), &value)) {
+        LOG_ERROR("invalid bool at path: %.*s", STRFMT(key));
+        return false;
+    }
+
+    *result = (i32)value;
+    if (f64(*result) != value) LOG_INFO("bad truncation of double to integer: %f", value);
+    return true;
+}
+
+
+bool json_parse(LspInitializeResult *result, String key, String json, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    String object;
+    if (!mjson_find(json.data, json.length, sz_string(key, scratch), (const char**)&object.data, &object.length)) {
+        LOG_ERROR("missing required field: %.*s", STRFMT(key));
         return false;
     }
 
     int type;
     int key_offset, key_length, value_offset, value_length;
     for (int i = 0; (i = mjson_next(
-            capabilities.data, capabilities.length, i,
+            object.data, object.length, i,
             &key_offset, &key_length,
             &value_offset, &value_length,
             &type)) != 0;)
     {
-        String key{ capabilities.data+key_offset, key_length };
-        String value{ capabilities.data+value_offset, value_length };
+        String key{ object.data+key_offset, key_length };
+        String value{ object.data+value_offset, value_length };
+
+        if (key[0] == '"') key = slice(key, 1, key.length-1);
 
         if (type == MJSON_TOK_STRING && key == "positionEncoding") {
             result->capabilities.positionEncoding = duplicate_string(value, mem);
+        } else if (type == MJSON_TOK_OBJECT && key == "textDocumentSync") {
+            json_parse(&result->capabilities.textDocumentSync.openClose, "$.openClose", value, scratch);
+            json_parse((i32*)&result->capabilities.textDocumentSync.change, "$.change", value, scratch);
         } else {
             LOG_INFO("unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
         }
@@ -1145,7 +1200,7 @@ bool jsonrpc_response(JsonRpcConnection *rpc, i32 request, T *result, Allocator 
         return false;
     }
 
-    return json_parse(result, s_result, mem);
+    return json_parse(result, "$.capabilities", s_result, mem);
 }
 
 
@@ -1289,6 +1344,11 @@ void lsp_did_open(JsonRpcConnection *rpc, String path, String language_id, Strin
     jsonrpc_notify(rpc, "textDocument/didOpen", sparams);
 }
 
+void lsp_did_change(JsonRpcConnection *rpc)
+{
+}
+
+
 int app_main(Array<String> args)
 {
     Vector2i resolution{ 1280, 720 };
@@ -1341,7 +1401,7 @@ int app_main(Array<String> args)
 
         //{ GOTO_DEF, { InputKey{ KC_G }, InputKey{ KC_D } }}
 
-        { FUZZY_FIND_FILE, IKEY(KC_O) },
+        { FUZZY_FIND_FILE, IKEY(KC_O, MF_CTRL ) },
 
         { PASTE,        IKEY(KC_P) },
         { COPY_RANGE,   IKEY(KC_Y) },
@@ -1534,7 +1594,9 @@ int app_main(Array<String> args)
         static const char *encodings[] = { "utf-8", nullptr };
         caps.general.positionEncodings = encodings;
 
-        lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
+        auto result = lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
+        app.lsp.clangd.server_capabilities = result.capabilities;
+
         lsp_initialized(&app.lsp.clangd);
     }
 
