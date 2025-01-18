@@ -1,0 +1,25 @@
+# TODO
+- [ ] [lsp] textDocument/didChange
+- [ ] [lsp] textDocument/willSave
+- [ ] [lsp] textDocument/didSave
+- [ ] [lsp] textDocument/didClose
+- [ ] [lsp] textDocument/publishDiagnostics
+- [ ] [tree-sitter][bug] ts_custom_alloc leak
+- [ ] command palette
+- [ ] build/task/command runner
+- [ ] vscode tasks.json support
+- [ ] vscode worksapce support
+- [ ] visual studio .sln support
+- [ ] project search
+- [ ] buffer search-replace
+- [ ] project search-replace
+- [ ] navigation/jump history
+- [ ] [history] serialise edit history
+- [ ] [history] memory allocator/memory layout improvements
+- [ ] serialise navigation/jump history
+
+# DOING
+
+
+# DONE
+- [x] [bug] investigate memory leak
