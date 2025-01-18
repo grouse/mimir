@@ -597,7 +597,7 @@ void ts_update_buffer(Buffer *buffer, TSInputEdit edit)
 }
 
 
-void get_syntax_colors(
+void ts_get_syntax_colors(
     DynamicArray<RangeColor> *colors,
     i64 byte_start,
     i64 byte_end,
@@ -3963,14 +3963,14 @@ next_node:;
             String l = string_from_enum(buffer->language);
             LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
 #endif
-            get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
+            ts_get_syntax_colors(&colors, byte_start, byte_end, buffer->syntax_tree, buffer->language);
 
             for (auto st : buffer->subtrees) {
 #if DEBUG_TREE_SITTER_COLORS
                 String l = string_from_enum(st.language);
                 LOG_INFO("highlight colors for language '%.*s'", STRFMT(l));
 #endif
-                get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
+                ts_get_syntax_colors(&colors, byte_start, byte_end, st.tree, st.language);
             }
 
             if (DEBUG_TREE_SITTER_COLORS) for (auto c : colors) LOG_INFO("color range [%d, %d]", c.start, c.end);
