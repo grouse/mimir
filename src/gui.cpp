@@ -45,19 +45,6 @@ i32 gui_push_overlay(Rect rect, bool active) INTERNAL
     return window;
 }
 
-f32 calc_center(f32 min, f32 max, f32 size) INTERNAL
-{
-    return min + 0.5f*(max-min - size);
-}
-
-Vector2 calc_center(Vector2 tl, Vector2 br, Vector2 size) INTERNAL
-{
-    return {
-        calc_center(tl.x, br.x, size.x),
-        calc_center(tl.y, br.y, size.y)
-    };
-}
-
 void gui_push_command_buffer() INTERNAL
 {
     array_add(&gui.draw_stack, gfx_command_buffer());
@@ -2817,6 +2804,8 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
             Rect item_r = split_row({ item_height });
             GuiId item_id = gui_gen_id(i);
 
+            if (Rect r = item_r; !apply_clip_rect(&r, array_tail(gui.clip_stack))) continue;
+
             if (gui_clicked(item_id, item_r)) {
                 *selected_item = i;
                 result = GUI_CHANGE;
@@ -2826,6 +2815,7 @@ GuiAction gui_lister_id(GuiId id, Array<String> items, i32 *selected_item) EXPOR
             if (i == *selected_item && gui.hot == item_id) gui_draw_rect(item_r, selected_hot_bg);
             else if (i == *selected_item) gui_draw_rect(item_r, selected_bg);
             else if (gui.hot == item_id) gui_draw_rect(item_r, hot_bg);
+
 
             gui_textbox(items[i], item_r);
         }

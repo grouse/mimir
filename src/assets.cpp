@@ -3,7 +3,7 @@
 #include "gfx_opengl.h"
 #include "core/string.h"
 
-#include "core/hash_table.h"
+#include "core/map.h"
 #include "core/core.h"
 
 #include <stb/stb_image.h>
@@ -18,9 +18,9 @@ struct {
     DynamicArray<AssetHandle> removed;
     DynamicArray<AssetHandle> free_slots;
 
-    HashTable<String, i32> types;
-    HashTable<String, asset_load_t> load_procs;
-    HashTable<String, asset_save_t> save_procs;
+    DynamicMap<String, i32> types;
+    DynamicMap<String, asset_load_t> load_procs;
+    DynamicMap<String, asset_save_t> save_procs;
 } assets{};
 
 

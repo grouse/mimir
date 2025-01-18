@@ -271,7 +271,7 @@ struct Application {
         i32 selected_item;
     } lister;
 
-    StaticArray<View, 5> views;
+    View views[5];
     View *current_view = &views[0];
 
     struct {
@@ -281,7 +281,7 @@ struct Application {
         bool set_mark;
     } incremental_search;
 
-    HashTable<String, Language> language_map;
+    DynamicMap<String, Language> language_map;
     const TSLanguage *languages[LANGUAGE_COUNT];
     TSQuery *highlights[LANGUAGE_COUNT];
     TSQuery *injections[LANGUAGE_COUNT];
@@ -308,7 +308,7 @@ struct Application {
     Vector3 caret_bg = bgr_unpack(0xFF8a523f);
     Vector3 line_bg = bgr_unpack(0xFF264041);
 
-    HashTable<String, u32> syntax_colors;
+    DynamicMap<String, u32> syntax_colors;
 
     struct {
         GLuint build;
@@ -482,7 +482,7 @@ TSQuery* ts_create_query(const TSLanguage *lang, String highlights)
     return nullptr;
 }
 
-HashTable<Language, DynamicArray<TSRange>> ts_get_injection_ranges(
+DynamicMap<Language, DynamicArray<TSRange>> ts_get_injection_ranges(
     Buffer *buffer,
     TSQuery *injection_query,
     Allocator mem)
@@ -494,7 +494,7 @@ HashTable<Language, DynamicArray<TSRange>> ts_get_injection_ranges(
 
     ASSERT(injection_query);
 
-    HashTable<Language, DynamicArray<TSRange>> lang_range_map{ .alloc = mem };
+    DynamicMap<Language, DynamicArray<TSRange>> lang_range_map{ .alloc = mem };
 
     TSNode root = ts_tree_root_node(buffer->syntax_tree);
     TSQueryCursor *cursor = ts_query_cursor_new();
@@ -543,7 +543,7 @@ void ts_parse_buffer(Buffer *buffer, TSInputEdit edit = {}) INTERNAL
     buffer->syntax_tree = ts_parser_parse_string(parser, buffer->syntax_tree, buffer->flat.data, buffer->flat.size);
 
     if (auto inj = app.injections[buffer->language]; inj) {
-        HashTable<Language, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
+        DynamicMap<Language, DynamicArray<TSRange>> lang_range_map = ts_get_injection_ranges(buffer, inj, scratch);
 
         for (auto it : lang_range_map) {
             SyntaxTree *subtree = nullptr;

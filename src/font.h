@@ -9,7 +9,7 @@
 #include "stb/stb_truetype.h"
 
 #include "core/string.h"
-#include "core/hash_table.h"
+#include "core/map.h"
 #include "gfx_opengl.h"
 
 struct Glyph {
@@ -46,7 +46,7 @@ struct FontAtlas {
     Vector2 current;
     f32 current_row_height;
 
-    HashTable<i32 , Glyph> glyphs;
+    DynamicMap<i32 , Glyph> glyphs;
 };
 
 struct GlyphsData {

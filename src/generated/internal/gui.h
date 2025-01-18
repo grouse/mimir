@@ -3,8 +3,6 @@
 
 static bool gui_is_parent(GuiId id);
 static i32 gui_push_overlay(Rect rect, bool active);
-static f32 calc_center(f32 min, f32 max, f32 size);
-static Vector2 calc_center(Vector2 tl, Vector2 br, Vector2 size);
 static void gui_push_command_buffer();
 static void gui_pop_command_buffer(GfxCommandBuffer *dst);
 static GfxCommand gui_command(GfxCommandType type);

@@ -243,9 +243,9 @@ struct GuiContext {
     DynamicArray<Rect> overlay_rects;
     DynamicArray<GuiDialog> dialogs;
 
-    HashTable<GuiId, u32> flags;
-    HashTable<GuiId, GuiMenu> menus;
-    HashTable<GuiId, GuiScrollArea> scroll_areas;
+    DynamicMap<GuiId, u32> flags;
+    DynamicMap<GuiId, GuiMenu> menus;
+    DynamicMap<GuiId, GuiScrollArea> scroll_areas;
     DynamicArray<GuiWindow> windows;
 
     Vector2 drag_start_mouse;
