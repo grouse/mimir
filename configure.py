@@ -9,7 +9,8 @@ from enki import *
 
 parser = argparse.ArgumentParser("configure.py", description="generates build files")
 parser.add_argument("-o", "--out", default="build", help="build generation output directory")
-parser.add_argument("-d", "--debug", action="store_true", help="compile with debug info")
+parser.add_argument("--debug", action="store_true", help="compile with debug info")
+parser.add_argument("--optimize", action="store_true", help="turn on compiler optimization")
 parser.add_argument("-r", "--render", choices=["opengl"], default="opengl", help="choose render backend")
 args = parser.parse_args();
 
@@ -69,6 +70,9 @@ build.flags["cxx"].extend([
 if args.debug:
     build.flags["c"].append("-g")
     build.flags["link"].append("-g")
+
+if args.optimize:
+    build.flags["c"].append("-O2")
 
 ext_optimised_flags = { "c" : [ "-O2", "-Wno-everything" ] }
 
