@@ -1,5 +1,5 @@
 # TODO
-- [ ] [lsp] textDocument/didChange
+- [ ] [lsp] positionEncoding conversion utf8 <-> utf16
 - [ ] [lsp] textDocument/willSave
 - [ ] [lsp] textDocument/didSave
 - [ ] [lsp] textDocument/didClose
@@ -17,8 +17,10 @@
 - [ ] [history] serialise edit history
 - [ ] [history] memory allocator/memory layout improvements
 - [ ] serialise navigation/jump history
+- [ ] [json] introduce serializer state such that commas and other separators can be automatically inserted
 
 # DOING
+- [ ] [lsp] textDocument/didChange
 
 
 # DONE

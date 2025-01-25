@@ -257,6 +257,28 @@ struct LspTextDocumentItem {
     String text;
 };
 
+struct LspTextDocumentIdentifier {
+    String uri;
+};
+
+struct LspVersionedTextDocumentIdentifier {
+    LspTextDocumentIdentifier base;
+    i32 version;
+};
+
+struct LspPosition {
+    u32 line;
+    u32 character;
+};
+
+struct LspRange {
+    LspPosition start, end;
+};
+
+struct LspTextDocumentContentChangeEvent {
+    LspRange range;
+    String text;
+};
 
 struct Application {
     AppWindow *wnd;
@@ -642,7 +664,7 @@ void ts_get_syntax_colors(
         String capture_name{ (char*)tmp, (i32)capture_name_length };
 
 #if DEBUG_TREE_SITTER_COLORS
-        if (false) {
+        {
             const char *node_type = ts_node_type(capture->node);
             LOG_INFO("query match id: %d, pattern_index: %d, capture_index: %d", match.id, match.pattern_index, capture_index);
             LOG_INFO("node type: %s, node range: [%d, %d]", node_type ? node_type : "null", start_byte, end_byte);
@@ -1209,6 +1231,11 @@ void json_append(StringBuilder *sb, String key, i32 value)
     append_stringf(sb, "\"%.*s\": %d", STRFMT(key), value);
 }
 
+void json_append(StringBuilder *sb, String key, u32 value)
+{
+    append_stringf(sb, "\"%.*s\": %u", STRFMT(key), value);
+}
+
 void json_append(StringBuilder *sb, String key, f32 value)
 {
     append_stringf(sb, "\"%.*s\": %f", STRFMT(key), value);
@@ -1279,14 +1306,41 @@ void json_append(StringBuilder *sb, String key, LspClientCapabilities value)
 void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
 {
     append_stringf(sb, "\"%.*s\": {", STRFMT(key));
-    json_append(sb, "uri", value.uri);
-    append_string(sb, ",");
-    json_append(sb, "languageId", value.languageId);
-    append_string(sb, ",");
-    json_append(sb, "version", value.version);
-    append_string(sb, ",");
+    json_append(sb, "uri", value.uri); append_string(sb, ",");
+    json_append(sb, "languageId", value.languageId); append_string(sb, ",");
+    json_append(sb, "version", value.version); append_string(sb, ",");
     json_append(sb, "text", value.text);
     append_string(sb, "}");
+}
+
+void json_append(StringBuilder *sb, String key, LspVersionedTextDocumentIdentifier value)
+{
+    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    json_append(sb, "uri", value.base.uri); append_string(sb, ",");
+    json_append(sb, "version", value.version);
+    append_string(sb, "}");
+}
+
+void json_append(StringBuilder *sb, String key, LspPosition value)
+{
+    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    json_append(sb, "line", value.line); append_string(sb, ",");
+    json_append(sb, "character", value.character);
+    append_string(sb, "}");
+}
+
+void json_append(StringBuilder *sb, String key, Array<LspRange> value)
+{
+    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
+    for (auto it : iterator(value)) {
+        append_string(sb, "{");
+        json_append(sb, "start", it->start); append_string(sb, ",");
+        json_append(sb, "end", it->end);
+
+        if (it.index == value.count-1) append_string(sb, "}");
+        else append_string(sb, "},");
+    }
+    append_string(sb, "]");
 }
 
 LspInitializeResult lsp_initialize(
@@ -1300,10 +1354,8 @@ LspInitializeResult lsp_initialize(
     i32 process_id = current_process_id();
 
     StringBuilder params{ .alloc = scratch };
-    json_append(&params, "processId", process_id);
-    append_string(&params, ",");
-    json_append(&params, "rootUri", uri_from_path(root, scratch));
-    append_string(&params, ",");
+    json_append(&params, "processId", process_id); append_string(&params, ",");
+    json_append(&params, "rootUri", uri_from_path(root, scratch)); append_string(&params, ",");
     json_append(&params, "capabilities", capabilities);
 
     LspInitializeResult result{};
@@ -1346,6 +1398,20 @@ void lsp_did_open(JsonRpcConnection *rpc, String path, String language_id, Strin
 
 void lsp_did_change(JsonRpcConnection *rpc)
 {
+    SArena scratch = tl_scratch_arena();
+
+    StringBuilder params{ .alloc = scratch };
+
+    LspVersionedTextDocumentIdentifier document{};
+    Array<LspRange> ranges{};
+    String text{};
+
+    json_append(&params, "textDocument", document); append_string(&params, ",");
+    json_append(&params, "contentChanges", ranges); append_string(&params, ",");
+    json_append(&params, "text", text);
+
+    String sparams = create_string(&params, scratch);
+    jsonrpc_notify(rpc, "textDocument/didChange", sparams);
 }
 
 
@@ -1496,10 +1562,7 @@ int app_main(Array<String> args)
 
     if (subprocess_create(cmdline, flags, &app.lsp.clangd.process) == 0) {
         jsonrpc_ctx_init(&app.lsp.clangd.ctx, jsonrpc_recv, &app.lsp.clangd);
-        jsonrpc_ctx_export(
-            &app.lsp.clangd.ctx,
-            "textDocument/publishDiagnostics",
-            &lsp_publishDiagnostics);
+        jsonrpc_ctx_export(&app.lsp.clangd.ctx, "textDocument/publishDiagnostics", &lsp_publishDiagnostics);
 
         SArena scratch = tl_scratch_arena();
 
@@ -1591,7 +1654,7 @@ int app_main(Array<String> args)
         });
 
         LspClientCapabilities caps{};
-        static const char *encodings[] = { "utf-8", nullptr };
+        static const char *encodings[] = { "utf-8", "utf-16", nullptr };
         caps.general.positionEncodings = encodings;
 
         auto result = lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
