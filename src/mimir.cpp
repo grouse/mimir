@@ -234,13 +234,18 @@ enum LspTextDocumentSyncKind {
     LSP_SYNC_INCREMENTAL = 2
 };
 
+enum LspEncoding {
+    LSP_UTF16 = 0,
+    LSP_UTF8,
+};
+
 struct LspTextDocumentSyncOptions {
     bool openClose;
     LspTextDocumentSyncKind change;
 };
 
 struct LspServerCapabilities {
-    String positionEncoding;
+    LspEncoding position_encoding;
     LspTextDocumentSyncOptions textDocumentSync;
 };
 
@@ -1205,7 +1210,9 @@ bool json_parse(LspInitializeResult *result, String key, String json, Allocator 
         if (key[0] == '"') key = slice(key, 1, key.length-1);
 
         if (type == MJSON_TOK_STRING && key == "positionEncoding") {
-            result->capabilities.positionEncoding = duplicate_string(value, mem);
+            if (value == "utf-8") result->capabilities.position_encoding = LSP_UTF8;
+            else if (value == "utf-16") result->capabilities.position_encoding = LSP_UTF16;
+            else LOG_ERROR("invalid position encoding from LSP initialization: '%.*s'", STRFMT(value));
         } else if (type == MJSON_TOK_OBJECT && key == "textDocumentSync") {
             json_parse(&result->capabilities.textDocumentSync.openClose, "$.openClose", value, scratch);
             json_parse((i32*)&result->capabilities.textDocumentSync.change, "$.change", value, scratch);
