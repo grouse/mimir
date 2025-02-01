@@ -110,13 +110,6 @@ struct BufferId {
     explicit operator bool() { return *this != BUFFER_INVALID; }
 };
 
-u32 hash32(BufferId buffer, u32 seed /*= MURMUR3_SEED */) INTERNAL
-{
-    u32 state = seed;
-    state = hash32(buffer.index, state);
-    return state;
-}
-
 struct BufferHistory {
     BufferHistoryType type;
     union {
@@ -358,6 +351,12 @@ struct RangeColor {
 
 #include "generated/internal/mimir.h"
 
+u32 hash32(BufferId buffer, u32 seed /*= MURMUR3_SEED */) INTERNAL
+{
+    u32 state = seed;
+    state = hash32(buffer.index, state);
+    return state;
+}
 
 String string_from_enum(NewlineMode mode)
 {
