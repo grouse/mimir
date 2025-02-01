@@ -107,8 +107,15 @@ struct BufferId {
 
     bool operator==(const BufferId &rhs) const { return index == rhs.index; }
     bool operator!=(const BufferId &rhs) const { return index != rhs.index; }
-    operator bool() { return *this != BUFFER_INVALID; }
+    explicit operator bool() { return *this != BUFFER_INVALID; }
 };
+
+u32 hash32(BufferId buffer, u32 seed /*= MURMUR3_SEED */) INTERNAL
+{
+    u32 state = seed;
+    state = hash32(buffer.index, state);
+    return state;
+}
 
 struct BufferHistory {
     BufferHistoryType type;
@@ -237,11 +244,6 @@ struct LspServerCapabilities {
     LspTextDocumentSyncOptions textDocumentSync;
 };
 
-struct LspConnection : JsonRpcConnection {
-    LspServerCapabilities server_capabilities;
-};
-
-
 struct LspInitializeResult {
     LspServerCapabilities capabilities;
     struct {
@@ -261,8 +263,7 @@ struct LspTextDocumentIdentifier {
     String uri;
 };
 
-struct LspVersionedTextDocumentIdentifier {
-    LspTextDocumentIdentifier base;
+struct LspVersionedTextDocumentIdentifier : LspTextDocumentIdentifier {
     i32 version;
 };
 
@@ -273,6 +274,11 @@ struct LspPosition {
 
 struct LspRange {
     LspPosition start, end;
+};
+
+struct LspConnection : JsonRpcConnection {
+    LspServerCapabilities server_capabilities;
+    DynamicMap<BufferId, LspTextDocumentItem> documents;
 };
 
 struct LspTextDocumentContentChangeEvent {
@@ -875,31 +881,31 @@ BufferId create_buffer(String file)
     // crash trying to render invalid text
     // TODO(jesper): tab/spaces indent mode depending on file type and project settings
 
-    Buffer b{ .type = BUFFER_FLAT };
-    b.id = { .index = buffers.count };
-    b.file_path = absolute_path(file, mem_dynamic);
-    b.name = filename_of(b.file_path);
-    b.newline_mode = NEWLINE_LF;
+    Buffer buffer{ .type = BUFFER_FLAT };
+    buffer.id = { .index = buffers.count };
+    buffer.file_path = absolute_path(file, mem_dynamic);
+    buffer.name = filename_of(buffer.file_path);
+    buffer.newline_mode = NEWLINE_LF;
 
     FileInfo f = read_file(file, mem_dynamic);
-    b.flat.data = (char*)f.data;
-    b.flat.size = f.size;
-    b.flat.capacity = f.size;
+    buffer.flat.data = (char*)f.data;
+    buffer.flat.size = f.size;
+    buffer.flat.capacity = f.size;
 
-    String ext = extension_of(b.file_path);
+    String ext = extension_of(buffer.file_path);
     if (ext == ".cpp" || ext == ".c" ||
         ext == ".h" || ext == ".hpp" ||
         ext == ".cxx" || ext == ".cc")
     {
-        b.language = LANGUAGE_CPP;
+        buffer.language = LANGUAGE_CPP;
     } else if (ext == ".rs") {
-        b.language = LANGUAGE_RUST;
+        buffer.language = LANGUAGE_RUST;
     } else if (ext == ".sh") {
-        b.language = LANGUAGE_BASH;
+        buffer.language = LANGUAGE_BASH;
     } else if (ext == ".cs") {
-        b.language = LANGUAGE_CS;
+        buffer.language = LANGUAGE_CS;
     } else if (ext == ".lua") {
-        b.language = LANGUAGE_LUA;
+        buffer.language = LANGUAGE_LUA;
     }
 
     if (f.data) {
@@ -909,36 +915,37 @@ BufferId create_buffer(String file)
         char *p = start+f.size-1;
         while (p >= start) {
             if (*p == '\n') {
-                if (p-1 >= start && *(p-1) == '\r') b.newline_mode = NEWLINE_CRLF;
-                else b.newline_mode = NEWLINE_LF;
+                if (p-1 >= start && *(p-1) == '\r') buffer.newline_mode = NEWLINE_CRLF;
+                else buffer.newline_mode = NEWLINE_LF;
                 break;
             } else if (*p == '\r') {
-                if (p-1 >= start && *(p-1) == '\n') b.newline_mode = NEWLINE_LFCR;
-                else b.newline_mode = NEWLINE_CR;
+                if (p-1 >= start && *(p-1) == '\n') buffer.newline_mode = NEWLINE_LFCR;
+                else buffer.newline_mode = NEWLINE_CR;
                 break;
             }
 
             p--;
         }
 
-        ts_parse_buffer(&b);
+        ts_parse_buffer(&buffer);
     }
 
-    switch (b.language) {
-    case LANGUAGE_CPP:
-        if (app.lsp.clangd.server_capabilities.textDocumentSync.openClose)
-            lsp_did_open(&app.lsp.clangd, b.file_path, "cpp", String{ b.flat.data, (i32)b.flat.size });
-        break;
-    default:
-        LOG_INFO("unsupported lsp for file type: %d", b.language);
-        break;
-    }
-
-    String newline_str = string_from_enum(b.newline_mode);
+    String newline_str = string_from_enum(buffer.newline_mode);
     LOG_INFO("created buffer: %.*s, newline mode: %.*s", STRFMT(file), STRFMT(newline_str));
 
-    array_add(&buffers, b);
-    return b.id;
+    array_add(&buffers, buffer);
+
+    switch (buffer.language) {
+    case LANGUAGE_CPP:
+        if (app.lsp.clangd.server_capabilities.textDocumentSync.openClose)
+            lsp_open(&app.lsp.clangd, buffer.id, "cpp", String{ buffer.flat.data, (i32)buffer.flat.size });
+        break;
+    default:
+        LOG_INFO("unsupported lsp for file type: %d", buffer.language);
+        break;
+    }
+
+    return buffer.id;
 }
 
 BufferId find_buffer(String file)
@@ -1316,7 +1323,7 @@ void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
 void json_append(StringBuilder *sb, String key, LspVersionedTextDocumentIdentifier value)
 {
     append_stringf(sb, "\"%.*s\": {", STRFMT(key));
-    json_append(sb, "uri", value.base.uri); append_string(sb, ",");
+    json_append(sb, "uri", value.uri); append_string(sb, ",");
     json_append(sb, "version", value.version);
     append_string(sb, "}");
 }
@@ -1344,7 +1351,7 @@ void json_append(StringBuilder *sb, String key, Array<LspRange> value)
 }
 
 LspInitializeResult lsp_initialize(
-    JsonRpcConnection *rpc,
+    LspConnection *lsp,
     String root,
     Allocator mem,
     LspClientCapabilities capabilities = {})
@@ -1359,8 +1366,8 @@ LspInitializeResult lsp_initialize(
     json_append(&params, "capabilities", capabilities);
 
     LspInitializeResult result{};
-    i32 request = jsonrpc_request(rpc, "initialize", create_string(&params, scratch));
-    if (!jsonrpc_response(rpc, request, &result, scratch)) {
+    i32 request = jsonrpc_request(lsp, "initialize", create_string(&params, scratch));
+    if (!jsonrpc_response(lsp, request, &result, scratch)) {
         LOG_ERROR("error reading LspInitializeResult");
         return {};
     }
@@ -1368,9 +1375,9 @@ LspInitializeResult lsp_initialize(
     return result;
 }
 
-void lsp_initialized(JsonRpcConnection *rpc)
+void lsp_initialized(LspConnection *lsp)
 {
-    jsonrpc_notify(rpc, "initialized");
+    jsonrpc_notify(lsp, "initialized");
 }
 
 void lsp_publishDiagnostics(struct jsonrpc_request *req)
@@ -1378,22 +1385,35 @@ void lsp_publishDiagnostics(struct jsonrpc_request *req)
     LOG_INFO("publishDiagnostics");
 }
 
-void lsp_did_open(JsonRpcConnection *rpc, String path, String language_id, String content) INTERNAL
+void lsp_open(LspConnection *lsp, BufferId buffer_id, String language_id, String content) INTERNAL
 {
     SArena scratch = tl_scratch_arena();
 
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) {
+        LOG_ERROR("[lsp] could not find buffer with id [%d]", buffer_id.index);
+        return;
+    }
+
+    if (map_find(&lsp->documents, buffer_id)) {
+        LOG_INFO("[lsp] document for buffer [%d] already open", buffer_id.index);
+        return;
+    }
+
     LspTextDocumentItem document{
-        .uri = uri_from_path(path, scratch),
+        .uri = uri_from_path(buffer->file_path, mem_dynamic),
         .languageId = language_id,
         .version = 0,
         .text = content,
     };
 
+    map_set(&lsp->documents, buffer_id, document);
+
     StringBuilder params{ .alloc = scratch };
     json_append(&params, "textDocument", document);
     String sparams = create_string(&params, scratch);
 
-    jsonrpc_notify(rpc, "textDocument/didOpen", sparams);
+    jsonrpc_notify(lsp, "textDocument/didOpen", sparams);
 }
 
 void lsp_did_change(JsonRpcConnection *rpc)

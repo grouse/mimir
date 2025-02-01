@@ -18,10 +18,18 @@
 - [ ] [history] memory allocator/memory layout improvements
 - [ ] serialise navigation/jump history
 - [ ] [json] introduce serializer state such that commas and other separators can be automatically inserted
+- [ ] [lsp] the lsp connections needs to be per language so I can access it like app.lsp[buffer->language]
+    - can we share a LSP connection across several languages if they use the same LSP server?
+- [ ] add unwrapped line begin/start information to buffers; currently storing line information in the view with flags for whether the line is wrapped or not
+    -  needed by e.g. LSP document position information, regardless of whether the buffer is opened in a view or not
+- [ ] [lsp] add a memory arena/allocator per lsp connection for fast and easy memory management of connections as they close and open
 
 # DOING
 - [ ] [lsp] textDocument/didChange
 
-
 # DONE
 - [x] [bug] investigate memory leak
+- [x] [lsp] TextDocumentIdentifier management
+    - mapping BufferId <-> LspVersionedDocumentIdentifier
+    - add mapping in lsp_open, making the text document identifers specific to the LspConnection
+    - e.g. didCange specifies documents needs to be "owned" by the client by signalling didOpen
