@@ -20,12 +20,15 @@
 - [ ] [json] introduce serializer state such that commas and other separators can be automatically inserted
 - [ ] [lsp] the lsp connections needs to be per language so I can access it like app.lsp[buffer->language]
     - can we share a LSP connection across several languages if they use the same LSP server?
-- [ ] add unwrapped line begin/start information to buffers; currently storing line information in the view with flags for whether the line is wrapped or not
-    -  needed by e.g. LSP document position information, regardless of whether the buffer is opened in a view or not
 - [ ] [lsp] add a memory arena/allocator per lsp connection for fast and easy memory management of connections as they close and open
+- [ ] [lsp] verify/handle LSP text/position encoding handling when sending text across
+    - does the text encoding in didOpen depend on the agreed upon position encoding?
+    - does the text encoding in didChange depend on the agreed upon position encoding?
 
 # DOING
 - [ ] [lsp] textDocument/didChange
+- [ ] add unwrapped line begin/start information to buffers; currently storing line information in the view with flags for whether the line is wrapped or not
+    -  needed by e.g. LSP document position information, regardless of whether the buffer is opened in a view or not
 
 # DONE
 - [x] [bug] investigate memory leak
