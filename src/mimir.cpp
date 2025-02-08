@@ -84,13 +84,13 @@ struct Range_i32 {
 };
 
 
-struct BufferLine {
+struct ViewLine {
     i64 offset : 63;
     i64 wrapped : 1;
 };
 
 enum NewlineMode {
-    NEWLINE_LF = 1,
+    NEWLINE_LF = 0,
     NEWLINE_CR,
     NEWLINE_CRLF,
     NEWLINE_LFCR,
@@ -147,6 +147,8 @@ struct Buffer {
     union {
         struct { char *data; i64 size; i64 capacity; } flat;
     };
+
+    DynamicArray<i64> line_offsets;
 };
 
 struct ProcessCommand {
@@ -182,7 +184,7 @@ struct View {
     GLuint glyph_data_ssbo;
     DynamicArray<BufferId> buffers;
     DynamicArray<ViewBufferState> saved_buffer_state;
-    DynamicArray<BufferLine> lines;
+    DynamicArray<ViewLine> lines;
 
     f32 voffset;
     i32 line_offset;
@@ -913,22 +915,34 @@ BufferId create_buffer(String file)
     }
 
     if (f.data) {
+        array_add(&buffer.line_offsets, i64(0));
+
         // TODO(jesper): guess tabs/spaces based on file content?
 
-        char *start = (char*)f.data;
-        char *p = start+f.size-1;
-        while (p >= start) {
-            if (*p == '\n') {
-                if (p-1 >= start && *(p-1) == '\r') buffer.newline_mode = NEWLINE_CRLF;
-                else buffer.newline_mode = NEWLINE_LF;
-                break;
-            } else if (*p == '\r') {
-                if (p-1 >= start && *(p-1) == '\n') buffer.newline_mode = NEWLINE_LFCR;
-                else buffer.newline_mode = NEWLINE_CR;
-                break;
-            }
+        bool found_newline_mode = false;
+        for (i64 offset = 0; offset < f.size; offset++) {
+            char n = offset < f.size-1 ? char(f.data[offset+1]) : 0;
+            char c = char(f.data[offset]);
 
-            p--;
+            if (c == '\n' || c == '\r') {
+                NewlineMode newline_mode{};
+                if (c == '\n' && n == '\r') {
+                    newline_mode = NEWLINE_LFCR;
+                    offset += 1;
+                } else if (c == '\n') newline_mode = NEWLINE_LF;
+                else if (c == '\r' && n == '\n') {
+                    newline_mode = NEWLINE_CRLF;
+                    offset += 1;
+                } else newline_mode = NEWLINE_CR;
+
+                if (newline_mode != buffer.newline_mode) {
+                    buffer.newline_mode = newline_mode;
+                    if (found_newline_mode) LOG_ERROR("buffer has mixed newlines; prompt to convert buffer!");
+                    found_newline_mode = true;
+                }
+
+                array_add(&buffer.line_offsets, offset);
+            }
         }
 
         ts_parse_buffer(&buffer);
@@ -1795,19 +1809,19 @@ i64 buffer_start(Buffer *buffer)
     }
 }
 
-i64 line_start_offset(i32 line, Array<BufferLine> lines)
+i64 line_start_offset(i32 line, Array<ViewLine> lines)
 {
     return line < lines.count ? lines[line].offset : 0;
 }
 
-i64 line_end_offset(i32 line, Array<BufferLine> lines, Buffer *buffer)
+i64 line_end_offset(i32 line, Array<ViewLine> lines, Buffer *buffer)
 {
     switch (buffer->type) {
     case BUFFER_FLAT: return (line+1) < lines.count ? lines[line+1].offset : buffer->flat.size;
     }
 }
 
-i64 line_end_offset(i32 wrapped_line, Array<BufferLine> lines, BufferId buffer_id)
+i64 line_end_offset(i32 wrapped_line, Array<ViewLine> lines, BufferId buffer_id)
 {
     return line_end_offset(wrapped_line, lines, &buffers[buffer_id.index]);
 }
@@ -1898,7 +1912,7 @@ Range_i32 range_i32(i32 a, i32 b)
     return { .start = MIN(a, b), .end = MAX(a, b) };
 }
 
-Range_i64 caret_range(Caret c0, Caret c1, Array<BufferLine> lines, BufferId buffer, bool lines_block)
+Range_i64 caret_range(Caret c0, Caret c1, Array<ViewLine> lines, BufferId buffer, bool lines_block)
 {
     Range_i64 r;
 
@@ -1929,14 +1943,14 @@ i64 caret_nth_offset(BufferId buffer_id, i64 current, i32 n)
     return offset;
 }
 
-i32 calc_unwrapped_line(i32 wrapped_line, Array<BufferLine> lines)
+i32 calc_unwrapped_line(i32 wrapped_line, Array<ViewLine> lines)
 {
     i32 line = CLAMP(wrapped_line, 0, lines.count-1);
     while (line > 0 && lines[line].wrapped) line--;
     return line;
 }
 
-i32 wrapped_line_from_offset(i64 offset, Array<BufferLine> lines, i32 guessed_line = 0)
+i32 wrapped_line_from_offset(i64 offset, Array<ViewLine> lines, i32 guessed_line = 0)
 {
     i32 line = CLAMP(guessed_line, 0, lines.count-1);
     while (line > 0 && offset < lines[line].offset) line--;
@@ -1944,13 +1958,22 @@ i32 wrapped_line_from_offset(i64 offset, Array<BufferLine> lines, i32 guessed_li
     return line;
 }
 
-i32 unwrapped_line_from_offset(i64 offset, Array<BufferLine> lines, u32 guessed_line = 0)
+i32 line_from_offset(i64 offset, Array<i64> offsets, i32 guessed_line /*= 0*/) INTERNAL
+{
+    // TODO(jesper): these are sorted offsets, use a binary search to find the line
+    i32 line = CLAMP(guessed_line, 0, offsets.count-1);
+    while (line > 0 && offset < offsets[line]) line--;
+    while (line < (offsets.count-2) && offset > offsets[line+1]) line++;
+    return line;
+}
+
+i32 unwrapped_line_from_offset(i64 offset, Array<ViewLine> lines, u32 guessed_line = 0)
 {
     i32 line = wrapped_line_from_offset(offset, lines, guessed_line);
     return calc_unwrapped_line(line, lines);
 }
 
-i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+i64 wrapped_column_count(i32 wrapped_line, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -1973,7 +1996,7 @@ i64 wrapped_column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buff
     return count;
 }
 
-i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+i64 column_count(i32 wrapped_line, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -2013,7 +2036,7 @@ i64 column_count(i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
     return count;
 }
 
-i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -2033,7 +2056,7 @@ i64 calc_wrapped_column_from_byte_offset(i64 byte_offset, i32 wrapped_line, Arra
     return column;
 }
 
-i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<BufferLine> lines, Buffer *buffer)
+i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -2055,7 +2078,7 @@ i64 calc_wrapped_column(i32 wrapped_line, i64 target_column, Array<BufferLine> l
     return column;
 }
 
-i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<BufferLine> lines, Buffer *buffer)
+i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -2071,7 +2094,7 @@ i64 calc_unwrapped_column(i32 wrapped_line, i64 wrapped_column, Array<BufferLine
     return column;
 }
 
-i64 unwrapped_column_from_offset(i64 offset, Array<BufferLine> lines, i32 wrapped_line)
+i64 unwrapped_column_from_offset(i64 offset, Array<ViewLine> lines, i32 wrapped_line)
 {
     i32 line = calc_unwrapped_line(wrapped_line, lines);
     i64 column = 0;
@@ -2081,7 +2104,7 @@ i64 unwrapped_column_from_offset(i64 offset, Array<BufferLine> lines, i32 wrappe
 
 
 
-i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lines, Buffer *buffer)
+i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<ViewLine> lines, Buffer *buffer)
 {
     if (wrapped_line >= lines.count) return 0;
 
@@ -2097,7 +2120,7 @@ i64 calc_byte_offset(i64 wrapped_column, i32 wrapped_line, Array<BufferLine> lin
 
 
 // NOTE(jesper): returns >= lines.count if line >= lines.count-1
-i32 next_unwrapped_line(i32 line, Array<BufferLine> lines)
+i32 next_unwrapped_line(i32 line, Array<ViewLine> lines)
 {
     i32 l = line;
     while (l < lines.count-1 && lines[l+1].wrapped) l++;
@@ -2105,7 +2128,7 @@ i32 next_unwrapped_line(i32 line, Array<BufferLine> lines)
 }
 
 // NOTE(jesper): returns -1 if line == 0
-i32 prev_unwrapped_line(i32 line, Array<BufferLine> lines)
+i32 prev_unwrapped_line(i32 line, Array<ViewLine> lines)
 {
     i32 l = line-1;
     while (l > 0 && lines[l].wrapped) l--;
@@ -2113,7 +2136,7 @@ i32 prev_unwrapped_line(i32 line, Array<BufferLine> lines)
 }
 
 
-void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<BufferLine> lines)
+void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array<ViewLine> lines)
 {
     if (new_wrapped_line == 0) {
         *wrapped_line = 0;
@@ -2140,7 +2163,7 @@ void recalc_caret_line(i32 new_wrapped_line, i32 *wrapped_line, i32 *line, Array
     }
 }
 
-void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_line, i32 end_line, BufferId buffer_id)
+void recalc_line_wrap(View *view, DynamicArray<ViewLine> *lines, i32 start_line, i32 end_line, BufferId buffer_id)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return;
@@ -2163,13 +2186,13 @@ void recalc_line_wrap(View *view, DynamicArray<BufferLine> *lines, i32 start_lin
     i64 word_start = p;
     i64 line_start = p;
 
-    DynamicArray<BufferLine> tmp_lines{ .alloc = scratch };
-    DynamicArray<BufferLine> *new_lines = &tmp_lines;
+    DynamicArray<ViewLine> tmp_lines{ .alloc = scratch };
+    DynamicArray<ViewLine> *new_lines = &tmp_lines;
 
     if (lines->count == 0 || (start_line == 0 && end_line == lines->count)) {
         new_lines = lines;
         lines->count = start_line = end_line = 0;
-        array_add(new_lines, BufferLine{ start, 0 });
+        array_add(new_lines, ViewLine{ start, 0 });
     } else {
         end_line = MIN(lines->count, end_line+1);
         start_line = MIN(lines->count, start_line+1);
@@ -2263,49 +2286,56 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
 
     switch (buffer->type) {
     case BUFFER_FLAT: {
-            byte_start = MAX(0, byte_start);
-            byte_end = MIN(byte_end, buffer->flat.size);
+        byte_start = MAX(0, byte_start);
+        byte_end = MIN(byte_end, buffer->flat.size);
 
-            i64 num_bytes = byte_end-byte_start;
-    		if (record_history) {
-        		BufferHistory h{
-            		.type = BUFFER_REMOVE,
-            		.offset = byte_start,
-            		.text = { &buffer->flat.data[byte_start], (i32)num_bytes }
-        		};
-        		buffer_history(buffer_id, h);
-    		}
+        i64 num_bytes = byte_end-byte_start;
+        if (record_history) {
+            BufferHistory h{
+                .type = BUFFER_REMOVE,
+                .offset = byte_start,
+                .text = { &buffer->flat.data[byte_start], (i32)num_bytes }
+            };
+            buffer_history(buffer_id, h);
+        }
 
 
-            memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
-            buffer->flat.size -= num_bytes;
+        memmove(&buffer->flat.data[byte_start], &buffer->flat.data[byte_end], buffer->flat.size-byte_end);
+        buffer->flat.size -= num_bytes;
 
-            // TODO(jesper): multi-view support
-            for (View &view : app.views) {
-                if (view.buffer != buffer_id) continue;
+        for (View &view : app.views) {
+            if (view.buffer != buffer_id) continue;
 
-                i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
-                i64 start_offset = view.lines[line].offset;
-                for (i32 i = line+1; i < view.lines.count; i++) {
-                    view.lines[i].offset -= num_bytes;
+            i32 line = wrapped_line_from_offset(byte_start, view.lines, view.caret.wrapped_line);
+            i64 start_offset = view.lines[line].offset;
+            for (i32 i = line+1; i < view.lines.count; i++) {
+                view.lines[i].offset -= num_bytes;
 
-                    if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
-                }
-
-                recalc_line_wrap(
-                    &view,
-                    &view.lines,
-                    prev_unwrapped_line(line, view.lines),
-                    next_unwrapped_line(line, view.lines),
-                    view.buffer);
+                if (view.lines[i].offset <= start_offset) array_remove(&view.lines, i--);
             }
 
-            ts_update_buffer(buffer, {
-                .start_byte = (u32)byte_start,
-                .old_end_byte = (u32)byte_end,
-                .new_end_byte = (u32)byte_start,
-            });
-        } break;
+            // TODO(jesper): this looks wrong if removed text contains one or more newlines
+            recalc_line_wrap(
+                &view,
+                &view.lines,
+                prev_unwrapped_line(line, view.lines),
+                next_unwrapped_line(line, view.lines),
+                view.buffer);
+        }
+
+        i32 line = line_from_offset(byte_start, buffer->line_offsets);
+        for (i32 i = line+1; i < buffer->line_offsets.count; i++) {
+            buffer->line_offsets[i] -= num_bytes;
+        }
+
+        // TODO(jesper): handle removal of newlines
+
+        ts_update_buffer(buffer, {
+            .start_byte = (u32)byte_start,
+            .old_end_byte = (u32)byte_end,
+            .new_end_byte = (u32)byte_start,
+        });
+    } break;
     }
 
 
@@ -2517,12 +2547,15 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
     i64 end_offset = offset;
     String nl = buffer_newline_str(buffer);
 
+    i32 newline_count = 0;
     i32 required_extra_space = 0;
+
     for (i32 i = 0; i < in_text.length; i++) {
         if (in_text[i] == '\r' || in_text[i] == '\n') {
             if (i < in_text.length-1 && in_text[i] == '\r' && in_text[i+1] == '\n') i++;
             if (i < in_text.length-1 && in_text[i] == '\n' && in_text[i+1] == '\r') i++;
             required_extra_space += nl.length;
+            newline_count++;
         } else {
             required_extra_space++;
         }
@@ -2549,39 +2582,47 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
 
     switch (buffer->type) {
     case BUFFER_FLAT: {
-            if (buffer->flat.size + text.length > buffer->flat.capacity) {
-                i64 new_capacity = buffer->flat.size + text.length;
-                buffer->flat.data = (char*)REALLOC(mem_dynamic, buffer->flat.data, buffer->flat.capacity, new_capacity);
-                buffer->flat.capacity = new_capacity;
+        if (buffer->flat.size + text.length > buffer->flat.capacity) {
+            i64 new_capacity = buffer->flat.size + text.length;
+            buffer->flat.data = (char*)REALLOC(mem_dynamic, buffer->flat.data, buffer->flat.capacity, new_capacity);
+            buffer->flat.capacity = new_capacity;
+        }
+
+        memmove(buffer->flat.data+offset+text.length, buffer->flat.data+offset, buffer->flat.size-offset);
+        memcpy(buffer->flat.data+offset, text.data, text.length);
+        buffer->flat.size += required_extra_space;
+        end_offset += required_extra_space;
+
+        for (View &view : app.views) {
+            if (view.buffer != buffer_id) continue;
+
+            i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
+            for (i32 i = line+1; i < view.lines.count; i++) {
+                view.lines[i].offset += required_extra_space;
             }
 
-            memmove(buffer->flat.data+offset+text.length, buffer->flat.data+offset, buffer->flat.size-offset);
-            memcpy(buffer->flat.data+offset, text.data, text.length);
-            buffer->flat.size += required_extra_space;
-            end_offset += required_extra_space;
+            // TODO(jesper): this looks wrong if the inserted text contains 1 or more newlines
+            recalc_line_wrap(
+                &view,
+                &view.lines,
+                calc_unwrapped_line(line, view.lines),
+                next_unwrapped_line(line, view.lines),
+                view.buffer);
+        }
 
-            for (View &view : app.views) {
-                if (view.buffer != buffer_id) continue;
+        i32 line = line_from_offset(offset, buffer->line_offsets);
+        for (i32 i = line+1; i < buffer->line_offsets.count; i++) {
+            buffer->line_offsets[i] += required_extra_space;
+        }
 
-                i32 line = wrapped_line_from_offset(offset, view.lines, view.caret.wrapped_line);
-                for (i32 i = line+1; i < view.lines.count; i++) {
-                    view.lines[i].offset += required_extra_space;
-                }
+        // TODO(jesper): handle newlines
 
-                recalc_line_wrap(
-                    &view,
-                    &view.lines,
-                    calc_unwrapped_line(line, view.lines),
-                    next_unwrapped_line(line, view.lines),
-                    view.buffer);
-            }
-
-            ts_update_buffer(buffer, {
-                .start_byte = (u32)offset,
-                .old_end_byte = (u32)offset,
-                .new_end_byte = (u32)(offset+required_extra_space),
-            });
-        } break;
+        ts_update_buffer(buffer, {
+            .start_byte = (u32)offset,
+            .old_end_byte = (u32)offset,
+            .new_end_byte = (u32)(offset+required_extra_space),
+        });
+    } break;
     }
 
     if (record_history) {
@@ -2673,7 +2714,7 @@ void buffer_redo(BufferId buffer_id)
     }
 }
 
-bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+bool line_is_empty_or_whitespace(BufferId buffer_id, Array<ViewLine> lines, i32 wrapped_line)
 {
     Buffer *buffer = get_buffer(buffer_id);
     ASSERT(buffer);
@@ -2690,14 +2731,14 @@ bool line_is_empty_or_whitespace(BufferId buffer_id, Array<BufferLine> lines, i3
     return true;
 }
 
-i32 seek_non_empty_line_back(BufferId buffer_id, Array<BufferLine> lines, i32 start_line)
+i32 seek_non_empty_line_back(BufferId buffer_id, Array<ViewLine> lines, i32 start_line)
 {
     i32 line = start_line;
     while (line > 0 && (lines[line].wrapped || line_is_empty_or_whitespace(buffer_id, lines, line))) line--;
     return line;
 }
 
-i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<ViewLine> lines, i32 wrapped_line)
 {
     if (wrapped_line >= lines.count-1) return wrapped_line;
     bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
@@ -2713,7 +2754,7 @@ i32 buffer_seek_next_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32
     return MIN(line, lines.count-1);
 }
 
-i32 buffer_seek_prev_empty_line(BufferId buffer_id, Array<BufferLine> lines, i32 wrapped_line)
+i32 buffer_seek_prev_empty_line(BufferId buffer_id, Array<ViewLine> lines, i32 wrapped_line)
 {
     if (wrapped_line <= 1) return 0;
     bool had_non_empty = !line_is_empty_or_whitespace(buffer_id, lines, wrapped_line);
@@ -2782,7 +2823,7 @@ i64 buffer_seek_next_word(BufferId buffer_id, i64 byte_offset)
     return byte_offset;
 }
 
-i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<ViewLine> lines, i32 line)
 {
     if (line >= lines.count) return 0;
 
@@ -2805,7 +2846,7 @@ i64 buffer_seek_beginning_of_line(BufferId buffer_id, Array<BufferLine> lines, i
     return start;
 }
 
-i64 buffer_seek_end_of_line(BufferId buffer_id, Array<BufferLine> lines, i32 line)
+i64 buffer_seek_end_of_line(BufferId buffer_id, Array<ViewLine> lines, i32 line)
 {
     if (line >= lines.count) return 0;
 
@@ -2890,7 +2931,7 @@ i64 buffer_seek_prev_word(BufferId buffer_id, i64 byte_offset)
     return byte_offset;
 }
 
-String get_indent_for_line(BufferId buffer_id, Array<BufferLine> lines, i32 line, Allocator mem)
+String get_indent_for_line(BufferId buffer_id, Array<ViewLine> lines, i32 line, Allocator mem)
 {
     line = seek_non_empty_line_back(buffer_id, lines, line);
     i64 line_start = buffer_seek_beginning_of_line(buffer_id, lines, line);
@@ -2906,7 +2947,7 @@ bool app_needs_render()
     return false;
 }
 
-Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<BufferLine> lines)
+Caret recalculate_caret(Caret caret, BufferId buffer_id, Array<ViewLine> lines)
 {
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return caret;
