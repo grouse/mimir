@@ -1363,9 +1363,6 @@ void json_append(StringBuilder *sb, String key, LspClientCapabilities::General v
 {
     append_stringf(sb, "\"%.*s\": {", STRFMT(key));
     json_append(sb, "positionEncodings", value.position_encodings);
-    if (value.offset_encodings) {
-        append_string(sb, ","); json_append(sb, "offsetEncoding", value.offset_encodings);
-    }
     append_string(sb, "}");
 }
 
@@ -1685,12 +1682,14 @@ int app_main(Array<String> args)
             SArena mem = tl_scratch_arena();
             StringBuilder line{ .alloc = mem };
 
-            char buffer[128];
+
             while (true) {
+                char buffer[256];
+
                 if (int bytes = subprocess_read_stderr(&app.lsp.clangd.process, buffer, sizeof buffer)) {
-                    i32 start = 0;
-                    while (start < bytes) {
-                        i32 offset = start, newline = -1;
+                    for (i32 offset = 0, head = 0; offset < bytes; head = ++offset) {
+                        i32 newline = -1;
+
                         for (; offset < bytes && buffer[offset]; offset++) {
                             if (is_newline(buffer[offset])) {
                                 newline = offset;
@@ -1700,14 +1699,12 @@ int app_main(Array<String> args)
                             }
                         }
 
+                        append_string(&line, String{ buffer+head, newline >= 0 ? newline-head : offset-head });
                         if (newline == -1) break;
 
                         SArena scratch = tl_scratch_arena(mem);
-                        append_string(&line, String{ buffer+start, newline });
                         String msg = create_string(&line, scratch);
                         reset_string_builder(&line);
-
-                        start = offset+1;
 
                         if (msg.length > 0) {
                             char type = msg[0];
@@ -1734,8 +1731,6 @@ int app_main(Array<String> args)
                             }
                         }
                     }
-
-                    if (bytes-start > 0) append_string(&line, String{ buffer+start, bytes-start });
                 }
             }
 
