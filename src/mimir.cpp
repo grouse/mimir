@@ -1147,10 +1147,15 @@ void jsonrpc_cancel_request(JsonRpcConnection *rpc, i32 request)
 
 String jsonrpc_response(JsonRpcConnection *rpc, i32 request, Allocator mem)
 {
+    if (!rpc->process.alive) {
+        LOG_ERROR("invalid process");
+        return "";
+    }
+
     LOG_INFO("[jsonrpc] waiting for response(%d)...", request);
 
     std::unique_lock lk(rpc->response_m);
-    app.lsp.clangd.response_cv.wait(lk, [rpc, request]{
+    rpc->response_cv.wait(lk, [rpc, request]{
         for (auto &it : rpc->responses)
             if (it.id == request) return true;
         return false;
@@ -1422,6 +1427,7 @@ LspInitializeResult lsp_initialize(
     Allocator mem,
     LspClientCapabilities capabilities = {})
 {
+    if (!lsp->process.alive) return {};
     SArena scratch = tl_scratch_arena(mem);
 
     i32 process_id = current_process_id();
@@ -1443,6 +1449,7 @@ LspInitializeResult lsp_initialize(
 
 void lsp_initialized(LspConnection *lsp)
 {
+    if (!lsp->process.alive) return;
     jsonrpc_notify(lsp, "initialized");
 }
 
@@ -1453,6 +1460,7 @@ void lsp_publishDiagnostics(struct jsonrpc_request *req)
 
 void lsp_open(LspConnection *lsp, BufferId buffer_id, String language_id, String content) INTERNAL
 {
+    if (!lsp->process.alive) return;
     SArena scratch = tl_scratch_arena();
 
     Buffer *buffer = get_buffer(buffer_id);
