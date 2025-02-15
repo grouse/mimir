@@ -219,8 +219,10 @@ struct JsonRpcConnection {
 
 struct LspClientCapabilities {
     struct General {
-        const char** positionEncodings;
+        Array<String> position_encodings;
     } general;
+
+    Array<String> offset_encodings;
 };
 
 enum LspTextDocumentSyncKind {
@@ -1198,6 +1200,40 @@ bool json_parse(i32 *result, String key, String json, Allocator mem)
     return true;
 }
 
+bool json_parse(LspServerCapabilities *result, String key, String json, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    String object = json;
+
+    int type;
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            object.data, object.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ object.data+key_offset, key_length };
+        String value{ object.data+value_offset, value_length };
+
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
+
+        if (type == MJSON_TOK_STRING && key == "positionEncoding") {
+            if (value == "utf-8") result->position_encoding = LSP_UTF8;
+            else if (value == "utf-16") result->position_encoding = LSP_UTF16;
+            else LOG_ERROR("invalid position encoding from LSP initialization: '%.*s'", STRFMT(value));
+        } else if (type == MJSON_TOK_OBJECT && key == "textDocumentSync") {
+            json_parse(&result->textDocumentSync.openClose, "$.openClose", value, scratch);
+            json_parse((i32*)&result->textDocumentSync.change, "$.change", value, scratch);
+        } else {
+            LOG_INFO("[jsonrpc][LspServerCapabilities] unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
+        }
+    }
+
+    return true;
+}
 
 bool json_parse(LspInitializeResult *result, String key, String json, Allocator mem)
 {
@@ -1220,17 +1256,17 @@ bool json_parse(LspInitializeResult *result, String key, String json, Allocator 
         String key{ object.data+key_offset, key_length };
         String value{ object.data+value_offset, value_length };
 
-        if (key[0] == '"') key = slice(key, 1, key.length-1);
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
 
-        if (type == MJSON_TOK_STRING && key == "positionEncoding") {
+        if (type == MJSON_TOK_OBJECT && key == "capabilities") {
+            json_parse(&result->capabilities, "$.capabilities", value, scratch);
+        } else if (type == MJSON_TOK_STRING && key == "offsetEncoding") {
             if (value == "utf-8") result->capabilities.position_encoding = LSP_UTF8;
             else if (value == "utf-16") result->capabilities.position_encoding = LSP_UTF16;
-            else LOG_ERROR("invalid position encoding from LSP initialization: '%.*s'", STRFMT(value));
-        } else if (type == MJSON_TOK_OBJECT && key == "textDocumentSync") {
-            json_parse(&result->capabilities.textDocumentSync.openClose, "$.openClose", value, scratch);
-            json_parse((i32*)&result->capabilities.textDocumentSync.change, "$.change", value, scratch);
+            else LOG_ERROR("invalid offset encoding from LSP initialization: '%.*s'", STRFMT(value));
         } else {
-            LOG_INFO("unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
+            LOG_INFO("[jsonrpc][LspInitializeResult] unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
         }
     }
 
@@ -1244,12 +1280,7 @@ bool jsonrpc_response(JsonRpcConnection *rpc, i32 request, T *result, Allocator 
     String response = jsonrpc_response(rpc, request, scratch);
     if (!response.length) return false;
 
-    String s_result;
-    if (!mjson_find(response.data, response.length, "$.result", (const char**)&s_result.data, &s_result.length)) {
-        return false;
-    }
-
-    return json_parse(result, "$.capabilities", s_result, mem);
+    return json_parse(result, "$.result", response, mem);
 }
 
 
@@ -1316,10 +1347,25 @@ void json_append(StringBuilder *sb, String key, const char** values)
     append_string(sb, "]");
 }
 
+void json_append(StringBuilder *sb, String key, Array<String> values)
+{
+    if (!values.count) return;
+
+    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
+    for (i32 i = 0; i < values.count; i++) {
+        append_stringf(sb, "\"%.*s\"%s", STRFMT(values[i]), i+1 < values.count ? "," : "");
+    }
+
+    append_string(sb, "]");
+}
+
 void json_append(StringBuilder *sb, String key, LspClientCapabilities::General value)
 {
     append_stringf(sb, "\"%.*s\": {", STRFMT(key));
-    json_append(sb, "positionEncodings", value.positionEncodings);
+    json_append(sb, "positionEncodings", value.position_encodings);
+    if (value.offset_encodings) {
+        append_string(sb, ","); json_append(sb, "offsetEncoding", value.offset_encodings);
+    }
     append_string(sb, "}");
 }
 
@@ -1327,6 +1373,9 @@ void json_append(StringBuilder *sb, String key, LspClientCapabilities value)
 {
     append_stringf(sb, "\"%.*s\": {", STRFMT(key));
     json_append(sb, "general", value.general);
+    if (value.offset_encodings) {
+        append_string(sb, ","); json_append(sb, "offsetEncoding", value.offset_encodings);
+    }
     append_string(sb, "}");
 }
 
@@ -1694,13 +1743,17 @@ int app_main(Array<String> args)
         });
 
         LspClientCapabilities caps{};
-        static const char *encodings[] = { "utf-8", "utf-16", nullptr };
-        caps.general.positionEncodings = encodings;
+        static String encodings[] = { "utf-8", "utf-16" };
+        caps.general.position_encodings = { encodings, ARRAY_COUNT(encodings) };
+        caps.offset_encodings = { encodings, ARRAY_COUNT(encodings) };
 
         auto result = lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
         app.lsp.clangd.server_capabilities = result.capabilities;
-
         lsp_initialized(&app.lsp.clangd);
+
+        if (app.lsp.clangd.server_capabilities.position_encoding != LSP_UTF8) {
+            LOG_ERROR("[lsp] unsupported position encoding");
+        }
     }
 
 
