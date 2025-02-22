@@ -1551,18 +1551,28 @@ void lsp_notify_change(
 {
     SArena scratch = tl_scratch_arena();
 
+    LspTextDocumentItem *document = map_find(&lsp->documents, buffer_id);
+    if (!document) {
+        LOG_ERROR("[lsp] no document open for buffer [%d]", buffer_id.index);
+        return;
+    }
+
+    LspVersionedTextDocumentIdentifier document_id{ document->uri, document->version };
+
+    LspTextDocumentChangeEvent changes{
+        .range = lsp_range_from_byte_offsets(lsp, buffer_id, byte_start, byte_end),
+        .text = text
+    };
+
     StringBuilder params{ .alloc = scratch };
-
-    LspVersionedTextDocumentIdentifier document{};
-    Array<LspRange> ranges{};
-    String text{};
-
-    json_append(&params, "textDocument", document); append_string(&params, ",");
-    json_append(&params, "contentChanges", ranges); append_string(&params, ",");
-    json_append(&params, "text", text);
+    json_append(&params, "textDocument", document_id); append_string(&params, ",");
+    json_append(&params, "contentChanges", Array<LspTextDocumentChangeEvent>{ &changes, 1 });
 
     String sparams = create_string(&params, scratch);
-    jsonrpc_notify(rpc, "textDocument/didChange", sparams);
+    if (true) {
+        jsonrpc_notify(lsp, "textDocument/didChange", sparams);
+        document->version++;
+    }
 }
 
 
@@ -2397,6 +2407,14 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
 
+    switch (buffer->language) {
+    case LANGUAGE_CPP:
+        lsp_notify_change(&app.lsp.clangd, buffer->id, byte_start, byte_end, "");
+        break;
+    default:
+        break;
+    }
+
     switch (buffer->type) {
     case BUFFER_FLAT: {
         byte_start = MAX(0, byte_start);
@@ -2691,6 +2709,15 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
                 text[s++] = in_text[i];
             }
         }
+    }
+
+
+    switch (buffer->language) {
+    case LANGUAGE_CPP:
+        lsp_notify_change(&app.lsp.clangd, buffer->id, offset, offset+required_extra_space, text);
+        break;
+    default:
+        break;
     }
 
     switch (buffer->type) {
