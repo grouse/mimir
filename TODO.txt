@@ -1,6 +1,5 @@
 # TODO
-- [ ] [lsp] positionEncoding conversion utf8 <-> utf16
-- [ ] [lsp] textDocument/willSave
+- [ ] [lsp] utf16 position encoding support
 - [ ] [lsp] textDocument/didSave
 - [ ] [lsp] textDocument/didClose
 - [ ] [lsp] textDocument/publishDiagnostics
@@ -32,6 +31,8 @@
 # DOING
 
 # DONE
+- [x] [lsp] textDocument/willSave
+    - stub implementation as clangd does not require it and I want a proper test case
 - [x] [lsp] textDocument/didChange
 - [x] [clangd] negotiate utf8 offsetEncoding
     - extension added to clangd before positionEncoding became a thing

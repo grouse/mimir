@@ -308,6 +308,12 @@ struct LspTextDocumentContentChangeEvent {
     String text;
 };
 
+enum LspTextDocumentSaveReason {
+    LSP_SAVE_REASON_MANUAL      = 1,
+    LSP_SAVE_REASON_AFTER_DELAY = 2,
+    LSP_SAVE_REASON_FOCUS_OUT   = 3,
+};
+
 struct Application {
     AppWindow *wnd;
     FontAtlas mono;
@@ -977,8 +983,7 @@ BufferId create_buffer(String file)
 
     switch (buffer.language) {
     case LANGUAGE_CPP:
-        if (app.lsp.clangd.server_capabilities.textDocumentSync.openClose)
-            lsp_open(&app.lsp.clangd, buffer.id, "cpp", String{ buffer.flat.data, (i32)buffer.flat.size });
+        lsp_open(&app.lsp.clangd, buffer.id, "cpp", String{ buffer.flat.data, (i32)buffer.flat.size });
         break;
     default:
         LOG_INFO("unsupported lsp for file type: %d", buffer.language);
@@ -1580,7 +1585,9 @@ void lsp_publishDiagnostics(struct jsonrpc_request *req)
 
 void lsp_open(LspConnection *lsp, BufferId buffer_id, String language_id, String content) INTERNAL
 {
+    if (!lsp->server_capabilities.text_document_sync.open_close) return;
     if (!lsp->process.alive) return;
+
     SArena scratch = tl_scratch_arena();
 
     Buffer *buffer = get_buffer(buffer_id);
@@ -1689,6 +1696,17 @@ void lsp_notify_change(
         jsonrpc_notify(lsp, "textDocument/didChange", sparams);
         document->version++;
     }
+}
+
+void lsp_notify_will_save(
+    LspConnection *lsp,
+    BufferId buffer_id,
+    LspTextDocumentSaveReason reason)
+{
+    if (!lsp->server_capabilities.text_document_sync.will_save) return;
+    if (!lsp->process.alive) return;
+
+    LOG_ERROR("[lsp] unimplemented notification: textDocument/willSave");
 }
 
 
@@ -2756,6 +2774,12 @@ void buffer_save(BufferId buffer_id)
     if (!buffer) return;
 
     if (buffer->saved_at == buffer->history_index) return;
+
+    switch (buffer->language) {
+    case LANGUAGE_CPP:
+        lsp_notify_will_save(&app.lsp.clangd, buffer_id, LSP_SAVE_REASON_MANUAL);
+        break;
+    }
 
     FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
     switch (buffer->type) {
