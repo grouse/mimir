@@ -1302,11 +1302,11 @@ void json_append(StringBuilder *sb, String key, T value)
 }
 
 template<typename T>
-void json_append(StringBuilder *sb, String key, Array<T> values)
+void json_append(StringBuilder *sb, Array<T> values)
 {
-    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
+    append_string(sb, "[");
     for (auto it : iterator(values)) {
-        json_append(sb, *it);
+        json_append(sb, it.elem());
         if (it.index+1 < values.count) append_string(sb, ",");
     }
 
@@ -1316,6 +1316,7 @@ void json_append(StringBuilder *sb, String key, Array<T> values)
 void json_append(StringBuilder *sb, i32 value) { append_stringf(sb, "%d", value); }
 void json_append(StringBuilder *sb, u32 value) { append_stringf(sb, "%u", value); }
 void json_append(StringBuilder *sb, f32 value) { append_stringf(sb, "%f", value); }
+void json_append(StringBuilder *sb, bool value) { append_string(sb, value ? string("true") : string("false")); }
 
 void json_append(StringBuilder *sb, String value)
 {
@@ -1346,7 +1347,7 @@ void json_append(StringBuilder *sb, String value)
         }
     }
 
-    if (String rem = slice(value, last_write, value.length); rem.length > 0) {
+    if (String rem = slice(value, last_write, value.length)) {
         append_string(sb, rem);
     }
 
