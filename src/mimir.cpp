@@ -1181,6 +1181,19 @@ String jsonrpc_response(JsonRpcConnection *rpc, i32 request, Allocator mem)
     return {};
 }
 
+bool json_parse(bool *result, int token, String json, Allocator mem)
+{
+  if (token== MJSON_TOK_TRUE) *result = true;
+  if (token == MJSON_TOK_FALSE) *result = false;
+  return token == MJSON_TOK_TRUE || token == MJSON_TOK_FALSE ? true : false;
+}
+
+bool json_parse(i32 *result, int token, String json, Allocator mem)
+{
+    if (token != MJSON_TOK_NUMBER) return false;
+    return i32_from_string(json, result);
+}
+
 bool json_parse(bool *result, String key, String json, Allocator mem)
 {
     SArena scratch = tl_scratch_arena(mem);
