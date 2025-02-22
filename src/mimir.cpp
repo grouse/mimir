@@ -278,6 +278,11 @@ struct LspRange {
     LspPosition start, end;
 };
 
+struct LspTextDocumentChangeEvent {
+    LspRange range;
+    String text;
+};
+
 struct LspConnection : JsonRpcConnection {
     LspServerCapabilities server_capabilities;
     DynamicMap<BufferId, LspTextDocumentItem> documents;
@@ -1289,24 +1294,32 @@ bool jsonrpc_response(JsonRpcConnection *rpc, i32 request, T *result, Allocator 
 }
 
 
-void json_append(StringBuilder *sb, String key, i32 value)
+template<typename T>
+void json_append(StringBuilder *sb, String key, T value)
 {
-    append_stringf(sb, "\"%.*s\": %d", STRFMT(key), value);
+    append_stringf(sb, "\"%.*s\": ", STRFMT(key));
+    json_append(sb, value);
 }
 
-void json_append(StringBuilder *sb, String key, u32 value)
+template<typename T>
+void json_append(StringBuilder *sb, String key, Array<T> values)
 {
-    append_stringf(sb, "\"%.*s\": %u", STRFMT(key), value);
+    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
+    for (auto it : iterator(values)) {
+        json_append(sb, *it);
+        if (it.index+1 < values.count) append_string(sb, ",");
+    }
+
+    append_string(sb, "]");
 }
 
-void json_append(StringBuilder *sb, String key, f32 value)
-{
-    append_stringf(sb, "\"%.*s\": %f", STRFMT(key), value);
-}
+void json_append(StringBuilder *sb, i32 value) { append_stringf(sb, "%d", value); }
+void json_append(StringBuilder *sb, u32 value) { append_stringf(sb, "%u", value); }
+void json_append(StringBuilder *sb, f32 value) { append_stringf(sb, "%f", value); }
 
-void json_append(StringBuilder *sb, String key, String value)
+void json_append(StringBuilder *sb, String value)
 {
-    append_stringf(sb, "\"%.*s\": \"", STRFMT(key));
+    append_string(sb, "\"");
 
     i32 last_write = 0;
     for (i32 i = 0; i < value.length; i++) {
@@ -1352,28 +1365,16 @@ void json_append(StringBuilder *sb, String key, const char** values)
     append_string(sb, "]");
 }
 
-void json_append(StringBuilder *sb, String key, Array<String> values)
+void json_append(StringBuilder *sb, LspClientCapabilities::General value)
 {
-    if (!values.count) return;
-
-    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
-    for (i32 i = 0; i < values.count; i++) {
-        append_stringf(sb, "\"%.*s\"%s", STRFMT(values[i]), i+1 < values.count ? "," : "");
-    }
-
-    append_string(sb, "]");
-}
-
-void json_append(StringBuilder *sb, String key, LspClientCapabilities::General value)
-{
-    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    append_string(sb, "{");
     json_append(sb, "positionEncodings", value.position_encodings);
     append_string(sb, "}");
 }
 
-void json_append(StringBuilder *sb, String key, LspClientCapabilities value)
+void json_append(StringBuilder *sb, LspClientCapabilities value)
 {
-    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    append_string(sb, "{");
     json_append(sb, "general", value.general);
     if (value.offset_encodings) {
         append_string(sb, ","); json_append(sb, "offsetEncoding", value.offset_encodings);
@@ -1381,9 +1382,9 @@ void json_append(StringBuilder *sb, String key, LspClientCapabilities value)
     append_string(sb, "}");
 }
 
-void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
+void json_append(StringBuilder *sb, LspTextDocumentItem value)
 {
-    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    append_string(sb, "{");
     json_append(sb, "uri", value.uri); append_string(sb, ",");
     json_append(sb, "languageId", value.languageId); append_string(sb, ",");
     json_append(sb, "version", value.version); append_string(sb, ",");
@@ -1391,35 +1392,38 @@ void json_append(StringBuilder *sb, String key, LspTextDocumentItem value)
     append_string(sb, "}");
 }
 
-void json_append(StringBuilder *sb, String key, LspVersionedTextDocumentIdentifier value)
+void json_append(StringBuilder *sb, LspVersionedTextDocumentIdentifier value)
 {
-    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    append_string(sb, "{");
     json_append(sb, "uri", value.uri); append_string(sb, ",");
     json_append(sb, "version", value.version);
     append_string(sb, "}");
 }
 
-void json_append(StringBuilder *sb, String key, LspPosition value)
+void json_append(StringBuilder *sb, LspPosition value)
 {
-    append_stringf(sb, "\"%.*s\": {", STRFMT(key));
+    append_string(sb, "{");
     json_append(sb, "line", value.line); append_string(sb, ",");
     json_append(sb, "character", value.character);
     append_string(sb, "}");
 }
 
-void json_append(StringBuilder *sb, String key, Array<LspRange> value)
+void json_append(StringBuilder *sb, LspRange value)
 {
-    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
-    for (auto it : iterator(value)) {
-        append_string(sb, "{");
-        json_append(sb, "start", it->start); append_string(sb, ",");
-        json_append(sb, "end", it->end);
-
-        if (it.index == value.count-1) append_string(sb, "}");
-        else append_string(sb, "},");
-    }
-    append_string(sb, "]");
+    append_string(sb, "{");
+    json_append(sb, "start", value.start); append_string(sb, ",");
+    json_append(sb, "end", value.end);
+    append_string(sb, "}");
 }
+
+void json_append(StringBuilder *sb, LspTextDocumentChangeEvent value)
+{
+    append_string(sb, "{");
+    json_append(sb, "range", value.range); append_string(sb, ",");
+    json_append(sb, "text", value.text);
+    append_string(sb, "}");
+}
+
 
 LspInitializeResult lsp_initialize(
     LspConnection *lsp,
