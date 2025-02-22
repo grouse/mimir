@@ -222,6 +222,12 @@ struct LspClientCapabilities {
         Array<String> position_encodings;
     } general;
 
+    struct TextDocument {
+        struct Synchronization {
+            bool will_save = true;
+        } synchronization;
+    } text_document;
+
     Array<String> offset_encodings;
 };
 
@@ -237,13 +243,22 @@ enum LspEncoding {
 };
 
 struct LspTextDocumentSyncOptions {
-    bool openClose;
+    bool open_close;
+    bool save;
+    bool will_save;
     LspTextDocumentSyncKind change;
 };
 
 struct LspServerCapabilities {
     LspEncoding position_encoding;
-    LspTextDocumentSyncOptions textDocumentSync;
+    LspTextDocumentSyncOptions text_document_sync;
+    bool definition_provider;
+    bool declaration_provider;
+    bool document_symbol_provider;
+    bool hover_provider;
+    bool implementation_provider;
+    bool references_provider;
+    bool type_definition_provider;
 };
 
 struct LspInitializeResult {
@@ -1223,6 +1238,56 @@ bool json_parse(i32 *result, String key, String json, Allocator mem)
     return true;
 }
 
+bool json_parse(LspTextDocumentSyncOptions *result, String json, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    String object = json;
+
+    int type;
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            object.data, object.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ object.data+key_offset, key_length };
+        String value{ object.data+value_offset, value_length };
+
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
+
+        if (key == "openClose") {
+            if (!json_parse(&result->open_close, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspTextDocumentSyncOptions] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "save") {
+            if (!json_parse(&result->save, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspTextDocumentSyncOptions] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "willSave") {
+            if (!json_parse(&result->will_save, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspTextDocumentSyncOptions] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "change") {
+            if (i32 ival = -1; json_parse(&ival, type, value, scratch)) {
+                result->change = LspTextDocumentSyncKind(ival);
+            } else {
+                LOG_ERROR("[jsonrpc][lsp][LspTextDocumentSyncOptions] unable to parse enum field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else {
+            LOG_INFO("[jsonrpc][LspTextDocumentSyncOptions] unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
+        }
+    }
+
+    return true;
+}
+
 bool json_parse(LspServerCapabilities *result, String key, String json, Allocator mem)
 {
     SArena scratch = tl_scratch_arena(mem);
@@ -1243,13 +1308,47 @@ bool json_parse(LspServerCapabilities *result, String key, String json, Allocato
         if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
         if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
 
-        if (type == MJSON_TOK_STRING && key == "positionEncoding") {
+        if (key == "positionEncoding" && type == MJSON_TOK_STRING) {
             if (value == "utf-8") result->position_encoding = LSP_UTF8;
             else if (value == "utf-16") result->position_encoding = LSP_UTF16;
             else LOG_ERROR("invalid position encoding from LSP initialization: '%.*s'", STRFMT(value));
-        } else if (type == MJSON_TOK_OBJECT && key == "textDocumentSync") {
-            json_parse(&result->textDocumentSync.openClose, "$.openClose", value, scratch);
-            json_parse((i32*)&result->textDocumentSync.change, "$.change", value, scratch);
+        } else if (key == "definitionProvider") {
+            if (!json_parse(&result->definition_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "declarationProvider") {
+            if (!json_parse(&result->declaration_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "documentSymbolProvider") {
+            if (!json_parse(&result->document_symbol_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "hoverProvider") {
+            if (!json_parse(&result->hover_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "implementationProvider") {
+            if (!json_parse(&result->implementation_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "referencesProvider") {
+            if (!json_parse(&result->references_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "typeDefintionProvider") {
+            if (!json_parse(&result->type_definition_provider, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspSserverCapabilities] unable to parse bool field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "textDocumentSync" && type == MJSON_TOK_OBJECT) {
+            json_parse(&result->text_document_sync, value, scratch);
         } else {
             LOG_INFO("[jsonrpc][LspServerCapabilities] unhandled json key-value: '%.*s' : '%.*s' [%d]", STRFMT(key), STRFMT(value), type);
         }
@@ -1367,18 +1466,6 @@ void json_append(StringBuilder *sb, String value)
     append_string(sb, "\"");
 }
 
-void json_append(StringBuilder *sb, String key, const char** values)
-{
-    if (!values) return;
-    if (!values[0]) return;
-
-    append_stringf(sb, "\"%.*s\": [", STRFMT(key));
-    for (const char **p = &values[0], **n = &values[1]; *p; p = n++) {
-        append_stringf(sb, "\"%s\"%s", *p, *n ? "," : "");
-    }
-    append_string(sb, "]");
-}
-
 void json_append(StringBuilder *sb, LspClientCapabilities::General value)
 {
     append_string(sb, "{");
@@ -1386,10 +1473,25 @@ void json_append(StringBuilder *sb, LspClientCapabilities::General value)
     append_string(sb, "}");
 }
 
+void json_append(StringBuilder *sb, LspClientCapabilities::TextDocument value)
+{
+    append_string(sb, "{");
+    json_append(sb, "synchronization", value.synchronization);
+    append_string(sb, "}");
+}
+
+void json_append(StringBuilder *sb, LspClientCapabilities::TextDocument::Synchronization value)
+{
+    append_string(sb, "{");
+    json_append(sb, "willSave", value.will_save);
+    append_string(sb, "}");
+}
+
 void json_append(StringBuilder *sb, LspClientCapabilities value)
 {
     append_string(sb, "{");
     json_append(sb, "general", value.general);
+    append_string(sb, ","); json_append(sb, "textDocument", value.text_document);
     if (value.offset_encodings) {
         append_string(sb, ","); json_append(sb, "offsetEncoding", value.offset_encodings);
     }
