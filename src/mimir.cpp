@@ -1494,7 +1494,60 @@ void lsp_open(LspConnection *lsp, BufferId buffer_id, String language_id, String
     jsonrpc_notify(lsp, "textDocument/didOpen", sparams);
 }
 
-void lsp_did_change(JsonRpcConnection *rpc)
+LspRange lsp_range_from_byte_offsets(LspConnection *lsp, BufferId buffer_id, i32 offset_start, i32 offset_end)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) {
+        LOG_ERROR("unable to find buffer with buffer id [%d]", buffer_id.index);
+        return {};
+    }
+
+    i32 start_line = line_from_offset(offset_start, buffer->line_offsets);
+    i32 end_line = line_from_offset(offset_end ,buffer->line_offsets, start_line);
+
+    i64 start_line_start_offset = buffer->line_offsets[start_line];
+    i64 start_line_end_offset = start_line+1 < buffer->line_offsets.count
+        ? buffer->line_offsets[start_line+1]
+        : *array_tail(buffer->line_offsets);
+
+    i64 end_line_start_offset = buffer->line_offsets[end_line];
+    i64 end_line_end_offset = end_line+1 < buffer->line_offsets.count
+        ? buffer->line_offsets[end_line+1]
+        : *array_tail(buffer->line_offsets);
+
+    LspRange range{};
+    range.start.line = start_line;
+    range.end.line = end_line;
+
+    switch (lsp->server_capabilities.position_encoding) {
+    case LSP_UTF8:
+        for (i32 i = 0; i+start_line_start_offset < start_line_end_offset; i++) {
+            if (buffer->line_offsets[start_line] + i >= offset_start) {
+                range.start.character = i;
+                break;
+            }
+        }
+
+        for (i32 i = 0; i+end_line_start_offset < end_line_end_offset; i++) {
+            if (buffer->line_offsets[end_line] + i >= offset_end) {
+                range.end.character = i;
+                break;
+            }
+        }
+        break;
+    case LSP_UTF16:
+        PANIC("[lsp] unimplemented path: UTF16 position encoding");
+        break;
+    }
+
+    return range;
+}
+
+void lsp_notify_change(
+    LspConnection *lsp,
+    BufferId buffer_id,
+    i32 byte_start, i32 byte_end,
+    String text)
 {
     SArena scratch = tl_scratch_arena();
 
