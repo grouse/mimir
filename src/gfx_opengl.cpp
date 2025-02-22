@@ -1,7 +1,7 @@
 #include "gfx_opengl.h"
 #include "generated/gfx_opengl.h"
 
-#include "assets.h"
+#include "core/assets.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ASSERT(x) ASSERT(x)

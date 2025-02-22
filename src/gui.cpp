@@ -3,8 +3,8 @@
 #include "generated/internal/gui.h"
 #include "font.h"
 #include "gfx_opengl.h"
-#include "assets.h"
 
+#include "core/assets.h"
 #include "core/core.h"
 #include "core/file.h"
 #include "core/array.h"

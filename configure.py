@@ -143,6 +143,7 @@ meta(core, "thread.cpp")
 meta(core, "process.cpp")
 meta(core, "core.cpp")
 meta(core, "file.cpp")
+meta(core, "assets.cpp")
 
 cxx(core, "core.cpp")
 cxx(core, "memory.cpp")
@@ -154,6 +155,7 @@ cxx(core, "lexer.cpp")
 cxx(core, "window.cpp")
 cxx(core, "maths.cpp")
 cxx(core, "process.cpp")
+cxx(core, "assets.cpp")
 
 
 ### mimir
@@ -172,13 +174,11 @@ if host_os == "win32": define(mimir, "_CRT_SECURE_NO_WARNINGS", public=True);
 include_path(mimir, ["$root/src", "$root", "$root/external", "$builddir"], public = True)
 
 cxx(mimir, "mimir.cpp")
-cxx(mimir, "assets.cpp")
 cxx(mimir, "font.cpp")
 
 meta(mimir, "mimir.cpp")
 meta(mimir, "gui.cpp")
 meta(mimir, "font.cpp")
-meta(mimir, "assets.cpp")
 
 if args.render == "opengl":
     gl_defines = define(mimir, "GFX_OPENGL")

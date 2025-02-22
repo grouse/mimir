@@ -4,7 +4,7 @@
 #include "core/platform.h"
 #include "core/maths.h"
 #include "core/file.h"
-#include "assets.h"
+#include "core/assets.h"
 #include "gfx_opengl.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION

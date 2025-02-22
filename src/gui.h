@@ -5,9 +5,10 @@
 #include "core/array.h"
 #include "core/string.h"
 #include "core/window.h"
-#include "assets.h"
-#include "font.h"
+#include "core/assets.h"
 #include "core/core.h"
+
+#include "font.h"
 
 #include <initializer_list>
 
