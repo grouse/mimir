@@ -1827,7 +1827,7 @@ int app_main(Array<String> args)
         });
 
         LspClientCapabilities caps{};
-        static String encodings[] = { "utf-8", "utf-16" };
+        static String encodings[] = { "utf-8" };
         caps.general.position_encodings = { encodings, ARRAY_COUNT(encodings) };
         caps.offset_encodings = { encodings, ARRAY_COUNT(encodings) };
 
