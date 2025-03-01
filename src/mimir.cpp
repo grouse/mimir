@@ -36,6 +36,8 @@ enum {
 
     FUZZY_FIND_FILE,
 
+    GOTO_DEFINITION,
+
     COPY_RANGE,
     CUT_RANGE,
     DELETE_RANGE,
@@ -291,6 +293,11 @@ struct LspPosition {
 
 struct LspRange {
     LspPosition start, end;
+};
+
+struct LspLocation {
+    String document_uri;
+    LspRange range;
 };
 
 struct LspTextDocumentChangeEvent {
@@ -1511,6 +1518,13 @@ void json_append(StringBuilder *sb, LspVersionedTextDocumentIdentifier value)
     append_string(sb, "}");
 }
 
+void json_append(StringBuilder *sb, LspTextDocumentIdentifier value)
+{
+    append_string(sb, "{");
+    json_append(sb, "uri", value.uri);
+    append_string(sb, "}");
+}
+
 void json_append(StringBuilder *sb, LspPosition value)
 {
     append_string(sb, "{");
@@ -1656,6 +1670,44 @@ LspRange lsp_range_from_byte_offsets(LspConnection *lsp, BufferId buffer_id, i32
     return range;
 }
 
+LspPosition lsp_position_from_byte_offset(LspConnection *lsp, BufferId buffer_id, i32 offset)
+{
+    Buffer *buffer = get_buffer(buffer_id);
+    if (!buffer) {
+        LOG_ERROR("unable to find buffer with buffer id [%d]", buffer_id.index);
+        return {};
+    }
+
+    i32 line = line_from_offset(offset, buffer->line_offsets);
+    if (line < 0) {
+        LOG_ERROR("unable to get line offset from buffer byte offset");
+        return {};
+    }
+
+    i64 start_offset = buffer->line_offsets[line];
+    i64 end_offset = line+1 < buffer->line_offsets.count
+        ? buffer->line_offsets[line+1]
+        : *array_tail(buffer->line_offsets);
+
+    LspPosition position{ .line = u32(line) };
+
+    switch (lsp->server_capabilities.position_encoding) {
+    case LSP_UTF8:
+        for (i32 i = 0; i+start_offset < end_offset; i++) {
+            position.character = i;
+            if (buffer->line_offsets[line] + i >= offset) {
+                break;
+            }
+        }
+        break;
+    case LSP_UTF16:
+        PANIC("[lsp] unimplemented path: UTF16 position encoding");
+        break;
+    }
+
+    return position;
+}
+
 void lsp_notify_change(
     LspConnection *lsp,
     BufferId buffer_id,
@@ -1720,6 +1772,39 @@ void lsp_notify_did_save(
     jsonrpc_notify(lsp, "textDocument/didSave", create_string(&params, scratch));
 }
 
+Array<LspLocation> lsp_request_definition(
+    LspConnection *lsp,
+    BufferId buffer_id,
+    i32 byte_offset,
+    Allocator mem) EXPORT
+{
+    if (!lsp->server_capabilities.definition_provider) return {};
+    if (!lsp->process.alive) return {};
+
+    SArena scratch = tl_scratch_arena(mem);
+    DynamicArray<LspLocation> locations{ .alloc = mem };
+
+    LspTextDocumentItem *document = map_find(&lsp->documents, buffer_id);
+    if (!document) {
+        LOG_ERROR("[lsp] no document open for buffer [%d]", buffer_id.index);
+        return {};
+    }
+
+    LspTextDocumentIdentifier document_id { document->uri };
+    LspPosition position = lsp_position_from_byte_offset(lsp, buffer_id, byte_offset);
+
+    StringBuilder params{ .alloc = scratch };
+    json_append(&params, "textDocument", document_id); append_string(&params, ",");
+    json_append(&params, "position", position);
+    // TODO(jesper): work done token
+    // TODO(jesper): partiaul result token
+
+    i32 request = jsonrpc_request(lsp, "textDocument/definition", create_string(&params, scratch));
+    String response = jsonrpc_response(lsp, request, scratch);
+    return locations;
+}
+
+
 
 int app_main(Array<String> args)
 {
@@ -1771,9 +1856,9 @@ int app_main(Array<String> args)
         { REDO,   IKEY(KC_R) },
         { SAVE,   IKEY(KC_S, MF_CTRL) },
 
-        //{ GOTO_DEF, { InputKey{ KC_G }, InputKey{ KC_D } }}
-
         { FUZZY_FIND_FILE, IKEY(KC_O, MF_CTRL ) },
+
+        { GOTO_DEFINITION, IKEY(KC_G) }, //ICHORD(IKEY(KC_G), IKEY(KC_D)) },
 
         { PASTE,        IKEY(KC_P) },
         { COPY_RANGE,   IKEY(KC_Y) },
@@ -3832,6 +3917,17 @@ void app_gather_input(AppWindow *wnd) INTERNAL
                 view->caret = recalculate_caret(view->caret, view->buffer, view->lines);
                 view->mark = view->caret;
                 move_view_to_caret(view);
+            }
+        }
+    }
+
+    if (get_input_edge(GOTO_DEFINITION, app.input.edit)) {
+        Buffer *buffer = get_buffer(view->buffer);
+        if (buffer) {
+            Array<LspLocation> locations = lsp_request_definition(&app.lsp[buffer->language], view->buffer, view->caret.byte_offset, scratch);
+            if (locations.count >= 1) {
+                if (locations.count > 1) LOG_ERROR("[lsp] handle multiple definition results");
+
             }
         }
     }

@@ -16,9 +16,6 @@
 - [ ] [history] memory allocator/memory layout improvements
 - [ ] serialise navigation/jump history
 - [ ] [lsp] add a memory arena/allocator per lsp connection for fast and easy memory management of connections as they close and open
-- [ ] [lsp] verify/handle LSP text/position encoding handling when sending text across
-    - does the text encoding in didOpen depend on the agreed upon position encoding?
-    - does the text encoding in didChange depend on the agreed upon position encoding?
 - [ ] [memory] arena/allocator per buffer for better and easier management of per buffer memory (line offsets, history, syntax trees, etc)
 - [ ] prompt to convert buffers with mixed newline character modes
 - [ ] handle buffer line offsets updating when newlines are inserted or removed in buffer_insert and buffer_remove
@@ -28,10 +25,17 @@
     - different buffers may belong to different workspaces
     - different workspaces may use different language servers for the same language
         - how true is this?
+- [ ] [lsp] add support for work done tokens
+- [ ] [lsp] add support for partial result tokens
+- [ ] [lsp] asynchronous requests
 
 # DOING
+- [ ] [lsp] textDocument/definition
 
 # DONE
+- [x] [lsp] verify/handle LSP text/position encoding handling when sending text across
+    - does the text encoding in didOpen depend on the agreed upon position encoding? yes
+    - does the text encoding in didChange depend on the agreed upon position encoding? yes
 - [x] [lsp] the lsp connections needs to be per language so I can access it like app.lsp[buffer->language]
     - can we share a LSP connection across several languages if they use the same LSP server?
 - [x] [lsp] textDocument/didSave
