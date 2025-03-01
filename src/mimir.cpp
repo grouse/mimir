@@ -347,9 +347,7 @@ struct Application {
         InputMapId edit;
     } input;
 
-    struct {
-        LspConnection clangd;
-    } lsp;
+    LspConnection lsp[LANGUAGE_COUNT];
 
     EditMode mode, next_mode;
 
@@ -980,15 +978,7 @@ BufferId create_buffer(String file)
     LOG_INFO("created buffer: %.*s, newline mode: %.*s", STRFMT(file), STRFMT(newline_str));
 
     array_add(&buffers, buffer);
-
-    switch (buffer.language) {
-    case LANGUAGE_CPP:
-        lsp_open(&app.lsp.clangd, buffer.id, "cpp", String{ buffer.flat.data, (i32)buffer.flat.size });
-        break;
-    default:
-        LOG_INFO("unsupported lsp for file type: %d", buffer.language);
-        break;
-    }
+    lsp_open(&app.lsp[buffer.language], buffer.id, "cpp", String{ buffer.flat.data, (i32)buffer.flat.size });
 
     return buffer.id;
 }
@@ -1876,15 +1866,15 @@ int app_main(Array<String> args)
         subprocess_option_no_window |
         0;
 
-    if (subprocess_create(cmdline, flags, &app.lsp.clangd.process) == 0) {
-        jsonrpc_ctx_init(&app.lsp.clangd.ctx, jsonrpc_recv, &app.lsp.clangd);
-        jsonrpc_ctx_export(&app.lsp.clangd.ctx, "textDocument/publishDiagnostics", &lsp_publishDiagnostics);
+    if (subprocess_create(cmdline, flags, &app.lsp[LANGUAGE_CPP].process) == 0) {
+        jsonrpc_ctx_init(&app.lsp[LANGUAGE_CPP].ctx, jsonrpc_recv, &app.lsp[LANGUAGE_CPP]);
+        jsonrpc_ctx_export(&app.lsp[LANGUAGE_CPP].ctx, "textDocument/publishDiagnostics", &lsp_publishDiagnostics);
 
         SArena scratch = tl_scratch_arena();
 
         create_thread([](void*) -> int {
             SArena mem = tl_scratch_arena();
-            FILE *p_stdout = subprocess_stdout(&app.lsp.clangd.process);
+            FILE *p_stdout = subprocess_stdout(&app.lsp[LANGUAGE_CPP].process);
 
             while (true) {
                 String response;
@@ -1901,7 +1891,7 @@ int app_main(Array<String> args)
                 response.data = ALLOC_ARR(mem_dynamic, char, response.length);
                 fgets(response.data, response.length, p_stdout);
 
-                jsonrpc_ctx_process(&app.lsp.clangd.ctx, response.data, response.length, jsonrpc_send, nullptr, nullptr);
+                jsonrpc_ctx_process(&app.lsp[LANGUAGE_CPP].ctx, response.data, response.length, jsonrpc_send, nullptr, nullptr);
             }
 
             return 0;
@@ -1916,7 +1906,7 @@ int app_main(Array<String> args)
             while (true) {
                 char buffer[256];
 
-                if (int bytes = subprocess_read_stderr(&app.lsp.clangd.process, buffer, sizeof buffer)) {
+                if (int bytes = subprocess_read_stderr(&app.lsp[LANGUAGE_CPP].process, buffer, sizeof buffer)) {
                     for (i32 offset = 0, head = 0; offset < bytes; head = ++offset) {
                         i32 newline = -1;
 
@@ -1972,11 +1962,11 @@ int app_main(Array<String> args)
         caps.general.position_encodings = { encodings, ARRAY_COUNT(encodings) };
         caps.offset_encodings = { encodings, ARRAY_COUNT(encodings) };
 
-        auto result = lsp_initialize(&app.lsp.clangd, "D:/projects/mimir", scratch, caps);
-        app.lsp.clangd.server_capabilities = result.capabilities;
-        lsp_initialized(&app.lsp.clangd);
+        auto result = lsp_initialize(&app.lsp[LANGUAGE_CPP], "D:/projects/mimir", scratch, caps);
+        app.lsp[LANGUAGE_CPP].server_capabilities = result.capabilities;
+        lsp_initialized(&app.lsp[LANGUAGE_CPP]);
 
-        if (app.lsp.clangd.server_capabilities.position_encoding != LSP_UTF8) {
+        if (app.lsp[LANGUAGE_CPP].server_capabilities.position_encoding != LSP_UTF8) {
             LOG_ERROR("[lsp] unsupported position encoding");
         }
     }
@@ -2562,13 +2552,7 @@ bool buffer_remove(BufferId buffer_id, i64 byte_start, i64 byte_end, bool record
     Buffer *buffer = get_buffer(buffer_id);
     if (!buffer) return false;
 
-    switch (buffer->language) {
-    case LANGUAGE_CPP:
-        lsp_notify_change(&app.lsp.clangd, buffer->id, byte_start, byte_end, "");
-        break;
-    default:
-        break;
-    }
+    lsp_notify_change(&app.lsp[buffer->language], buffer->id, byte_start, byte_end, "");
 
     switch (buffer->type) {
     case BUFFER_FLAT: {
@@ -2796,11 +2780,7 @@ void buffer_save(BufferId buffer_id)
 
     if (buffer->saved_at == buffer->history_index) return;
 
-    switch (buffer->language) {
-    case LANGUAGE_CPP:
-        lsp_notify_will_save(&app.lsp.clangd, buffer_id, LSP_SAVE_REASON_MANUAL);
-        break;
-    }
+    lsp_notify_will_save(&app.lsp[buffer->language], buffer_id, LSP_SAVE_REASON_MANUAL);
 
     FileHandle f = open_file(buffer->file_path, FILE_OPEN_TRUNCATE);
     switch (buffer->type) {
@@ -2811,12 +2791,7 @@ void buffer_save(BufferId buffer_id)
     close_file(f);
 
     buffer->saved_at = buffer->history_index;
-
-    switch (buffer->language) {
-    case LANGUAGE_CPP:
-        lsp_notify_did_save(&app.lsp.clangd, buffer_id);
-        break;
-    }
+    lsp_notify_did_save(&app.lsp[buffer->language], buffer_id);
 }
 
 bool buffer_unsaved_changes(BufferId buffer_id)
@@ -2878,14 +2853,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
         }
     }
 
-
-    switch (buffer->language) {
-    case LANGUAGE_CPP:
-        lsp_notify_change(&app.lsp.clangd, buffer->id, offset, offset, text);
-        break;
-    default:
-        break;
-    }
+    lsp_notify_change(&app.lsp[buffer->language], buffer->id, offset, offset, text);
 
     switch (buffer->type) {
     case BUFFER_FLAT: {

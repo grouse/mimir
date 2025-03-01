@@ -15,8 +15,6 @@
 - [ ] [history] serialise edit history
 - [ ] [history] memory allocator/memory layout improvements
 - [ ] serialise navigation/jump history
-- [ ] [lsp] the lsp connections needs to be per language so I can access it like app.lsp[buffer->language]
-    - can we share a LSP connection across several languages if they use the same LSP server?
 - [ ] [lsp] add a memory arena/allocator per lsp connection for fast and easy memory management of connections as they close and open
 - [ ] [lsp] verify/handle LSP text/position encoding handling when sending text across
     - does the text encoding in didOpen depend on the agreed upon position encoding?
@@ -26,10 +24,16 @@
 - [ ] handle buffer line offsets updating when newlines are inserted or removed in buffer_insert and buffer_remove
 - [ ] go over and verify the logic of recalc_line_wrap when inserted or removed text includes one or more newlines
 - [ ] [json] introduce serializer state such that commas and other separators can be automatically inserted
+- [ ] [lsp] per-buffer configured LSP server
+    - different buffers may belong to different workspaces
+    - different workspaces may use different language servers for the same language
+        - how true is this?
 
 # DOING
 
 # DONE
+- [x] [lsp] the lsp connections needs to be per language so I can access it like app.lsp[buffer->language]
+    - can we share a LSP connection across several languages if they use the same LSP server?
 - [x] [lsp] textDocument/didSave
 - [x] [lsp] textDocument/willSave
     - stub implementation as clangd does not require it and I want a proper test case
