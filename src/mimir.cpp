@@ -1645,15 +1645,15 @@ LspRange lsp_range_from_byte_offsets(LspConnection *lsp, BufferId buffer_id, i32
     switch (lsp->server_capabilities.position_encoding) {
     case LSP_UTF8:
         for (i32 i = 0; i+start_line_start_offset < start_line_end_offset; i++) {
+            range.start.character = i;
             if (buffer->line_offsets[start_line] + i >= offset_start) {
-                range.start.character = i;
                 break;
             }
         }
 
-        for (i32 i = 0; i+end_line_start_offset < end_line_end_offset; i++) {
+        for (i32 i = range.start.character; i+end_line_start_offset < end_line_end_offset; i++) {
+            range.end.character = i;
             if (buffer->line_offsets[end_line] + i >= offset_end) {
-                range.end.character = i;
                 break;
             }
         }
@@ -1692,10 +1692,8 @@ void lsp_notify_change(
     json_append(&params, "contentChanges", Array<LspTextDocumentChangeEvent>{ &changes, 1 });
 
     String sparams = create_string(&params, scratch);
-    if (true) {
-        jsonrpc_notify(lsp, "textDocument/didChange", sparams);
-        document->version++;
-    }
+    jsonrpc_notify(lsp, "textDocument/didChange", sparams);
+    document->version++;
 }
 
 void lsp_notify_will_save(
@@ -2854,7 +2852,7 @@ i64 buffer_insert(BufferId buffer_id, i64 offset, String in_text, bool record_hi
 
     switch (buffer->language) {
     case LANGUAGE_CPP:
-        lsp_notify_change(&app.lsp.clangd, buffer->id, offset, offset+required_extra_space, text);
+        lsp_notify_change(&app.lsp.clangd, buffer->id, offset, offset, text);
         break;
     default:
         break;
