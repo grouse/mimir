@@ -1707,6 +1707,29 @@ void lsp_notify_will_save(
     LOG_ERROR("[lsp] unimplemented notification: textDocument/willSave");
 }
 
+void lsp_notify_did_save(
+    LspConnection *lsp,
+    BufferId buffer_id)
+{
+    SArena scratch = tl_scratch_arena();
+
+    if (!lsp->server_capabilities.text_document_sync.save) return;
+    if (!lsp->process.alive) return;
+
+    LspTextDocumentItem *document = map_find(&lsp->documents, buffer_id);
+    if (!document) {
+        LOG_ERROR("[lsp] no document open for buffer [%d]", buffer_id.index);
+        return;
+    }
+
+    LspVersionedTextDocumentIdentifier document_id{ document->uri, document->version };
+
+    StringBuilder params{ .alloc = scratch };
+    json_append(&params, "textDocument", document_id);
+
+    jsonrpc_notify(lsp, "textDocument/didSave", create_string(&params, scratch));
+}
+
 
 int app_main(Array<String> args)
 {
@@ -2788,6 +2811,12 @@ void buffer_save(BufferId buffer_id)
     close_file(f);
 
     buffer->saved_at = buffer->history_index;
+
+    switch (buffer->language) {
+    case LANGUAGE_CPP:
+        lsp_notify_did_save(&app.lsp.clangd, buffer_id);
+        break;
+    }
 }
 
 bool buffer_unsaved_changes(BufferId buffer_id)

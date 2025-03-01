@@ -1,6 +1,5 @@
 # TODO
 - [ ] [lsp] utf16 position encoding support
-- [ ] [lsp] textDocument/didSave
 - [ ] [lsp] textDocument/didClose
 - [ ] [lsp] textDocument/publishDiagnostics
 - [ ] [tree-sitter][bug] ts_custom_alloc leak
@@ -31,6 +30,7 @@
 # DOING
 
 # DONE
+- [x] [lsp] textDocument/didSave
 - [x] [lsp] textDocument/willSave
     - stub implementation as clangd does not require it and I want a proper test case
 - [x] [lsp] textDocument/didChange
