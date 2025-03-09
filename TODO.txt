@@ -31,6 +31,12 @@
 
 # DOING
 - [ ] [lsp] textDocument/definition
+    - [x] send request
+    - [x] parse request
+        - assumes array of locations, even if only one location is received
+    - [x] open file of location
+        - hacky conversion from uri to path by stripping "file:///" prefix
+    - [ ] goto line:col of location
 
 # DONE
 - [x] [lsp] verify/handle LSP text/position encoding handling when sending text across

@@ -296,7 +296,7 @@ struct LspRange {
 };
 
 struct LspLocation {
-    String document_uri;
+    String uri;
     LspRange range;
 };
 
@@ -1198,6 +1198,7 @@ String jsonrpc_response(JsonRpcConnection *rpc, i32 request, Allocator mem)
     return {};
 }
 
+
 bool json_parse(bool *result, int token, String json, Allocator mem)
 {
   if (token== MJSON_TOK_TRUE) *result = true;
@@ -1209,6 +1210,119 @@ bool json_parse(i32 *result, int token, String json, Allocator mem)
 {
     if (token != MJSON_TOK_NUMBER) return false;
     return i32_from_string(json, result);
+}
+
+bool json_parse(u32 *result, int token, String json, Allocator mem)
+{
+    if (token != MJSON_TOK_NUMBER) return false;
+    return u32_from_string(json, result);
+}
+
+bool json_parse(LspPosition *result, int type, String json, Allocator mem)
+{
+    if (type != MJSON_TOK_OBJECT) return false;
+
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            json.data, json.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ json.data+key_offset, key_length };
+        String value{ json.data+value_offset, value_length };
+
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
+
+        if (key == "line") {
+            if (!json_parse(&result->line, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspRange] unable to parse line field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "character") {
+            if (!json_parse(&result->character, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspRange] unable to parse character field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        }
+    }
+
+    return true;
+}
+
+bool json_parse(LspRange *result, int type, String json, Allocator mem)
+{
+    if (type != MJSON_TOK_OBJECT) return false;
+
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            json.data, json.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ json.data+key_offset, key_length };
+        String value{ json.data+value_offset, value_length };
+
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
+
+        if (key == "start") {
+            if (!json_parse(&result->start, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspRange] unable to parse range field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "end") {
+            if (!json_parse(&result->end, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspRange] unable to parse range field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        }
+    }
+
+    return true;
+}
+
+bool json_parse(String *result, int type, String json, Allocator mem)
+{
+    if (type != MJSON_TOK_STRING) return false;
+    *result = duplicate_string(json, mem);
+    return true;
+}
+
+
+template<typename T>
+bool json_parse(DynamicArray<T> *result, String key, String json, Allocator mem)
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    String object{};
+    int token = mjson_find(json.data, json.length, sz_string(key, scratch), (const char**)&object.data, &object.length);
+
+    if (token != MJSON_TOK_ARRAY) {
+        LOG_ERROR("[json] expected array, got %d", token);
+        return false;
+    }
+
+    int key_offset, key_length;
+    int val_offset, val_length, val_type;
+
+    int offset = 0;
+    while (true) {
+         int len = mjson_next(object.data, object.length, offset, &key_offset, &key_length, &val_offset, &val_length, &val_type);
+         if (len == 0) break;
+
+         if (T value; json_parse(&value, slice(object, val_offset, val_offset+val_length), mem)) {
+             array_add(result, value);
+         } else {
+             LOG_ERROR("[json] unable to parse array element at '%.*s'", slice(object, val_offset, val_offset+val_length));
+             return false;
+         }
+         offset = len+1;
+    }
+
+    return true;
 }
 
 bool json_parse(bool *result, String key, String json, Allocator mem)
@@ -1240,7 +1354,41 @@ bool json_parse(i32 *result, String key, String json, Allocator mem)
     return true;
 }
 
-bool json_parse(LspTextDocumentSyncOptions *result, String json, Allocator mem)
+bool json_parse(LspLocation *result, String json, Allocator mem) EXPORT
+{
+    SArena scratch = tl_scratch_arena(mem);
+
+    int type;
+    int key_offset, key_length, value_offset, value_length;
+    for (int i = 0; (i = mjson_next(
+            json.data, json.length, i,
+            &key_offset, &key_length,
+            &value_offset, &value_length,
+            &type)) != 0;)
+    {
+        String key{ json.data+key_offset, key_length };
+        String value{ json.data+value_offset, value_length };
+
+        if (key[0] == '"'   && key[key.length-1] == '"')     key = slice(key, 1, key.length-1);
+        if (value[0] == '"' && value[value.length-1] == '"') value = slice(value, 1, value.length-1);
+
+        if (key == "uri") {
+            if (!json_parse(&result->uri, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspLocation] unable to parse uri field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        } else if (key == "range") {
+            if (!json_parse(&result->range, type, value, mem)) {
+                LOG_ERROR("[jsonrpc][lsp][LspLocation] unable to parse range field: '%.*s' : '%.*s' [%d]",
+                          STRFMT(key), STRFMT(value), type);
+            }
+        }
+    }
+
+    return true;
+}
+
+bool json_parse(LspTextDocumentSyncOptions *result, String json, Allocator mem) EXPORT
 {
     SArena scratch = tl_scratch_arena(mem);
 
@@ -1406,7 +1554,6 @@ bool jsonrpc_response(JsonRpcConnection *rpc, i32 request, T *result, Allocator 
 
     return json_parse(result, "$.result", response, mem);
 }
-
 
 template<typename T>
 void json_append(StringBuilder *sb, String key, T value)
@@ -1800,7 +1947,10 @@ Array<LspLocation> lsp_request_definition(
     // TODO(jesper): partiaul result token
 
     i32 request = jsonrpc_request(lsp, "textDocument/definition", create_string(&params, scratch));
-    String response = jsonrpc_response(lsp, request, scratch);
+    if (!jsonrpc_response(lsp, request, &locations, scratch)) {
+        LOG_ERROR("[lsp] failed to parse array of locations from request %d", request);
+        return {};
+    }
     return locations;
 }
 
@@ -3927,6 +4077,14 @@ void app_gather_input(AppWindow *wnd) INTERNAL
             Array<LspLocation> locations = lsp_request_definition(&app.lsp[buffer->language], view->buffer, view->caret.byte_offset, scratch);
             if (locations.count >= 1) {
                 if (locations.count > 1) LOG_ERROR("[lsp] handle multiple definition results");
+
+                String path = locations[0].uri;
+                if (starts_with(path, "file:///")) path = slice(path, strlen("file:///"));
+
+                BufferId buffer = find_buffer(path);
+                if (!buffer) buffer = create_buffer(path);
+                view_set_buffer(app.current_view, buffer);
+
 
             }
         }
