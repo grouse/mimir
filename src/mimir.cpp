@@ -4747,7 +4747,7 @@ next_node:;
 
     app.animating = text_input_enabled();
 
-    Matrix3 view = mat3_orthographic(0, gfx.resolution.x, gfx.resolution.y, 0, 1);
+    Matrix3 view = mat3_orthographic2(0, gfx.resolution.x, gfx.resolution.y, 0);
 
     gfx_flush_transfers();
     gfx_submit_commands(gfx.frame_cmdbuf, view);
