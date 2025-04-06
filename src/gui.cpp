@@ -448,7 +448,7 @@ void init_gui() EXPORT
     });
 
     init_input_map(gui.input.editbox, {
-        { TEXT_INPUT,   .text = {}},
+        { TEXT_INPUT,   ITEXT() },
         { CURSOR_LEFT,  IKEY(KC_LEFT) },
         { CURSOR_RIGHT, IKEY(KC_RIGHT) },
         { SELECT_ALL,   IKEY(KC_A, MF_CTRL) },

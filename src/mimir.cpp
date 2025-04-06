@@ -2008,7 +2008,7 @@ int app_main(Array<String> args)
 
         { FUZZY_FIND_FILE, IKEY(KC_O, MF_CTRL ) },
 
-        { GOTO_DEFINITION, IKEY(KC_G) }, //ICHORD(IKEY(KC_G), IKEY(KC_D)) },
+        { GOTO_DEFINITION, ICHORD(IKEY(KC_G), IKEY(KC_D)) },
 
         { PASTE,        IKEY(KC_P) },
         { COPY_RANGE,   IKEY(KC_Y) },
@@ -2018,7 +2018,7 @@ int app_main(Array<String> args)
 
     init_input_map(app.input.insert, {
         { EDIT_MODE,  IKEY(KC_ESC)},
-        { TEXT_INPUT, .text = {}},
+        { TEXT_INPUT, ITEXT() },
     });
 
     app.mode = app.next_mode = MODE_EDIT;
